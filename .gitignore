@@ -1,3 +1,12 @@
+lib
+name-lists
+tmp
+todo
+git_info
+DATA*
+
+
+### Python stuff (template from github)
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
