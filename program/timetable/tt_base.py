@@ -1,7 +1,7 @@
 """
 timetable/tt_base.py
 
-Last updated:  2023-08-10
+Last updated:  2023-08-11
 
 Handle the basic information for timetable display and processing.
 
@@ -50,6 +50,28 @@ from core.classes import NO_CLASS, GROUP_ALL
 from core.teachers import NO_TEACHER
 from core.db_access import db_select, db_query
 
+class COURSE_INFO(NamedTuple):
+    klass: str
+    group: str
+    sid: str
+    tid: str
+    bsid: str
+    room: str
+
+class TT_LESSON(NamedTuple):
+    checkbits: int
+    roomlists: tuple[list[int], list[list[int]], list[list[int]]]
+    courselist: list[COURSE_INFO]
+    lesson_id: int
+    subject_tag: str
+    length: int
+    lesson_group: int
+    time: str
+    # These are only needed for initialisation
+    placement0: str
+    rooms0: list[int]
+
+### -----
 
 def get_teacher_bits(b):
     """Each teacher gets a unique index, so that integers can be used
@@ -169,7 +191,7 @@ def get_activity_groups(tt_data: TT_DATA):
         sid = rec["SUBJECT"]
         bsid = rec["BLOCK_SID"]
         tid = rec ["TEACHER"]
-        row = (
+        row = COURSE_INFO(
             klass,
             group,
             sid,
@@ -177,8 +199,6 @@ def get_activity_groups(tt_data: TT_DATA):
             bsid,
             room
         )
-# Display sid is: bsid if bsid else sid,
-
         gbits = tt_data.class_group_bits[ci][group] if group else 0
         ti = tt_data.teacher_i[tid]
         tbits = tt_data.teacher_bits[ti]
@@ -205,8 +225,11 @@ def get_activity_groups(tt_data: TT_DATA):
         #print("  -->", lg_data[1])
     return lg_map
 
+# Each lg will have one or more classes (though the null class is
+# possible, too) and one or more teachers (though the null teacher is
+# possible, too).
 
-def get_lessons():
+def get_lg_lessons():
     q = """select
 
         Lesson_group,
@@ -220,32 +243,88 @@ def get_lessons():
 
         where Lesson_group != '0'
     """
-    return {r[1]: r for r in db_query(q)}
+    lg_ll = {}
+    for r in db_query(q):
+        lg = r.pop(0)
+        try:
+            lg_ll[lg].append(r)
+        except KeyError:
+            lg_ll[lg] = [r]
+    return lg_ll
 
 
 def collate_lessons(
-    lid_map: dict[int, list],
-    parallel_map: dict[str, list], # list: lid-list, weight
+    lg_ll: dict[int, list],
     lg_map: dict[int, list[int, set[str], list[tuple]]],
     rmap_i: dict[str, int],
 ):
+#TODO: documentation
     tt_lessons = []   # (checkbits, list of room-choice lists, ???)
-    for l_data in lid_map.values():
-        lg, lid, l, t, p, rr = l_data
-        lg_data = lg_map[lg]
-        if rr:
-            rplist = [rmap_i[r] for r in rr.split(",")]
-        else:
-            rplist = []
-        tt_lessons.append((
-            lg_data[0],
-            lg_data[1],
-            lg_data[2],
-            t,
-            p,
-            rplist
-        ))
-    return tt_lessons
+
+    class_activities = {}       # class -> list of tt_lesson indexes
+    teacher_activities = {}     # teacher -> list of tt_lesson indexes
+#TODO: ... or rather list of (lg, [tt_lesson indexes]) ?
+#TODO: Use indexes for teachers(, subjects) and classes?
+    for lg, ll in lg_ll.items():
+        checkbits, roomlists, courselist = lg_map[lg]
+        tids = set()
+        classes = set()
+        sid0, bsid0 = None, None
+        for course in courselist:
+            # Each row <courselist> must have the same bsid and, if bsid
+            # is null, the same sid.
+            # <sid0> will be the lesson subject.
+            bsid = course.bsid
+            sid = course.sid
+            if bsid != bsid0:
+                assert bsid0 is None
+                bsid0 = bsid
+                if bsid0:
+                    sid0 = bsid0
+                else:
+                    sid0 = sid
+            elif not bsid:
+                assert sid == sid0
+            # Extend teacher and class lists
+            tid = course.tid
+            assert tid
+            if tid != NO_TEACHER:
+                tids.add(tid)
+            klass = course.klass
+            assert klass
+            if klass != NO_CLASS and course.group:
+                classes.add(klass)
+
+        for lid, l, t, p, rr in ll:
+            tt_index = len(tt_lessons)
+            for tid in tids:
+                try:
+                    teacher_activities[tid].append(tt_index)
+                except KeyError:
+                    teacher_activities[tid] = [tt_index]
+            for klass in classes:
+                try:
+                    class_activities[klass].append(tt_index)
+                except KeyError:
+                    class_activities[klass] = [tt_index]
+
+            if rr:
+                rplist = [rmap_i[r] for r in rr.split(",")]
+            else:
+                rplist = []
+            tt_lessons.append(TT_LESSON(
+                checkbits,
+                roomlists,
+                courselist,
+                lid,
+                sid0,
+                l,
+                lg,
+                t,
+                p,
+                rplist
+            ))
+    return tt_lessons, class_activities, teacher_activities
 
 
 def room_split(room_choice: str) -> list[str]:
@@ -345,9 +424,8 @@ def read_tt_db():
         rimap,
     )
     lg_map = get_activity_groups(tt_data)
-    l_map = get_lessons()
-    pmap = get_parallels()
-    tlessons = collate_lessons(l_map, pmap, lg_map, rimap)
+    lg_ll = get_lg_lessons()
+    return collate_lessons(lg_ll, lg_map, rimap)
 
 
 #TODO: This is the version for "3a", using the PARALLEL_LESSONS table.
@@ -426,25 +504,33 @@ if __name__ == '__main__':
 
     lg_map = get_activity_groups(tt_data)
 
-    print("\n LESSONS:")
-    l_map = get_lessons()
-    for l, ldata in l_map.items():
-        print(f"   -- {l:4}:", ldata)
-
+# Not used here ...
     print("\n PARALLELS:")
     pmap = get_parallels()
     for tag in sorted(pmap):
         print(f"  // {tag:10} : {pmap[tag]}")
 
+    print("\n LG_LESSONS:")
+    lg_ll = get_lg_lessons()
+    for lg, ll in lg_ll.items():
+        print("  **", lg)
+        for l in ll:
+            print("    --", l)
+
     print("\n TLESSONS:")
-    tlessons = collate_lessons(l_map, pmap, lg_map, tt_data.room_i)
+    tlessons, class_activities, teacher_activities = collate_lessons(
+        lg_ll, lg_map, tt_data.room_i
+    )
     for tl in tlessons:
         print("   --", tl)
 
+    print("\n TLESSONS  class 11G:")
+    for tli in class_activities["11G"]:
+        print("   --", tlessons[tli])
 
-#???
-#    tt = Timetable()
+    print("\n TLESSONS  teacher MT:")
+    for tli in teacher_activities["MT"]:
+        print("   --", tlessons[tli])
 
-#    rset = {   "R1", "R2/R3", "R1/R5", "R1+", "R2/R5+", "R3" }
-#    print("Room set:", rset)
-#    print("  -->", simplify_room_lists_(rset))
+    from pympler import asizeof
+    print("\nSIZE:", asizeof.asizeof(tlessons))

@@ -2,7 +2,7 @@
 """
 ui/modules/timetable_editor.py
 
-Last updated:  2023-08-10
+Last updated:  2023-08-11
 
 Show a timetable grid and allow placement of lesson tiles.
 
@@ -41,22 +41,17 @@ T = TRANSLATIONS("ui.modules.timetable_editor")
 
 ### +++++
 
-from ui.timetable_grid import GridViewRescaling, GridPeriodsDays
+from ui.timetable_grid import GridPeriodsDays
 from core.basic_data import (
     clear_cache,
     get_days,
     get_periods,
     get_classes,
-    get_teachers,
-    get_subjects,
-    timeslot2index
-)
-from core.activities import (
-    collect_activity_groups,
-    CourseWithRoom,
+    get_rooms,
+    timeslot2index,
 )
 from core.classes import GROUP_ALL
-from timetable.timetable_base import Timetable, room_split
+from timetable.tt_base import read_tt_db, room_split
 from ui.ui_base import (
     ### QtWidgets:
     QListWidgetItem,
@@ -86,7 +81,8 @@ class TimetableEditor(Page):
         open_database()
         clear_cache()
         self.TT_CONFIG = MINION(DATAPATH("CONFIG/TIMETABLE"))
-        self.timetable = (tt := TimetableManager())
+        tt = TimetableManager()
+        self.timetable = tt
         breaks = self.TT_CONFIG["BREAKS_BEFORE_PERIODS"]
         self.grid = WeekGrid(breaks)
         self.table_view.setScene(self.grid)
@@ -95,7 +91,7 @@ class TimetableEditor(Page):
         ## Set up class list
         self.all_classes = []
         for k, name in get_classes().get_class_list():
-            if tt.class_activities[k]:
+            if tt.class_ttls[k]:
                 self.all_classes.append(k)
                 item = QListWidgetItem(f"{k} – {name}")
                 self.class_list.addItem(item)
@@ -133,7 +129,27 @@ class TimetableEditor(Page):
 # if a tile in another class must be moved? Only vie direct, conscious
 # removal?
 
-class TimetableManager(Timetable):
+class TimetableManager:
+    def __init__(self):
+        ### Read data from database
+        self.tt_lessons, self.class_ttls, self.teacher_ttls = read_tt_db()
+
+        ### Build group-division map for each class
+        self.group_division = {}
+        for klass, cdata in get_classes().items():
+            divs = cdata.divisions.divisions
+            g2div = {GROUP_ALL: (-1, GROUP_ALL)}
+            self.group_division[klass] = g2div
+            for i, div in enumerate(divs):
+                dgas = []
+                for d, v in div:
+                    if v is None:
+                        dgas.append(d)
+                        g2div[d] = (i, [d])
+                    else:
+                        g2div[d] = (i, v)
+                g2div[f"%{i}"] = dgas
+
     def set_gui(self, gui):
         self.gui = gui
 
@@ -144,22 +160,19 @@ class TimetableManager(Timetable):
         tile_list.clearContents()
         # Sort activities on subject
         class_activities = sorted(
-            self.class_activities[klass],
-            key=lambda x: self.activities[x].sid
+            (self.tt_lessons[i] for i in self.class_ttls[klass]),
+            key=lambda x: x.subject_tag
         )
         tile_list.setRowCount(len(class_activities))
-#?
-        tiledata = []
         tiles = []
         tile_list_hidden = []
 #TODO--
 #        print("\nCLASS", klass)
-        for row, a_index in enumerate(class_activities):
-            activity = self.activities[a_index]
+        for row, activity in enumerate(class_activities):
 #TODO--
-#            print("  --", activity)
-            lesson_data = activity.lesson_info
-            fixed_time = lesson_data["TIME"]
+            print("  --", activity)
+
+            fixed_time = activity.time
 
 #TODO: Keep non-fixed times separate from the database? When would they
 # be saved, then?
@@ -168,7 +181,7 @@ class TimetableManager(Timetable):
 #                print("   @", d, p)
 
             else:
-                slot_time = lesson_data["PLACEMENT"]
+                slot_time = activity.placement0
                 if slot_time:
                     d, p = timeslot2index(slot_time)
 #                    print("   (@)", d, p)
@@ -182,23 +195,23 @@ class TimetableManager(Timetable):
             groups = set()
             tids = set()
             rooms = set()
-            sid = activity.sid
-            for c in activity.course_list:
+            sid = activity.subject_tag
+            for c in activity.courselist:
                 if c.klass == klass:
                     groups.add(c.group)
-                    tids.add(c.teacher)
+                    tids.add(c.tid)
                     # The rooms are the acceptable ones!
                     rooms.update(room_split(c.room))
                 else:
                     x = True
 #TODO: tool-tip (or whatever) to show parallel courses?
 #TODO: The rooms are part of the allocation data and should be checked!
-            t_rooms = lesson_data["ROOMS"]
+            t_rooms = activity.rooms0 # list of room indexes!
 # It could be that not all required rooms have been allocated?
 # I would need to compare this with the "roomlists" lists,
 # <activity.roomlists>.
-            alloc_rooms = t_rooms.split(',') if t_rooms else []
-            print("???", len(activity.roomlists), rooms, alloc_rooms)
+#            alloc_rooms = t_rooms.split(',') if t_rooms else []
+#            print("???", len(activity.roomlists), rooms, alloc_rooms)
 
             t_tids = ','.join(sorted(tids)) or '–'
             t_groups, tile_divisions = self.tile_division(klass, groups)
@@ -209,7 +222,7 @@ class TimetableManager(Timetable):
 #            print("  ...", sid, t_tids, t_groups, t_rooms, tile_divisions)
 
             tile_list.setItem(row, 0, QTableWidgetItem(sid))
-            twi = QTableWidgetItem(str(lesson_data["LENGTH"]))
+            twi = QTableWidgetItem(str(activity.length))
             twi.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             tile_list.setItem(row, 1, twi)
             twi = QTableWidgetItem(t_groups)
@@ -227,12 +240,18 @@ class TimetableManager(Timetable):
 # in case the fixed times have changed (or there is an error in the
 # database).
 
+#TODO: The rooms should have been checked by trying to place all
+# activities. The atual rooms used would be got from elsewhere!
+# The calls to get_rooms are very inefficient ...
+            t_rooms_str = ",".join(get_rooms()[r][0] for r in t_rooms)
+            #print("\n???", t_rooms_str)
+
             for i, l, n in tile_divisions:
                 tile_index = len(tiles)
                 tile = make_tile(
                     grid=grid,
                     tag=tile_index,
-                    duration=lesson_data["LENGTH"],
+                    duration=activity.length,
                     n_parts=l,
                     n_all=n,
                     offset=i,
@@ -241,7 +260,7 @@ class TimetableManager(Timetable):
 # Rooms can perhaps only be added when placed, and even then not always ...
                     tl=t_tids,
                     tr=t_groups,
-                    br=t_rooms,
+                    br=t_rooms_str,
                 )
                 tiles.append(tile)
                 if d >= 0:
@@ -324,72 +343,6 @@ def make_tile(
     if bl:
         tile.set_corner(3, bl)
     return tile
-
-
-
-#TODO--?
-def simplify_room_lists(roomlists):
-    """Simplify room lists, check for room conflicts."""
-    # Collect single room "choices" and remove redundant entries
-    singles = set()
-    while True:
-        extra = False
-        singles1 = set()
-        roomlists1 = []
-        for rl in roomlists:
-            rl1 = [r for r in rl if r not in singles]
-            if rl1:
-                if len(rl1) == 1:
-                    if rl1[0] == '+':
-                        if not extra:
-                            roomlists1.append(rl1)
-                            extra = True
-                    else:
-                        singles1.add(rl1[0])
-                else:
-                    roomlists1.append(rl1)
-            else:
-                raise ValueError
-        if roomlists1 == roomlists:
-            return [[s] for s in sorted(singles)] + roomlists
-        singles.update(singles1)
-        roomlists = roomlists1
-
-
-#TODO--?
-def simplify_room_lists_(roomlists, klass, tag):
-    """Simplify room lists, check for room conflicts."""
-    # Collect single room "choices" and remove redundant entries
-    singles = set()
-    while True:
-        extra = False
-        singles1 = set()
-        roomlists1 = []
-        for rl in roomlists:
-            rl1 = [r for r in rl if r not in singles]
-            if rl1:
-                if len(rl1) == 1:
-                    if rl1[0] == '+':
-                        if not extra:
-                            roomlists1.append(rl1)
-                            extra = True
-                    else:
-                        singles1.add(rl1[0])
-                else:
-                    roomlists1.append(rl1)
-            else:
-                SHOW_ERROR(
-                    T["BLOCK_ROOM_CONFLICT"].format(
-                        klass=klass,
-                        sid=sid,
-                        tag=tag,
-                        rooms=repr(roomlists),
-                    ),
-                )
-        if roomlists1 == roomlists:
-            return [[s] for s in sorted(singles)] + roomlists
-        singles.update(singles1)
-        roomlists = roomlists1
 
 
 class WeekGrid(GridPeriodsDays):
