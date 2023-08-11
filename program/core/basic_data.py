@@ -1,5 +1,5 @@
 """
-core/basic_data.py - last updated 2023-08-10
+core/basic_data.py - last updated 2023-08-11
 
 Handle caching of the basic data sources
 
@@ -30,8 +30,8 @@ from core.db_access import (
     db_key_value_list,
     KeyValueList,
 )
-from core.classes import Classes
-from core.teachers import Teachers
+from core.classes import Classes, NO_CLASS, GROUP_ALL
+from core.teachers import Teachers, NO_TEACHER
 from ui.ui_base import QRegularExpression  ### QtCore
 
 SHARED_DATA = {}

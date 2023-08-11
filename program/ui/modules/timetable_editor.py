@@ -1,4 +1,4 @@
-#TODO: migrate to tt_base
+#TODO: add teacher view, editing
 """
 ui/modules/timetable_editor.py
 
@@ -47,10 +47,12 @@ from core.basic_data import (
     get_days,
     get_periods,
     get_classes,
+    GROUP_ALL,
+    get_teachers,
+    NO_TEACHER,
     get_rooms,
     timeslot2index,
 )
-from core.classes import GROUP_ALL
 from timetable.tt_base import read_tt_db, room_split
 from ui.ui_base import (
     ### QtWidgets:
@@ -66,6 +68,9 @@ from ui.ui_base import (
     uic,
 )
 
+WHOLE_CLASS = ""
+#WHOLE_CLASS = GROUP_ALL
+
 ### -----
 
 def init():
@@ -75,7 +80,7 @@ def init():
 class TimetableEditor(Page):
     def __init__(self):
         super().__init__()
-        uic.loadUi(APPDATAPATH("ui/timetable_class_view.ui"), self)
+        uic.loadUi(APPDATAPATH("ui/timetable_view.ui"), self)
 
     def enter(self):
         open_database()
@@ -90,12 +95,29 @@ class TimetableEditor(Page):
 
         ## Set up class list
         self.all_classes = []
+        self.class_list.clear()
         for k, name in get_classes().get_class_list():
-            if tt.class_ttls[k]:
+            if tt.class_ttls.get(k):
                 self.all_classes.append(k)
                 item = QListWidgetItem(f"{k} – {name}")
                 self.class_list.addItem(item)
         self.class_list.setCurrentRow(0)
+
+        ## Set up teacher list
+        self.all_teachers = []
+        self.teacher_list.clear()
+        teachers = get_teachers()
+        for tid in teachers:
+            if tt.teacher_ttls.get(tid):
+                self.all_teachers.append(tid)
+                item = QListWidgetItem(f"{tid} – {teachers.name(tid)}")
+                self.teacher_list.addItem(item)
+        self.teacher_list.setCurrentRow(0)
+
+#TODO
+    @Slot(int)
+    def on_class_teacher_currentChanged(self, i):
+        pass
 
     @Slot(int, int, int, int)
     def on_lessons_currentCellChanged(self, r, c, r0, c0):
@@ -113,6 +135,16 @@ class TimetableEditor(Page):
         print("§§§ SELECTED CLASS:", klass,
             get_classes()[klass].divisions.divisions
         )
+
+    @Slot(int)
+    def on_teacher_list_currentRowChanged(self, row):
+        tid = self.all_teachers[row]
+        self.grid.remove_tiles()
+#        self.timetable.show_teacher(tid)
+#TODO
+#        self.timetable.enter_teacher(tid)
+#TODO--
+        print("§§§ SELECTED TEACHER:", tid)
 
 #TODO
     def selected_tile(self, row, col, row0, col0):
@@ -217,7 +249,7 @@ class TimetableManager:
             t_groups, tile_divisions = self.tile_division(klass, groups)
             #t_groups = ','.join(sorted(groups))
             if x:
-                t_groups += ",+"
+                t_groups += "+"
 #TODO--
 #            print("  ...", sid, t_tids, t_groups, t_rooms, tile_divisions)
 
@@ -278,12 +310,11 @@ class TimetableManager:
         for g in groups:
             i, dgs = g2div[g]
             if i < 0:
-                # whole class
-                return (GROUP_ALL, [(0, 1, 1)])
+                return (WHOLE_CLASS, [(0, 1, 1)])
             if divi != i:
                 if divi >= 0:
                     # groups from multiple divisions, assume whole class
-                    return (GROUP_ALL, [(0, 1, 1)])
+                    return (WHOLE_CLASS, [(0, 1, 1)])
                 else:
                     divi = i
                     dgset = set(dgs)
@@ -293,7 +324,7 @@ class TimetableManager:
         div_groups = g2div[f"%{divi}"]
         n = len(div_groups)
         if len(dgset) == n:
-            return (GROUP_ALL, [(0, 1, 1)])
+            return (WHOLE_CLASS, [(0, 1, 1)])
         l = 0
         i = 0
         tiles = []

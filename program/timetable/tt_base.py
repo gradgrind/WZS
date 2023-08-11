@@ -45,9 +45,10 @@ from core.basic_data import (
     get_classes,
     get_teachers,
     get_rooms,
+    NO_CLASS,
+    GROUP_ALL,
+    NO_TEACHER
 )
-from core.classes import NO_CLASS, GROUP_ALL
-from core.teachers import NO_TEACHER
 from core.db_access import db_select, db_query
 
 class COURSE_INFO(NamedTuple):
