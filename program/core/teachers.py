@@ -1,5 +1,5 @@
 """
-core/teachers.py - last updated 2023-08-10
+core/teachers.py - last updated 2023-08-12
 
 Manage teacher data.
 
@@ -83,8 +83,9 @@ class Teachers(dict):
         data = self[tid]
         return f"{data.firstname} {data.lastname}"
 
-    # deprecated?
     def list_teachers(self):
+        """Return an ordered list of teachers.
+        """
         return list(self)
 
 

@@ -2,7 +2,7 @@
 """
 ui/modules/timetable_editor.py
 
-Last updated:  2023-08-11
+Last updated:  2023-08-125
 
 Show a timetable grid and allow placement of lesson tiles.
 
@@ -164,7 +164,8 @@ class TimetableEditor(Page):
 class TimetableManager:
     def __init__(self):
         ### Read data from database
-        self.tt_lessons, self.class_ttls, self.teacher_ttls = read_tt_db()
+        tt_data, tt_lists = read_tt_db()
+        self.tt_lessons, self.class_ttls, self.teacher_ttls = tt_lists
 
         ### Build group-division map for each class
         self.group_division = {}
@@ -200,6 +201,8 @@ class TimetableManager:
         tile_list_hidden = []
 #TODO--
 #        print("\nCLASS", klass)
+
+# Can I share this with the teacher view?
         for row, activity in enumerate(class_activities):
 #TODO--
             print("  --", activity)
@@ -302,6 +305,132 @@ class TimetableManager:
                     tile_list_hidden.append(False)
 
         tile_list.resizeColumnsToContents()
+
+
+#TODO: Show all activities (class or teacher)
+    def show_view(self, activities):
+        tile_list = self.gui.lessons
+        tile_list.clearContents()
+        tile_list.setRowCount(len(activities))
+        tiles = []
+        tile_list_hidden = []
+#TODO--
+#        print("\nCLASS", klass)
+
+# Can I share this with the teacher view?
+        for row, activity in enumerate(activities):
+#TODO--
+            print("  --", activity)
+
+            fixed_time = activity.time
+
+#TODO: Keep non-fixed times separate from the database? When would they
+# be saved, then?
+            if fixed_time:
+                d, p = timeslot2index(fixed_time)
+#                print("   @", d, p)
+
+            else:
+                slot_time = activity.placement0
+                if slot_time:
+                    d, p = timeslot2index(slot_time)
+#                    print("   (@)", d, p)
+
+#TODO: display data
+
+#TODO: rooms? Shouldn't the rooms per group be available????
+# Via the workload entry ... this can, however, be '$', potentially
+# leading to multiple rooms.
+
+# This bit outside of the function, because it is different for class &
+# teacher?
+            x = False
+#? for teacher ...
+            class_groups = set()
+            rooms = set()
+            sid = activity.subject_tag
+            for c in activity.courselist:
+                if c.tid == tid:
+                    klass = c.klass
+                    group = c.group
+#                    class_groups.add(???)
+                    # The rooms are the acceptable ones!
+                    rooms.update(room_split(c.room))
+                else:
+                    x = True
+
+            tl = sid
+            #text = class-group list
+
+
+#TODO: tool-tip (or whatever) to show parallel courses?
+#TODO: The rooms are part of the allocation data and should be checked!
+            t_rooms = activity.rooms0 # list of room indexes!
+# It could be that not all required rooms have been allocated?
+# I would need to compare this with the "roomlists" lists,
+# <activity.roomlists>.
+#            alloc_rooms = t_rooms.split(',') if t_rooms else []
+#            print("???", len(activity.roomlists), rooms, alloc_rooms)
+
+            t_tids = ','.join(sorted(tids)) or '–'
+            t_groups, tile_divisions = self.tile_division(klass, groups)
+            #t_groups = ','.join(sorted(groups))
+            if x:
+                t_groups += "+"
+#TODO--
+#            print("  ...", sid, t_tids, t_groups, t_rooms, tile_divisions)
+
+            tile_list.setItem(row, 0, QTableWidgetItem(sid))
+            twi = QTableWidgetItem(str(activity.length))
+            twi.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            tile_list.setItem(row, 1, twi)
+            twi = QTableWidgetItem(t_groups)
+            twi.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            tile_list.setItem(row, 2, twi)
+            tile_list.setItem(row, 3, QTableWidgetItem(t_tids))
+
+# Just testing!!! It should actually be based on existing placement
+#            if fixed_time:
+#                tile_list.hideRow(row)
+#            else:
+#                tile_list.showRow(row)
+
+# Perhaps placements should be done "normally", i.e. with all checks,
+# in case the fixed times have changed (or there is an error in the
+# database).
+
+#TODO: The rooms should have been checked by trying to place all
+# activities. The atual rooms used would be got from elsewhere!
+# The calls to get_rooms are very inefficient ...
+            t_rooms_str = ",".join(get_rooms()[r][0] for r in t_rooms)
+            #print("\n???", t_rooms_str)
+
+            for i, l, n in tile_divisions:
+                tile_index = len(tiles)
+                tile = make_tile(
+                    grid=grid,
+                    tag=tile_index,
+                    duration=activity.length,
+                    n_parts=l,
+                    n_all=n,
+                    offset=i,
+                    text=sid,
+#TODO: Might want to handle the placing of the corners in the configuration?
+# Rooms can perhaps only be added when placed, and even then not always ...
+                    tl=t_tids,
+                    tr=t_groups,
+                    br=t_rooms_str,
+                )
+                tiles.append(tile)
+                if d >= 0:
+                    grid.place_tile(tile_index, (d, p))
+                    tile_list_hidden.append(True)
+                else:
+                    tile_list_hidden.append(False)
+
+        tile_list.resizeColumnsToContents()
+
+
 
     def tile_division(self, klass, groups):
         # Gather division components

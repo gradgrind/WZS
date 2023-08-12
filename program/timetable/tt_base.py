@@ -1,7 +1,7 @@
 """
 timetable/tt_base.py
 
-Last updated:  2023-08-11
+Last updated:  2023-08-12
 
 Handle the basic information for timetable display and processing.
 
@@ -33,7 +33,6 @@ if __name__ == "__main__":
     from core.base import start
     start.setup(os.path.join(basedir, 'TESTDATA'))
 
-#T = TRANSLATIONS("timetable.timetable_base")
 #T = TRANSLATIONS("timetable.tt_base")
 
 ### +++++
@@ -50,6 +49,14 @@ from core.basic_data import (
     NO_TEACHER
 )
 from core.db_access import db_select, db_query
+
+class TT_DATA(NamedTuple):
+    class_i: dict[str, int]
+    class_group_bits: list[dict[str, int]]
+    class_room: list[str]
+    teacher_i: dict[str, int]
+    teacher_bits: list[int]
+    room_i: dict[str, int]
 
 class COURSE_INFO(NamedTuple):
     klass: str
@@ -76,17 +83,18 @@ class TT_LESSON(NamedTuple):
 
 def get_teacher_bits(b):
     """Each teacher gets a unique index, so that integers can be used
-    instead of the tag (str) in speed critical code.
+    instead of the tag (str) in speed critical code. Index 0 is reserved
+    for the null teacher (<NO_TEACHER>), the others follow contiguously.
     Also a vector of bit-tags is generated so that logical AND can be
     used to test timetable clashes.
     """
-    timap = {}
-    tvec = []
-    for i, tid in enumerate(get_teachers()):
-        timap[tid] = i
-        if tid == NO_TEACHER:
-            tvec.append(0)
-        else:
+    timap = {NO_TEACHER: 0}
+    tvec = [0]
+    i = 0
+    for tid in get_teachers().list_teachers():
+        if tid != NO_TEACHER:
+            i += 1
+            timap[tid] = i
             tvec.append(b)
             b += b
     return timap, tvec, b
@@ -94,66 +102,59 @@ def get_teacher_bits(b):
 
 def get_class_bits(b):
     """Each class gets a unique index, so that integers can be used
-    instead of the tag (str) in speed critical code.
+    instead of the tag (str) in speed critical code. Index 0 is reserved
+    for the null class (<NO_CLASS>), the others follow contiguously.
     Also bit-tags are generated for all usable class-groups, so that
     logical AND can be used to test timetable clashes. These are
     organised as a vector of mappings, one mapping per class, the keys
     being the groups, the values the bit-tags.
     """
     cmap = {}
-    cimap = {}
-    cgvec = []
-    crvec = []
+    cimap = {NO_CLASS: 0}
+    cgvec = [{GROUP_ALL: 0}]
+    crvec = [""]
     i = 0
     for klass, cdata in get_classes().items():
         #print("?", klass)
-        cimap[klass] = i
-        i += 1
-        gmap = {}
-        cgvec.append(gmap)
-        crvec.append(cdata.classroom)
-        cg = cdata.divisions
-        g0 = 0  # whole class / all atomic groups
-        for ag in cg.atomic_groups:
-            cmap[ag] = b
-            g0 |= b
-            b += b
-        for g, ags in cg.group_atoms().items():
-            #print("???", g, ags)
-            bg0 = 0
-            for ag in ags:
-                bg0 |= cmap[ag]
-            gmap[g] = bg0
-        if g0:
-            gmap[GROUP_ALL] = g0
-        elif klass == NO_CLASS:
-            gmap[GROUP_ALL] = 0
-        else:
-            gmap[GROUP_ALL] = b
-            b += b
+        if klass != NO_CLASS:
+            i += 1
+            cimap[klass] = i
+            gmap = {}
+            cgvec.append(gmap)
+            crvec.append(cdata.classroom)
+            cg = cdata.divisions
+            g0 = 0  # whole class / all atomic groups
+            for ag in cg.atomic_groups:
+                cmap[ag] = b
+                g0 |= b
+                b += b
+            for g, ags in cg.group_atoms().items():
+                #print("???", g, ags)
+                bg0 = 0
+                for ag in ags:
+                    bg0 |= cmap[ag]
+                gmap[g] = bg0
+            if g0:
+                gmap[GROUP_ALL] = g0
+            else:
+                gmap[GROUP_ALL] = b
+                b += b
     return cimap, cgvec, crvec, b
 
 
 def get_room_map():
     """Each room gets a unique index, so that integers can be used
     instead of the tag (str) in speed critical code.
-    The special room "+" is given index -1.
+    The special room "+" (which indicates that a room is still needed
+    and cannot be allocated directly in the timetable) is given index 0.
+    The others follow contiguously.
     """
-    rmap = {"+": -1}
+    rmap = {"+": 0}
     i = 0
     for r, n in get_rooms():
-        rmap[r] = i
         i += 1
+        rmap[r] = i
     return rmap
-
-
-class TT_DATA(NamedTuple):
-    class_i: dict[str, int]
-    class_group_bits: list[dict[str, int]]
-    class_room: list[str]
-    teacher_i: dict[str, int]
-    teacher_bits: list[int]
-    room_i: dict[str, int]
 
 
 def get_activity_groups(tt_data: TT_DATA):
@@ -362,7 +363,7 @@ def simplify_room_lists(roomlists: list[list[int]]) -> Optional[
     rooms = []  # "normal" room choice list
     xrooms = [] # "flexible" room choice list (with '+')
     for rchoice in roomlists:
-        if rchoice[-1] < 0:
+        if rchoice[-1] == 0:    # '+'
             xrooms.append(rchoice[:-1])
         elif len(rchoice) == 1:
             r = rchoice[0]
@@ -426,7 +427,7 @@ def read_tt_db():
     )
     lg_map = get_activity_groups(tt_data)
     lg_ll = get_lg_lessons()
-    return collate_lessons(lg_ll, lg_map, rimap)
+    return tt_data, collate_lessons(lg_ll, lg_map, rimap)
 
 
 #TODO: This is the version for "3a", using the PARALLEL_LESSONS table.
