@@ -278,8 +278,9 @@ class TimetableManager:
 #TODO: The rooms should have been checked by trying to place all
 # activities. The atual rooms used would be got from elsewhere!
 # The calls to get_rooms are very inefficient ...
-            t_rooms_str = ",".join(get_rooms()[r][0] for r in t_rooms)
-            #print("\n???", t_rooms_str)
+            t_rooms_str = ",".join(get_rooms()[r-1][0] for r in t_rooms)
+            #print("\n???", t_rooms)
+            #print("   ->", t_rooms_str)
 
             for i, l, n in tile_divisions:
                 tile_index = len(tiles)
