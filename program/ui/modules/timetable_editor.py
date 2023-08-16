@@ -2,7 +2,7 @@
 """
 ui/modules/timetable_editor.py
 
-Last updated:  2023-08-125
+Last updated:  2023-08-13
 
 Show a timetable grid and allow placement of lesson tiles.
 

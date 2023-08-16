@@ -1,8 +1,7 @@
-#TODO: Already deprecated? See tt_basic_data.
 """
-timetable/tt_base.py
+timetable/tt_basic_data.py
 
-Last updated:  2023-08-13
+Last updated:  2023-08-16
 
 Handle the basic information for timetable display and processing.
 
@@ -34,12 +33,11 @@ if __name__ == "__main__":
     from core.base import start
     start.setup(os.path.join(basedir, 'TESTDATA'))
 
-#T = TRANSLATIONS("timetable.tt_base")
+#T = TRANSLATIONS("timetable.tt_basic_data")
 
 ### +++++
 
 from typing import NamedTuple, Optional
-#from dataclasses import dataclass
 
 from core.basic_data import (
     get_classes,
@@ -51,13 +49,12 @@ from core.basic_data import (
 )
 from core.db_access import db_select, db_query
 
-class TT_DATA(NamedTuple):
-    class_i: dict[str, int]
-    class_group_bits: list[dict[str, int]]
-    class_room: list[str]
-    teacher_i: dict[str, int]
-    teacher_bits: list[int]
-    room_i: dict[str, int]
+class TT_BASE_DATA(NamedTuple):
+    class_room: dict[str, str]
+    class_group_atoms: dict[str, dict[str, list[int]]]
+    n_class_group_atoms: int
+    teacher_index: dict[str, int]
+    room_index: dict[str, int]
 
 class COURSE_INFO(NamedTuple):
     klass: str
@@ -67,11 +64,15 @@ class COURSE_INFO(NamedTuple):
     bsid: str
     room: str
 
+class ACTIVITY_GROUP(NamedTuple):
+    teachers: set[int]
+    class_groups: set[int]
+    courses: list[COURSE_INFO]
+    roomlists: list[list[int]]
 
-#TODO: add "teachers" and "classgroups" fields.
-# Remove "checkbits"
 class TT_LESSON(NamedTuple):
-    checkbits: int
+    teachers: list[int]
+    classgroups: list[int]
     roomlists: tuple[list[int], list[list[int]], list[list[int]]]
     courselist: list[COURSE_INFO]
     lesson_id: int
@@ -104,6 +105,7 @@ def get_class_atoms():
     """Each atomic group within a class gets a unique index.
     The division groups need to be mapped to a list of these indexes.
     """
+    c_rmap = {}     # { class: classroom }
     c_g_map = {}    # { class: { group: [ index, ... ] } }
     # The NO_CLASS entry might be superfluous: there shouldn't be any
     # entries with a non-null group in the null class.
@@ -111,6 +113,7 @@ def get_class_atoms():
     i = 0
     for klass, cdata in get_classes().items():
         #print("?", klass)
+        c_rmap[klass] = cdata.classroom
         if klass != NO_CLASS:
             gmap = {}
             c_g_map[klass] = gmap
@@ -128,7 +131,7 @@ def get_class_atoms():
                 i += 1
                 gmap[GROUP_ALL] = [i]
             #print("  gmap:", gmap)
-    return i, c_g_map
+    return i, c_g_map, c_rmap
 
 
 def get_room_map():
@@ -146,69 +149,10 @@ def get_room_map():
     return rmap
 
 
-# Keep the bit stuff in case I want to use it sometime?
-def get_teacher_bits(b):
-    """Each teacher gets a unique index, so that integers can be used
-    instead of the tag (str) in speed critical code. Index 0 is reserved
-    for the null teacher (<NO_TEACHER>), the others follow contiguously.
-    Also a vector of bit-tags is generated so that logical AND can be
-    used to test timetable clashes.
+def get_activity_groups(tt_data: TT_BASE_DATA):
+    """Return a mapping of "activity groups" – that is, a collection of
+    data for each non-null Lesson_group value.
     """
-    timap = {NO_TEACHER: 0}
-    tvec = [0]
-    i = 0
-    for tid in get_teachers().list_teachers():
-        if tid != NO_TEACHER:
-            i += 1
-            timap[tid] = i
-            tvec.append(b)
-            b += b
-    return timap, tvec, b
-
-
-def get_class_bits(b):
-    """Each class gets a unique index, so that integers can be used
-    instead of the tag (str) in speed critical code. Index 0 is reserved
-    for the null class (<NO_CLASS>), the others follow contiguously.
-    Also bit-tags are generated for all usable class-groups, so that
-    logical AND can be used to test timetable clashes. These are
-    organised as a vector of mappings, one mapping per class, the keys
-    being the groups, the values the bit-tags.
-    """
-    cmap = {}
-    cimap = {NO_CLASS: 0}
-    cgvec = [{GROUP_ALL: 0}]
-    crvec = [""]
-    i = 0
-    for klass, cdata in get_classes().items():
-        #print("?", klass)
-        if klass != NO_CLASS:
-            i += 1
-            cimap[klass] = i
-            gmap = {}
-            cgvec.append(gmap)
-            crvec.append(cdata.classroom)
-            cg = cdata.divisions
-            g0 = 0  # whole class / all atomic groups
-            for ag in cg.atomic_groups:
-                cmap[ag] = b
-                g0 |= b
-                b += b
-            for g, ags in cg.group_atoms().items():
-                #print("???", g, ags)
-                bg0 = 0
-                for ag in ags:
-                    bg0 |= cmap[ag]
-                gmap[g] = bg0
-            if g0:
-                gmap[GROUP_ALL] = g0
-            else:
-                gmap[GROUP_ALL] = b
-                b += b
-    return cimap, cgvec, crvec, b
-
-
-def get_activity_groups(tt_data: TT_DATA):
     q = """select
 
         Lesson_group,
@@ -229,12 +173,13 @@ def get_activity_groups(tt_data: TT_DATA):
         where Lesson_group != '0'
     """
     lg_map = {}
-    r_map = tt_data.room_i
+    room_sets = {}
+    r_map = tt_data.room_index
+    t_map = tt_data.teacher_index
     for rec in db_select(q):
         lg = rec["Lesson_group"]
         klass = rec["CLASS"]
-        ci = tt_data.class_i[klass]
-        rm = tt_data.class_room[ci]
+        rm = tt_data.class_room[klass]
         if rm:
             room = rec["ROOM"].replace("$", rm)
         else:
@@ -252,31 +197,36 @@ def get_activity_groups(tt_data: TT_DATA):
             bsid,
             room
         )
-        gbits = tt_data.class_group_bits[ci][group] if group else 0
-        ti = tt_data.teacher_i[tid]
-        tbits = tt_data.teacher_bits[ti]
-        checkbits = gbits | tbits
-
+        cgalist = tt_data.class_group_atoms[klass][group] if group else []
+        ti = t_map[tid]
         try:
             lg_data = lg_map[lg]
-            lg_data[0] |= checkbits
-            if room:
-                lg_data[1].add(room)
+            if ti:
+                lg_data[0].add(ti)
+            if cgalist:
+                lg_data[1].update(cgalist)
             lg_data[2].append(row)
-
+            if room:
+                lg_data[3].add(room)
         except KeyError:
-            lg_map[lg] = [
-                checkbits,
-                {room} if room else set(),
+            lg_map[lg] = (
+                {ti} if ti else set(),
+                set(cgalist),
                 [row],
-            ]
-    # Process the room choices
-    for lg_data in lg_map.values():
-        lg_data[1] = simplify_room_lists(
-            [[r_map[r] for r in room_split(rx)] for rx in lg_data[1]]
+                {room} if room else set()
+            )
+    return {
+        lg: ACTIVITY_GROUP(
+            *lg_data[:3],
+            simplify_room_lists(
+                [
+                    [r_map[r] for r in room_split(rx)]
+                    for rx in lg_data[3]
+                ]
+            )
         )
-        #print("  -->", lg_data[1])
-    return lg_map
+        for lg, lg_data in lg_map.items()
+    }
 
 # Each lg will have one or more classes (though the null class is
 # possible, too) and one or more teachers (though the null teacher is
@@ -319,11 +269,13 @@ def collate_lessons(
 #TODO: ... or rather list of (lg, [tt_lesson indexes]) ?
 #TODO: Use indexes for teachers(, subjects) and classes?
     for lg, ll in lg_ll.items():
-        checkbits, roomlists, courselist = lg_map[lg]
+        ag = lg_map[lg]
+        tlist = sorted(ag.teachers)
+        cglist = sorted(ag.class_groups)
         tids = set()
         classes = set()
         sid0, bsid0 = None, None
-        for course in courselist:
+        for course in ag.courses:
             # Each row <courselist> must have the same bsid and, if bsid
             # is null, the same sid.
             # <sid0> will be the lesson subject.
@@ -347,7 +299,6 @@ def collate_lessons(
             assert klass
             if klass != NO_CLASS and course.group:
                 classes.add(klass)
-
         for lid, l, t, p, rr in ll:
             tt_index = len(tt_lessons)
             for tid in tids:
@@ -360,15 +311,15 @@ def collate_lessons(
                     class_activities[klass].append(tt_index)
                 except KeyError:
                     class_activities[klass] = [tt_index]
-
             if rr:
                 rplist = [rmap_i[r] for r in rr.split(",")]
             else:
                 rplist = []
             tt_lessons.append(TT_LESSON(
-                checkbits,
-                roomlists,
-                courselist,
+                tlist,
+                cglist,
+                ag.roomlists,
+                ag.courses,
                 lid,
                 sid0,
                 l,
@@ -465,20 +416,20 @@ def simplify_room_lists(roomlists: list[list[int]]) -> Optional[
 def read_tt_db():
     """Read all timetable-relevant information from the database.
     """
-    timap, tvec, b = get_teacher_bits(1)
-    cimap, cgvec, crvec, b = get_class_bits(b)
+    timap = get_teacher_indexes()
+    n, cgimap, crmap = get_class_atoms()
     rimap = get_room_map()
-    tt_data = TT_DATA(
-        cimap,
-        cgvec,
-        crvec,
+    tt_data = TT_BASE_DATA(
+        crmap,
+        cgimap,
+        n,
         timap,
-        tvec,
         rimap,
     )
     lg_map = get_activity_groups(tt_data)
     lg_ll = get_lg_lessons()
     return tt_data, collate_lessons(lg_ll, lg_map, rimap)
+
 
 
 #TODO: This is the version for "3a", using the PARALLEL_LESSONS table.
@@ -524,38 +475,22 @@ if __name__ == '__main__':
     from core.db_access import open_database
     open_database()
 
-    timap, tvec, b = get_teacher_bits(1)
-    l = len(f"{b:b}")
-    print("\n TEACHERS\n  bits bytes:", l-1, sys.getsizeof(b))
-    for tid, i in timap.items():
-        print(f"   -- {tid:5} {tvec[i]:0{l}b}")
+    tt_data, collated_lessons = read_tt_db()
 
-    cimap, cgvec, crvec, b = get_class_bits(b)
-    l = len(f"{b:b}")
-    print("\n CLASS-GROUPS\n  bits bytes:", l-1, sys.getsizeof(b))
-    for klass, i in cimap.items():
-        gmap = cgvec[i]
-        print("***** class", klass, crvec[i])
-        for g, bits in gmap.items():
-            print(f"   -- {g:5} {bits:0{l}b}")
+    print("\n TEACHER INDEXES:")
+    for tid, i in tt_data.teacher_index.items():
+        print(f"   -- {tid:5} {i}")
+
+    print("\n CLASS-GROUPS:")
+    for klass, cgmap in tt_data.class_group_atoms.items():
+        print("***** class", klass)
+        for g, i in cgmap.items():
+            print(f"   -- {g:5} {i}")
+    print("  ... last index =", tt_data.n_class_group_atoms)
 
     print("\n ROOMS:")
-    rimap = get_room_map()
-    for r, i in rimap.items():
+    for r, i in tt_data.room_index.items():
         print(f"   -- {r:5} {i}")
-
-    tt_data = TT_DATA(
-        cimap,
-        cgvec,
-        crvec,
-        timap,
-        tvec,
-        rimap,
-    )
-
-    #quit(0)
-
-    lg_map = get_activity_groups(tt_data)
 
 # Not used here ...
     print("\n PARALLELS:")
@@ -563,19 +498,9 @@ if __name__ == '__main__':
     for tag in sorted(pmap):
         print(f"  // {tag:10} : {pmap[tag]}")
 
-    print("\n LG_LESSONS:")
-    lg_ll = get_lg_lessons()
-    for lg, ll in lg_ll.items():
-        print("  **", lg)
-        for l in ll:
-            print("    --", l)
+    tlessons, class_activities, teacher_activities = collated_lessons
 
-    print("\n TLESSONS:")
-    tlessons, class_activities, teacher_activities = collate_lessons(
-        lg_ll, lg_map, tt_data.room_i
-    )
-    for tl in tlessons:
-        print("   --", tl)
+#TODO: ACTIVITY_GROUP.roomlists seems to be failing!
 
     print("\n TLESSONS  class 11G:")
     for tli in class_activities["11G"]:
@@ -585,13 +510,6 @@ if __name__ == '__main__':
     for tli in teacher_activities["MT"]:
         print("   --", tlessons[tli])
 
-    print("\nc_g_map:")
-    n_groups, c_g_map = get_class_atoms()
-    for c, g_map in c_g_map.items():
-        print("  Class:", c)
-        for g, ilist in g_map.items():
-            print("    --", g, ilist)
-    print("  ... last index =", n_groups)
 
     from pympler import asizeof
     print("\nSIZE:", asizeof.asizeof(tlessons))
