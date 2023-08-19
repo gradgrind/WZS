@@ -1,7 +1,7 @@
 """
 timetable/tt_basic_data.py
 
-Last updated:  2023-08-16
+Last updated:  2023-08-17
 
 Handle the basic information for timetable display and processing.
 
@@ -47,7 +47,7 @@ from core.basic_data import (
     GROUP_ALL,
     NO_TEACHER
 )
-from core.db_access import db_select, db_query
+from core.db_access import db_select, db_query, db_read_fields
 
 class TT_BASE_DATA(NamedTuple):
     class_room: dict[str, str]
@@ -147,6 +147,16 @@ def get_room_map():
         i += 1
         rmap[r] = i
     return rmap
+
+
+def get_room_groups():
+    rgroups = {}
+    for rg, rid in db_read_fields("TT_ROOM_GROUPS", ("ROOM_GROUP", "RID")):
+        try:
+            rgroups[rg].append(rid)
+        except KeyError:
+            rgroups[rg] = [rid]
+    return rgroups
 
 
 def get_activity_groups(tt_data: TT_BASE_DATA):
@@ -474,6 +484,12 @@ def get_parallels():
 if __name__ == '__main__':
     from core.db_access import open_database
     open_database()
+
+    print("\n ROOM GROUPS")
+    for rg, rlist in get_room_groups().items():
+        print(f"  -- {rg:10}", rlist)
+
+    quit(1)
 
     tt_data, collated_lessons = read_tt_db()
 
