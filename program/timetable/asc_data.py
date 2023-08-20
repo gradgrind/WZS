@@ -2,7 +2,7 @@
 # It is at present used primarily for the generation of configurations
 # using a fet-result. It is then imported by fet_read_results.
 """
-timetable/asc_data.py - last updated 2023-08-10
+timetable/asc_data.py - last updated 2023-08-20
 
 Prepare aSc-timetables input from the database ...
 
@@ -70,6 +70,7 @@ from core.basic_data import (
     timeslot2index,
 )
 from core.activities import collect_activity_groups
+from timetable.tt_basic_data import get_room_groups
 
 def idsub(tag):
     """In aSc, "id" fields may only contain ASCII alphanumeric characters,
@@ -300,6 +301,7 @@ class TimetableCourses:
 
         ### Add asc activities
         lg_map = collect_activity_groups()
+        room_groups = get_room_groups()
         for lg, act in lg_map.items():
             ## Collect classes / groups
             class_set = set()
@@ -329,11 +331,49 @@ class TimetableCourses:
             ## aSc doesn't support xml-input of complex room info, so
             ## just make a simple list.
             for r in room_set:
-                if (rs := r.rstrip('+')):
-                    for rl in rs.split('/'):
-                        room_list.append(rl)
-                if r[-1] == '+':
-                    extra_room = True
+
+
+                rsx = r.split("+")
+                if len(rsx) == 2:
+                    rs, rg = rsx
+                    if rg:
+                        try:
+                            rxlist = room_groups[rg]
+                        except KeyError:
+                            REPORT(
+                                "ERROR",
+                                T["UNKNOWN_ROOM_GROUP"].format(
+                                    rgroup=rg,
+                                    classes=",".join(sorted(class_set)),
+                                    subject=sid
+                                )
+                            )
+                            rxlist = []
+                    else:
+#TODO: Actually deprecated ...
+                        rxlist = []
+                        extra_room = True
+                else:
+                    assert len(rsx) == 1
+                    rxlist = []
+                    rs = r
+                if rs:
+                    # Add these explicit rooms room list, avoiding
+                    # duplicates
+                    for rx in rs.split('/'):
+                        if rx not in room_list:
+                            room_list.append(rx)
+                # Add rooms from the group to the room list, avoiding
+                # duplicates
+                for rx in rxlist:
+                    if rx not in rl:
+                        rl.append(rx)
+#old:
+#                if (rs := r.rstrip('+')):
+#                    for rl in rs.split('/'):
+#                        room_list.append(rl)
+#                if r[-1] == '+':
+#                    extra_room = True
             if extra_room:
                 room_list.append(EXTRA_ROOM)
             ## Divide lessons up according to duration

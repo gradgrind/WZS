@@ -1,7 +1,7 @@
 #TODO: Do a lint to find a couple of errors.
 # Importing core.activities, which may be deprecated?
 """
-timetable/fet_data.py - last updated 2023-08-10
+timetable/fet_data.py - last updated 2023-08-20
 
 Prepare fet-timetables input from the database ...
 
@@ -76,6 +76,7 @@ from core.db_access import (
     db_name,
 )
 from core.activities import collect_activity_groups
+from timetable.tt_basic_data import get_room_groups
 
 LUNCH_BREAK = '^'
 
@@ -353,6 +354,7 @@ class TimetableCourses:
 
         ### Collect data for each lesson-group
         lg_map = collect_activity_groups()
+        room_groups = get_room_groups()
         ### Add fet activities
         for lg, act in lg_map.items():
             class_set = set()
@@ -407,15 +409,45 @@ class TimetableCourses:
             singles = []
             roomlists0 = []
             classes_str = ",".join(sorted(class_set))
-            # Collect open allocations (with '+') and multiple room
-            # activities. Eliminate open room choices from further
-            # consideration here.
+            # Collect open allocations (the old variant ending in "+")
+            # and multiple room activities, including room groups.
+            # Eliminate open room choices from further consideration here.
             roomlists = []
             for r in room_set:
-                rs = r.rstrip('+')
+                rsx = r.split("+")
+                if len(rsx) == 2:
+                    rs, rg = rsx
+                    if rg:
+                        try:
+                            rxlist = room_groups[rg]
+                        except KeyError:
+                            REPORT(
+                                "ERROR",
+                                T["UNKNOWN_ROOM_GROUP"].format(
+                                    rgroup=rg,
+                                    classes=classes_str,
+                                    subject=sid
+                                )
+                            )
+                            rxlist = []
+                    else:
+#TODO: Actually deprecated ...
+                        rxlist = ["+"]
+                else:
+                    assert len(rsx) == 1
+                    rxlist = []
+                    rs = r
                 rl = rs.split('/') if rs else []
-                if r[-1] == '+':
-                    rl.append('+')
+                # Add rooms from the group to the room list, avoiding
+                # duplicates
+                for rx in rxlist:
+                    if rx not in rl:
+                        rl.append(rx)
+#old:
+#                rs = r.rstrip('+')
+#                rl = rs.split('/') if rs else []
+#                if r[-1] == '+':
+#                    rl.append('+')
                 roomlists.append(rl)
             if len(roomlists) > 1:
                 self.fancy_rooms.append((classes_str, lg, roomlists))

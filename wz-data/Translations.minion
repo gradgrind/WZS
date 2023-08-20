@@ -506,6 +506,7 @@ timetable.asc_data: {
     # Entries probably valid not just for "aSc"
     WHOLE_CLASS:    alle  # name for a "group" comprising the whole class
     ROOM_TODO:      "Raum muss noch festgelegt werden"
+    UNKNOWN_ROOM_GROUP: "Fach {sid} in Klasse(n) {classes} ... unbekannte Raumgruppe: {rgroup}"
 }
 
 timetable.fet_data: {
@@ -525,6 +526,7 @@ timetable.fet_data: {
     INVALID_CONSTRAINT_VALUE: "ungültiger Wert für Bedingung ({val})"
     PARALLEL_SINGLE: "Parallel-Kennung {tag} hat nur eine Unterrichtsstunde"
     LUNCH_BREAK:    "Mittagspause"
+    UNKNOWN_ROOM_GROUP: "Fach {sid} in Klasse(n) {classes} ... unbekannte Raumgruppe: {rgroup}"
 }
 
 timetable.fet_read_results: {
