@@ -1,7 +1,7 @@
 """
 timetable/tt_basic_data.py
 
-Last updated:  2023-08-17
+Last updated:  2023-08-20
 
 Handle the basic information for timetable display and processing.
 
@@ -53,6 +53,8 @@ class TT_BASE_DATA(NamedTuple):
     class_room: dict[str, str]
     class_group_atoms: dict[str, dict[str, list[int]]]
     n_class_group_atoms: int
+    # <n_class_group_atoms> is provided because <class_group_atoms>
+    # (being a dict of dicts) doesn't directly provide the needed number.
     teacher_index: dict[str, int]
     room_index: dict[str, int]
 
@@ -488,8 +490,6 @@ if __name__ == '__main__':
     print("\n ROOM GROUPS")
     for rg, rlist in get_room_groups().items():
         print(f"  -- {rg:10}", rlist)
-
-    quit(1)
 
     tt_data, collated_lessons = read_tt_db()
 

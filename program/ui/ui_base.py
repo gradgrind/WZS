@@ -1,7 +1,7 @@
 """
 ui/ui_base.py
 
-Last updated:  2023-05-19
+Last updated:  2023-08-21
 
 Support stuff for the GUI: application initialization, dialogs, etc.
 
@@ -275,7 +275,7 @@ def YesOrNoDialog(message, title=None):
     ok.clicked.connect(qd.accept)
     bbox.addWidget(ok)
     cancel.setDefault(True)
-    return qd.exec_() == QDialog.Accepted
+    return qd.exec() == QDialog.Accepted
 
 
 def LoseChangesDialog():
@@ -300,7 +300,7 @@ def LineDialog(message, text=None, title=None):
     ok.clicked.connect(td.accept)
     bbox.addWidget(ok)
     cancel.setDefault(True)
-    if td.exec_() == QDialog.Accepted:
+    if td.exec() == QDialog.Accepted:
         return lineedit.text().strip()
     return None
 
@@ -326,7 +326,7 @@ def TextAreaDialog(message=None, text=None, title=None):
     ok.clicked.connect(td.accept)
     bbox.addWidget(ok)
     cancel.setDefault(True)
-    if td.exec_() == QDialog.Accepted:
+    if td.exec() == QDialog.Accepted:
         return textedit.toPlainText().strip()
     return None
 
@@ -373,7 +373,7 @@ def ListSelect(title, message, data, button=None):
         xb = QPushButton(button)
         xb.clicked.connect(xb_clicked)
         bbox.addWidget(xb)
-    select.exec_()
+    select.exec()
     return select.result
 
 
@@ -424,7 +424,7 @@ def TreeDialog(title, message, data, button=None):
         xb = QPushButton(button)
         xb.clicked.connect(xb_clicked)
         bbox.addWidget(xb)
-    select.exec_()
+    select.exec()
     return select.result
 
 
@@ -475,7 +475,7 @@ def TreeMultiSelect(title, message, data, checked=False):
     ok.setDefault(True)
     ok.clicked.connect(select.accept)
     bbox.addWidget(ok)
-    if select.exec_() == QDialog.Accepted:
+    if select.exec() == QDialog.Accepted:
         categories = []
         for k, items in elements:
             # Filter the changes lists

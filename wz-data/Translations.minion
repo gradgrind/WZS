@@ -535,3 +535,7 @@ timetable.fet_read_results: {
     Open_Directory:         "Zielordner öffnen"
     BAD_PLACEMENTS_ENDING:  "Die fet-Ergebnisse sind in einer Datei mit Endung „{ending}“"
 }
+
+timetable.tt_placement: {
+    CLASHING_FIXED_TIME: "Aktivitäten können nicht gleichzeitig ({time}) stattfinden:\n  1) {activity1}\n  2) {activity2}"
+}
