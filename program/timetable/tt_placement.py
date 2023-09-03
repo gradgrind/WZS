@@ -2,7 +2,7 @@
 """
 timetable/tt_placement.py
 
-Last updated:  2023-08-21
+Last updated:  2023-08-23
 
 Handle the basic information for timetable display and processing.
 
@@ -57,9 +57,9 @@ class PlacementEngine:
 # be entries for unallocated room requirements?
 
 class ALLOCATION(NamedTuple):
-    teacher_weeks: list[int]
-    group_weeks: list[int]
-    room_weeks: list[int]
+    teacher_weeks: list[list[int]]
+    group_weeks: list[list[int]]
+    room_weeks: list[list[int]]
 
 
 def data_structures(n_teachers, n_groups, n_rooms):
@@ -104,7 +104,9 @@ def get_state_vector(tt_lessons):
             rl3 = ttl.roomlists
 #TODO: Actually the third entry in <rl3> is deprecated, but may still
 # appear for a while ...
-            for i in range(len(rl3[0]) + len(rl3[1]) + len(rl3[2])):
+            # Skip the compulsory single rooms (see comment below)
+            #for i in range(len(rl3[0]) + len(rl3[1]) + len(rl3[2])):
+            for i in range(len(rl3[1]) + len(rl3[2])):
                 lstate.append(0)
     return state
 
@@ -200,10 +202,11 @@ def place_lesson_initial(
     # Place single compulsory rooms
     pslot = allocation.room_weeks[timeslot]
     rl = ttl.roomlists
+    # Skip the compulsory single rooms (see comment to <get_state_vector()>)
     for r in rl[0]:
         pslot[r] = ttli
-        i += 1
-        state[i] = r
+        #i += 1
+        #state[i] = r
     # Room choices are not allocated here
     for rc in rl[1]:
         i += 1
@@ -229,10 +232,6 @@ def place_lesson_initial(
 # for incomplete timetables.
 #TODO
 def full_placement(tt_data, tt_lessons, saved_state=None):
-    day2index = get_days().index
-    periods = get_periods()
-    nperiods = len(periods)
-    period2index = periods.index
     allocation = data_structures(
         len(tt_data.teacher_index),
         tt_data.n_class_group_atoms + 1,
@@ -244,11 +243,9 @@ def full_placement(tt_data, tt_lessons, saved_state=None):
     while i < imax:
         i += 1
         ttl = tt_lessons[i]
-        timeslot_txt = ttl.time
-        if timeslot_txt:
-#TODO: Could be "^ ..." (lesson reference)!
-            d, p = timeslot_txt.split(".")
-            timeslot = day2index(d) * nperiods + period2index(p) + 1
+        timeslot = ttl.time
+        if timeslot != 0:
+#TODO: Could have been "^ ..." (lesson reference)!
             blockers = can_place_lesson(allocation, tt_lessons, i, timeslot)
             if blockers:
                 #print("   BLOCKERS", i, blockers)
@@ -258,16 +255,18 @@ def full_placement(tt_data, tt_lessons, saved_state=None):
                     T["CLASHING_FIXED_TIME"].format(
                         activity1=print_activity(ttlx),
                         activity2=print_activity(ttl),
-                        time=timeslot_txt
+                        time=timeslot_text(timeslot)
                     )
                 )
                 continue
         elif saved_state:
-            timeslot = saved_state[i]
+            timeslot = saved_state[i][0]
             if timeslot == 0:
                 continue
             blockers = can_place_lesson(allocation, tt_lessons, i, timeslot)
-            #print("?????", i, timeslot, blockers)
+#--
+#            print("?????", i, timeslot, blockers)
+
             if blockers:
                 continue
         else:
@@ -290,17 +289,127 @@ def print_activity(tlesson):
     return f"{g}|{course1.tid}{multi} :: {tlesson.subject_tag}"
 
 
+# Do I want to keep this structure?
+def get_saved_state(tt_lessons):
+    """Extract the placements from the LESSONS table (via the activities
+    list).
+    """
+    state = [None]
+    for ttli in range(1, len(tt_lessons)):
+        ttl = tt_lessons[ttli]
+        time = ttl.placement0
+        if time > 0:
+            rooms = ttl.rooms0
+            # The rooms might not correspond (even in number) to those
+            # expected ...
+            state.append([time] + ttl.rooms0)
+        else:
+            state.append([0])
+    return state
+
+
+# See init_timeslot_text below
+def timeslot_text(timeslot):
+    days = get_days()
+    periods = get_periods()
+    if timeslot == 0:
+        return ""
+    #print("§DAYS:", days)
+    #print("§PERIODS:", periods)
+    d, p = divmod(timeslot - 1, len(periods))
+    return f"{days[d][0]}.{periods[p][0]}"
+
+
+# The returned function is a bit more efficient than the above for repeated use.
+def init_timeslot_text():
+    def tt(timeslot):
+        if timeslot == 0:
+            return ""
+        d, p = divmod(timeslot - 1, nperiods)
+        return f"{days[d]}.{periods[p]}"
+    days = [x[0] for x in get_days()]
+    periods = [x[0] for x in get_periods()]
+    nperiods = len(periods)
+    return tt
+
+
+def test_room_allocation(
+    requirements: list[list[int]],
+    test_rooms: list[int]
+):
+    """Check the availability of the saved room list and correlate it
+    to the room requirements (choices) list.
+
+? Would a simple yes/no result be more appropriate?
+    Return the list of allocations corresponding to the requirements,
+    with 0 at places where no allocation is possible.
+? Should an attempt be made to find other possible rooms?
+    """
+    ttl = tt_lessons[ttli]
+    length = ttl.length
+    while length > 0:
+        cleared_rooms = []
+        pslot = allocation.room_weeks[timeslot]
+        rl = ttl.roomlists
+        for r in test_rooms:
+            if pslot[r] == 0:
+                cleared_rooms.append(r)
+        length -= 1
+        timeslot += 1
+        test_rooms = cleared_rooms
+# Now try to fit to requirements ... probably very inefficient ...
+    for rc in first_choice_list:
+        try:
+            test_rooms.remove(rc)
+        except ValueError:
+            continue
+#TODO!
+        if recurse:
+            return True
+        else:
+            test_rooms.append(rc)   # put it back, try another one ...
+    return False
+#Consider thoroughly what I want to achieve here!
+
+
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
 
 if __name__ == '__main__':
     from core.db_access import open_database
     open_database()
 
+    """
+    from random import randrange
+    from timeit import default_timer as timer
+    from datetime import timedelta
+    start = timer()
+    for i in range(1000000):
+        t = timeslot_text(randrange(46))
+    end = timer()
+    print(timedelta(seconds=end-start))
+    timeslot_text2 = init_timeslot_text()
+    start = timer()
+    for i in range(1000000):
+        t = timeslot_text2(randrange(46))
+    end = timer()
+    print(timedelta(seconds=end-start))
+    quit(1)
+    """
+
+    """
+    timeslot_text2 = init_timeslot_text()
+    print("§", timeslot_text2(0))
+    print("§", timeslot_text2(10))
+    print("§", timeslot_text2(11))
+    quit(1)
+    """
+
     from timetable.tt_basic_data import read_tt_db
     tt_data, tt_lists = read_tt_db()
     tt_lessons, class_ttls, teacher_ttls = tt_lists
 
-    full_placement(tt_data, tt_lessons)
+    saved_state = get_saved_state(tt_lessons)
+    full_placement(tt_data, tt_lessons, saved_state)
 
     quit(0)
 

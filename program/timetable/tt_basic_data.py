@@ -1,7 +1,7 @@
 """
 timetable/tt_basic_data.py
 
-Last updated:  2023-08-20
+Last updated:  2023-09-03
 
 Handle the basic information for timetable display and processing.
 
@@ -33,13 +33,15 @@ if __name__ == "__main__":
     from core.base import start
     start.setup(os.path.join(basedir, 'TESTDATA'))
 
-#T = TRANSLATIONS("timetable.tt_basic_data")
+T = TRANSLATIONS("timetable.tt_basic_data")
 
 ### +++++
 
 from typing import NamedTuple, Optional
 
 from core.basic_data import (
+    get_days,
+    get_periods,
     get_classes,
     get_teachers,
     get_rooms,
@@ -57,6 +59,7 @@ class TT_BASE_DATA(NamedTuple):
     # (being a dict of dicts) doesn't directly provide the needed number.
     teacher_index: dict[str, int]
     room_index: dict[str, int]
+    room_groups: dict[str, list[int]]
 
 class COURSE_INFO(NamedTuple):
     klass: str
@@ -67,23 +70,26 @@ class COURSE_INFO(NamedTuple):
     room: str
 
 class ACTIVITY_GROUP(NamedTuple):
-    teachers: set[int]
-    class_groups: set[int]
+    teacher_set: set[int]
+    classgroup_set: set[int]
     courses: list[COURSE_INFO]
-    roomlists: list[list[int]]
+    fixed_rooms: list[int]
+    room_choices: list[list[int]]
 
 class TT_LESSON(NamedTuple):
     teachers: list[int]
     classgroups: list[int]
-    roomlists: tuple[list[int], list[list[int]], list[list[int]]]
+    fixed_rooms: list[int]
+    room_choices: list[list[int]]
     courselist: list[COURSE_INFO]
     lesson_id: int
     subject_tag: str
     length: int
     lesson_group: int
-    time: str
+    time: int
     # These are only needed for initialisation
-    placement0: str
+#TODO: Consider moving the following out of this data structure
+    placement0: int
     rooms0: list[int]
 
 ### -----
@@ -112,7 +118,8 @@ def get_class_atoms():
     # The NO_CLASS entry might be superfluous: there shouldn't be any
     # entries with a non-null group in the null class.
     c_g_map[NO_CLASS] = {GROUP_ALL: [0]}
-    i = 0
+    i = 0           # Maximum index in <c_g_map>, i.e. number of atomic
+                    # groups (valid indexing starts at 1)
     for klass, cdata in get_classes().items():
         #print("?", klass)
         c_rmap[klass] = cdata.classroom
@@ -139,11 +146,8 @@ def get_class_atoms():
 def get_room_map():
     """Each room gets a unique index, so that integers can be used
     instead of the tag (str) in speed critical code.
-    The special room "+" (which indicates that a room is still needed
-    and cannot be allocated directly in the timetable) is given index 0.
-    The others follow contiguously.
     """
-    rmap = {"+": 0}
+    rmap = {"": 0}
     i = 0
     for r, n in get_rooms():
         i += 1
@@ -185,7 +189,6 @@ def get_activity_groups(tt_data: TT_BASE_DATA):
         where Lesson_group != '0'
     """
     lg_map = {}
-    room_sets = {}
     r_map = tt_data.room_index
     t_map = tt_data.teacher_index
     for rec in db_select(q):
@@ -227,18 +230,46 @@ def get_activity_groups(tt_data: TT_BASE_DATA):
                 [row],
                 {room} if room else set()
             )
-    return {
-        lg: ACTIVITY_GROUP(
-            *lg_data[:3],
-            simplify_room_lists(
-                [
-                    [r_map[r] for r in room_split(rx)]
-                    for rx in lg_data[3]
-                ]
+    agmap = {}
+    for lg, lg_data in lg_map.items():
+        rsl = []
+        for rx in lg_data[3]:
+            try:
+                rsl.append(room_split(tt_data, rx))
+            except KeyError:
+                cdata = lg_data[2][0]
+                sbj = cdata.bsid or cdata.sid
+                cstr = f"{cdata.klass}.{cdata.group},{cdata.tid},{sbj}"
+                if len(lg_data[2]) > 1:
+                    cstr += " ..."
+                REPORT(
+                    "ERROR",
+                    T["UNKNOWN_ROOM_GROUP"].format(
+                        course = cstr,
+                        rooms = rx,
+                    )
+                )
+        srl = simplify_room_lists(rsl)
+        print("???", rsl)
+        print("   -->", srl)
+        if not srl:
+            cdata = lg_data[2][0]
+            sbj = cdata.bsid or cdata.sid
+            cstr = f"{cdata.klass}.{cdata.group},{cdata.tid},{sbj} ..."
+            assert len(lg_data[2]) > 1
+            # I think an error can only occur when there are
+            # multiple courses, so the assertion is a check.
+            REPORT(
+                "ERROR",
+                T["ROOM_ERROR"].format(
+                    course = cstr,
+                    rooms = ", ".join(lg_data[3]),
+                )
             )
-        )
-        for lg, lg_data in lg_map.items()
-    }
+            srl = ([], [])
+        agmap[lg] = ACTIVITY_GROUP(*lg_data[:3], *srl)
+    return agmap
+
 
 # Each lg will have one or more classes (though the null class is
 # possible, too) and one or more teachers (though the null teacher is
@@ -273,17 +304,28 @@ def collate_lessons(
     lg_map: dict[int, list[int, set[str], list[tuple]]],
     rmap_i: dict[str, int],
 ):
-#TODO: documentation
+    """Combine the data for the lesson groups and the individual lessons
+    to a list of TT_LESSON items.
+    For more effective placement checks teachers, groups and rooms are
+    replaced by integers (there is a somewhat dynamic correspondence of
+    the various tags to the indexes, which may vary from run to run).
+    Information from the "courses" connected with such an item, is
+    retained as a list with the original values, not the numeric
+    equivalents.
+    """
+    # The following is for converting lesson "times" to week-vector indexes:
+    day2index = get_days().index
+    periods = get_periods()
+    nperiods = len(periods)
+    period2index = periods.index
+    # Run through the lesson groups and their associated lessons
     tt_lessons = [None]   # (checkbits, list of room-choice lists, ???)
-
     class_activities = {}       # class -> list of tt_lesson indexes
     teacher_activities = {}     # teacher -> list of tt_lesson indexes
-#TODO: ... or rather list of (lg, [tt_lesson indexes]) ?
-#TODO: Use indexes for teachers(, subjects) and classes?
     for lg, ll in lg_ll.items():
         ag = lg_map[lg]
-        tlist = sorted(ag.teachers)
-        cglist = sorted(ag.class_groups)
+        tlist = sorted(ag.teacher_set)
+        cglist = sorted(ag.classgroup_set)
         tids = set()
         classes = set()
         sid0, bsid0 = None, None
@@ -311,7 +353,7 @@ def collate_lessons(
             assert klass
             if klass != NO_CLASS and course.group:
                 classes.add(klass)
-        for lid, l, t, p, rr in ll:
+        for lid, l, t, p0, rr0 in ll:
             tt_index = len(tt_lessons)
             for tid in tids:
                 try:
@@ -323,63 +365,90 @@ def collate_lessons(
                     class_activities[klass].append(tt_index)
                 except KeyError:
                     class_activities[klass] = [tt_index]
-            if rr:
-                rplist = [rmap_i[r] for r in rr.split(",")]
+            if t:
+#TODO: What if it is a reference (starting with "^")?
+                d, p = t.split(".")
+                t_index = day2index(d) * nperiods + period2index(p) + 1
+            else:
+                t_index = 0
+#TODO: Consider moving p0 and rr0 out of this data structure
+            if p0:
+                d, p = p0.split(".")
+                p0_index = day2index(d) * nperiods + period2index(p) + 1
+            else:
+                p0_index = 0
+            if rr0:
+                rplist = [rmap_i[r] for r in rr0.split(",")]
             else:
                 rplist = []
             tt_lessons.append(TT_LESSON(
                 tlist,
                 cglist,
-                ag.roomlists,
+                ag.fixed_rooms,
+                ag.room_choices,
                 ag.courses,
                 lid,
                 sid0,
                 l,
                 lg,
-                t,
-                p,
+                t_index,
+                p0_index,
                 rplist
             ))
     return tt_lessons, class_activities, teacher_activities
 
 
-def room_split(room_choice: str) -> list[str]:
+def room_split(tt_data: TT_BASE_DATA, room_choice: str) -> list[int]:
     """Split a room (choice) string into components.
-    If there is a '+', it must be the last character, not preceded
-    by a '/'.
+    If there is a '+', it must be followed by a valid room-group name,
+    not preceded by a '/' and be the last item in the string. The group
+    is replaced by its contents, though rooms are not included more than
+    once in the resulting list.
+    The rooms are returned as indexes.
     """
-    rs = room_choice.rstrip('+')
-    rl = rs.split('/') if rs else []
-    if room_choice and room_choice[-1] == '+':
-        rl.append('+')
+    rs = room_choice.split('+')
+    if len(rs) == 1:
+        rgl = []
+    else:
+        room_choice, rg = rs            # ValueError if not 2 items
+        rgl = tt_data.room_groups[rg]   # KeyError if invalid
+    if room_choice:
+        r_map = tt_data.room_index
+        rl = [r_map[r] for r in room_choice.split('/')]
+    else:
+        rl = []
+    for rx in rgl:
+        if rx not in rl:
+            rl.append(rx)
     return rl
 
 
-def simplify_room_lists(roomlists: list[list[int]]) -> Optional[
-    tuple[
-        list[int],          # required single rooms
-        list[list[int]],    # fixed room choices
-        list[list[int]]     # flexible room choices
-    ]
-]:
+def simplify_room_lists(roomlists: list[list[int]]
+) -> Optional[tuple[list[int], list[list[int]]]]:
     """Simplify room lists, where possible, and check for room conflicts.
 
     The basic room specifications for the individual "tlessons" are
-    processed into three separate lists (see result type).
-    The number of entries in <roomlist> is taken to be the number of
-    distinct rooms needed.
+    processed into compulsory single rooms and further required rooms
+    which can be one of a number of choices.
     This approach is in some respects not ideal, but given the
     difficulties of specifying concisely the room requirements for
     blocks containing multiple courses, it seemed a reasonable compromise.
+
+    <roomlists>: A list of lists. Each entry in the outer list
+        corresponds to one required room. Such an entry is a list
+        containing the indexes of the permissible rooms.
+
+    Return:
+        List of required rooms (indexes) where there is no choice.
+        List of choice lists.
+
+    A <None> return value indicates invalid data.
     """
     ## Collect single room "choices" and remove redundant entries
-    srooms = [] # (single) fixed room
-    rooms = []  # "normal" room choice list
-    xrooms = [] # "flexible" room choice list (with '+')
+    srooms = []         # (single) fixed room
+    rooms = []          # room choice list
     for rchoice in roomlists:
-        if rchoice[-1] == 0:    # '+'
-            xrooms.append(rchoice[:-1])
-        elif len(rchoice) == 1:
+        if len(rchoice) == 1:
             r = rchoice[0]
             if r in srooms:
                 return None     # Internal conflict!
@@ -407,22 +476,10 @@ def simplify_room_lists(roomlists: list[list[int]]) -> Optional[
                 else:
                     rooms_1.append(rlist)
         rooms = rooms_1
-        # Filter already claimed rooms from the flexible choices
-        for rlist in xrooms:
-            try:
-                rlist.remove(r)
-            except ValueError:
-                continue
     # Sort according to list length
     rl1 = [(len(rl), rl) for rl in rooms]
-    rl2 = [(len(rl), rl) for rl in xrooms]
     rl1.sort()
-    rl2.sort()
-    return (
-        srooms,
-        [rl[1] for rl in rl1],
-        [rl[1] for rl in rl2]
-    )
+    return (srooms, rl1)
 
 
 def read_tt_db():
@@ -431,12 +488,17 @@ def read_tt_db():
     timap = get_teacher_indexes()
     n, cgimap, crmap = get_class_atoms()
     rimap = get_room_map()
+    rgmap = {
+        rg: [rimap[r] for r in rl]
+        for rg, rl in get_room_groups().items()
+    }
     tt_data = TT_BASE_DATA(
         crmap,
         cgimap,
         n,
         timap,
         rimap,
+        rgmap,
     )
     lg_map = get_activity_groups(tt_data)
     lg_ll = get_lg_lessons()
@@ -515,8 +577,6 @@ if __name__ == '__main__':
         print(f"  // {tag:10} : {pmap[tag]}")
 
     tlessons, class_activities, teacher_activities = collated_lessons
-
-#TODO: ACTIVITY_GROUP.roomlists seems to be failing!
 
     print("\n TLESSONS  class 11G:")
     for tli in class_activities["11G"]:
