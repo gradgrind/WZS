@@ -445,41 +445,36 @@ def simplify_room_lists(roomlists: list[list[int]]
     A <None> return value indicates invalid data.
     """
     ## Collect single room "choices" and remove redundant entries
-    srooms = []         # (single) fixed room
+    srooms = set()      # (single) fixed room
     rooms = []          # room choice list
     for rchoice in roomlists:
         if len(rchoice) == 1:
             r = rchoice[0]
             if r in srooms:
                 return None     # Internal conflict!
-            srooms.append(r)
+            srooms.add(r)
         else:
             rooms.append(rchoice)
+    # Filter already-claimed rooms from the choice lists, but retain
+    # ordering of choices
     i = 0
-    while i < len(srooms):
-        # Filter already-claimed rooms from the choice lists
-        r = srooms[i]
-        i += 1
-        rooms_1 = []    # temporary buffer for rebuilding <rooms>
-        for rlist in rooms:
-            try:
-                rlist.remove(r)
-            except ValueError:
-                rooms_1.append(rlist)
+    while i < len(rooms):
+        rl = rooms[i]
+        for r in srooms.intersection(rl):
+            rl.remove(r)
+        if rl:
+            if len(rl) == 1:
+                # new single room
+                srooms.add(rl[0])
+                del rooms[i]
+                i = 0
             else:
-                if len(rlist) == 1:
-                    rx = rlist[0]
-                    if rx in srooms:
-                        return None
-                    # Add to list of single rooms
-                    srooms.append(rx)
-                else:
-                    rooms_1.append(rlist)
-        rooms = rooms_1
+                i += 1
+        else:
+            return None     # No rooms left, internal conflict!
     # Sort according to list length
-    rl1 = [(len(rl), rl) for rl in rooms]
-    rl1.sort()
-    return (srooms, rl1)
+    rooms.sort(key=len)
+    return (list(srooms), rooms)
 
 
 def read_tt_db():

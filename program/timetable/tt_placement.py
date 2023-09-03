@@ -1,8 +1,7 @@
-#TODO ...
 """
 timetable/tt_placement.py
 
-Last updated:  2023-08-23
+Last updated:  2023-09-03
 
 Handle the basic information for timetable display and processing.
 
@@ -92,38 +91,35 @@ def data_structures(n_teachers, n_groups, n_rooms):
 def get_state_vector(tt_lessons):
     """Return an empty state vector.
     This contains an entry for each activity. Each entry is a list of
-    integers: The timeslot (0 for unallocated) followed by the rooms,
-    the latter corresponding to the list of room requirements (1+ for an
-    allocated room, 0 for an unallocated one).
+    integers: The timeslot (0 for unallocated) followed by the rooms
+    where there is a choice – the "fixed" rooms are not included.
+    A room value is 0 when it is not yet allocated (otherwise 1+).
     """
-    state = [0] # First entry is null (not a lesson)
+    state = [[0]] # First entry is null (not a lesson)
     for ttl in tt_lessons:
         if ttl:
             lstate = [0]
             state.append(lstate)
-            rl3 = ttl.roomlists
-#TODO: Actually the third entry in <rl3> is deprecated, but may still
-# appear for a while ...
-            # Skip the compulsory single rooms (see comment below)
-            #for i in range(len(rl3[0]) + len(rl3[1]) + len(rl3[2])):
-            for i in range(len(rl3[1]) + len(rl3[2])):
+            for rc in ttl.room_choices:
                 lstate.append(0)
     return state
 
-#TODO: As the compulsory single rooms of an activity must be avaiable
-# for a placement to be successful, there is actually no need to have
-# them as part of the "state". Of course, also a deallocation would
-# then have to seek rooms in two places.
+#NOTE: As the compulsory single rooms of an activity must be available
+# for a placement to be successful, there is no need to have them as
+# part of the "state". Of course, also a deallocation will have to
+# seek rooms in two places, the "fixed" ones and the "chosen" ones.
 
 
-def can_place_lesson(allocation, tt_lessons, ttli, timeslot):
+def very_hard_constraints(allocation, tt_lesson, timeslot):
     """Test whether the lesson/activity can be placed in the specified
     slot.
     The teachers, class-groups and compulsory single rooms are tested.
-    Room requirements where there is a choice are not considered here,
+    Let's call these "very hard constraints". It can be seen as a first
+    stage, which will filter out many non-fitting placement attempts
+    quite quickly.
+    Room requirements where there is a choice are handled separately,
     as that is quite a bit more complicated. That is postponed to the
-    evaluation of penalties, which is only done when all activities
-    have been placed according to this simple test.
+    evaluation of other hard constraints.
 
     allocation: placement data structures
     tt_lessons: the activity vector
@@ -132,38 +128,178 @@ def can_place_lesson(allocation, tt_lessons, ttli, timeslot):
 
     Return a set of blocking activity indexes.
     """
-    ttl = tt_lessons[ttli]
-    length = ttl.length
+    length = tt_lesson.length
     blockers = set()
     #print("TIMESLOT", timeslot, allocation.teacher_weeks[timeslot])
     #print("TIMESLOT", 1, allocation.teacher_weeks[1])
     while length > 0:
         # Test teachers
         pslot = allocation.teacher_weeks[timeslot]
-        for t in ttl.teachers:
+        for t in tt_lesson.teachers:
             i = pslot[t]
             if i != 0:
-                print("TEACHER", t, i, ttl.time)
+                print("TEACHER", t, i, timeslot)
                 blockers.add(i)
         # Test class-groups
         pslot = allocation.group_weeks[timeslot]
-        for cg in ttl.classgroups:
+        for cg in tt_lesson.classgroups:
             i = pslot[cg]
             if i != 0:
-                print("GROUP", cg, i, ttl.time)
+                print("GROUP", cg, i, timeslot)
                 blockers.add(i)
         # Test single compulsory rooms
         pslot = allocation.room_weeks[timeslot]
-        rl = ttl.roomlists
-        for r in rl[0]:
+        for r in tt_lesson.fixed_rooms:
             i = pslot[r]
             if i != 0:
-                print("ROOM", r, i, ttl.time)
+                print("ROOM", r, i, timeslot)
                 blockers.add(i)
         # Room choices are ignored here
         length -= 1
         timeslot += 1
     return blockers
+
+
+def hard_constraints():
+    print("TODO")
+# Apart from going through the various hard constraints relevant to a
+# lesson placement, a list of rooms for the choice list should be
+# produced, which then needs to be available for the actual placement.
+# If multiple activities with room choices are to be placed in a time-
+# slot, a more intricate algorithm would be needed to sort out the
+# compatibility ...
+# If an attempt is made to place an activity in a slot and it doesn't
+# work because of rooms occupied by choices of other activities, it
+# MIGHT be reasonable to attempt a reallocation of the choice rooms,
+# but is that really what is wanted? Quite possibly, but perhaps I
+# should first try the placement without reorganizing the rooms.
+
+
+
+def resolve_room_choice(
+    allocation: ALLOCATION,
+    tt_lesson: TT_LESSON,
+    timeslot: int,
+):
+    """Try to allocate rooms satisfying the choice lists.
+    """
+    choice_lists = tt_lesson.room_choices
+    length = tt_lesson.length
+    # Handle possibility of length > 1
+    rslots = [
+        allocation.room_weeks[i]
+        for i in range(timeslot, timeslot + length)
+    ]
+    # Initialize result list
+    rooms = [0] * len(choice_lists)
+    # Recursive function to build room list using first possible
+    # room combination
+    def resolve(i, blocked):
+        try:
+            choices = choice_lists[i]
+        except IndexError:
+            return True
+        for r in choices:
+            # Check that the room is free
+            if r in blocked:
+                continue
+            for rs in rslots:
+                if rs[r] != 0:  # room in use
+                    break
+            else:
+                # Try to fill the remaining positions
+                if resolve(i + 1, blocked + {r}):
+                    rooms[i] = r
+                    return True
+        return False
+    if resolve(0, set()):
+        return rooms
+    return None
+
+
+def test_placement(
+    allocation: ALLOCATION,
+    tt_lesson: TT_LESSON,
+    timeslot: int,
+    saved_rooms: Optional[list[int]]
+) -> bool:
+    """Check all hard contraints for the given placement.
+    """
+    if very_hard_constraints(allocation, tt_lesson, timeslot):
+        return False
+
+#TODO: Is this at all appropriate here? Isn't it rather a question of
+# whether a placement is at all possible. If the saved rooms fit, this
+# should be done when actually doing the placement. If they don't fit,
+# then others will be used.
+    # Check the saved rooms, if supplied
+    if saved_rooms and not test_room_allocation(
+        allocation,
+        tt_lesson.room_choices,
+        saved_rooms,
+        timeslot,
+        tt_lesson.length
+    ):
+        return False
+
+    return not hard_constraints(allocation, tt_lesson, timeslot)
+
+
+def place_with_room_choices(
+    allocation: ALLOCATION,
+    tt_lessons: list[Optional[TT_LESSON]],  # only the first entry is <None>
+    ttli: int,
+    timeslot: int,
+    state_vector: list[list[int]],
+    saved_rooms: Optional[list[int]]
+):
+    """The activity is to be placed in the given time-slot.
+    If a list of saved rooms is provided, try to use these.
+    It is assumed that the possibility of the placement has been
+    checked already!
+    """
+    ttl = tt_lessons[ttli]
+    #print("\n??? TTL:", ttli, timeslot)
+    #print("[]", len(allocation.teacher_weeks), allocation.teacher_weeks)
+    length = ttl.length
+    state = state_vector[ttli]
+    state[0] = timeslot
+
+#TODO: deal with length (number of periods)
+    i = 0
+    # Place teachers
+    pslot = allocation.teacher_weeks[timeslot]
+    for t in ttl.teachers:
+        pslot[t] = ttli
+    # Place class-groups
+    pslot = allocation.group_weeks[timeslot]
+    for cg in ttl.classgroups:
+        pslot[cg] = ttli
+#TODO: comments not clear!
+    # Place single compulsory rooms
+    pslot = allocation.room_weeks[timeslot]
+    # Skip the compulsory single rooms (see comment to <get_state_vector()>)
+    for r in ttl.fixed_rooms:
+        pslot[r] = ttli
+
+    # Room choices ...
+    if saved_rooms and test_room_allocation(
+        allocation,
+        ttl.room_choices,
+        saved_rooms,
+        timeslot,
+        ttl.length
+    ):
+        pass
+
+
+    # Deal with no saved rooms
+
+
+    for rc in ttl.room_choices:
+        i += 1
+        state[i] = 0
+    #print("[]", timeslot, allocation.teacher_weeks)
 
 
 def place_lesson_initial(
@@ -174,7 +310,8 @@ def place_lesson_initial(
     state_vector: list[list[int]],
 ):
     """Place the given activity in the specified time slot.
-    !!! Only do this when the allocation slots are really empty.
+    !!! Only do this when the allocation slots are really empty, that is
+    not checked here.
 
     allocation: placement data structures
     tt_lessons: the activity vector
@@ -199,21 +336,14 @@ def place_lesson_initial(
     pslot = allocation.group_weeks[timeslot]
     for cg in ttl.classgroups:
         pslot[cg] = ttli
+#TODO: comments not clear!
     # Place single compulsory rooms
     pslot = allocation.room_weeks[timeslot]
-    rl = ttl.roomlists
     # Skip the compulsory single rooms (see comment to <get_state_vector()>)
-    for r in rl[0]:
+    for r in ttl.fixed_rooms:
         pslot[r] = ttli
-        #i += 1
-        #state[i] = r
     # Room choices are not allocated here
-    for rc in rl[1]:
-        i += 1
-        state[i] = 0
-#TODO: Actually the third entry in <rl> is deprecated, but may still
-# appear for a while ...
-    for rc in rl[2]:
+    for rc in ttl.room_choices:
         i += 1
         state[i] = 0
     #print("[]", timeslot, allocation.teacher_weeks)
@@ -230,6 +360,10 @@ def place_lesson_initial(
 # complex and some constraints only make sense when all activities have
 # been placed. There is not much point in calculating weights/penalties
 # for incomplete timetables.
+#
+
+
+
 #TODO
 def full_placement(tt_data, tt_lessons, saved_state=None):
     allocation = data_structures(
@@ -246,7 +380,7 @@ def full_placement(tt_data, tt_lessons, saved_state=None):
         timeslot = ttl.time
         if timeslot != 0:
 #TODO: Could have been "^ ..." (lesson reference)!
-            blockers = can_place_lesson(allocation, tt_lessons, i, timeslot)
+            blockers = very_hard_constraints(allocation, tt_lessons[i], timeslot)
             if blockers:
                 #print("   BLOCKERS", i, blockers)
                 ttlx = tt_lessons[list(blockers)[0]]
@@ -263,7 +397,7 @@ def full_placement(tt_data, tt_lessons, saved_state=None):
             timeslot = saved_state[i][0]
             if timeslot == 0:
                 continue
-            blockers = can_place_lesson(allocation, tt_lessons, i, timeslot)
+            blockers = very_hard_constraints(allocation, tt_lessons[i], timeslot)
 #--
 #            print("?????", i, timeslot, blockers)
 
@@ -334,42 +468,39 @@ def init_timeslot_text():
 
 
 def test_room_allocation(
+    allocation: ALLOCATION,
     requirements: list[list[int]],
-    test_rooms: list[int]
+    test_rooms: list[int],
+    timeslot: int,
+    length: int
 ):
-    """Check the availability of the saved room list and correlate it
-    to the room requirements (choices) list.
-
-? Would a simple yes/no result be more appropriate?
-    Return the list of allocations corresponding to the requirements,
-    with 0 at places where no allocation is possible.
-? Should an attempt be made to find other possible rooms?
+    """Check the availability of the saved room list and try to
+    correlate it with the room requirements (choices) list.
+    Return true if successful (the rooms can be used).
     """
-    ttl = tt_lessons[ttli]
-    length = ttl.length
+    # There must be the same number of entries in both lists
+    if len(requirements) != len(test_rooms):
+        return False
+    # Check availability of requested rooms
     while length > 0:
-        cleared_rooms = []
         pslot = allocation.room_weeks[timeslot]
-        rl = ttl.roomlists
         for r in test_rooms:
-            if pslot[r] == 0:
-                cleared_rooms.append(r)
-        length -= 1
+            if pslot[r] != 0:
+                return False
         timeslot += 1
-        test_rooms = cleared_rooms
-# Now try to fit to requirements ... probably very inefficient ...
-    for rc in first_choice_list:
+        length -= 1
+    # Attempt to correlate requested rooms with required rooms
+    def select(rs, ri):
+        # A recursive function
         try:
-            test_rooms.remove(rc)
-        except ValueError:
-            continue
-#TODO!
-        if recurse:
-            return True
-        else:
-            test_rooms.append(rc)   # put it back, try another one ...
-    return False
-#Consider thoroughly what I want to achieve here!
+            rs.intersection(requirements[ri])
+        except IndexError:
+            return True # all requirements tested
+        for r in intersects.pop():
+            if select(rs - {r}, ri + 1):
+                return True
+        return False
+    return select(set(test_rooms), 0)
 
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
