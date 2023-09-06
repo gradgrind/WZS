@@ -1,7 +1,7 @@
 """
 timetable/tt_placement.py
 
-Last updated:  2023-09-03
+Last updated:  2023-09-05
 
 Handle the basic information for timetable display and processing.
 
@@ -126,7 +126,8 @@ def very_hard_constraints(allocation, tt_lesson, timeslot):
     ttli: index of the activity to test (1+)
     timeslot: index of the time slot to test (1+)
 
-    Return a set of blocking activity indexes.
+    Return a set of blocking activity indexes, empty if the allocation
+    is possible in the given time-slot.
     """
     length = tt_lesson.length
     blockers = set()
@@ -173,6 +174,9 @@ def hard_constraints():
 # MIGHT be reasonable to attempt a reallocation of the choice rooms,
 # but is that really what is wanted? Quite possibly, but perhaps I
 # should first try the placement without reorganizing the rooms.
+# Unfortunately, an automatic reallocation of rooms across activities
+# might well turn out to be a touch more complex than I would like
+# (especially when considering varying activity lengths).
 
 
 
@@ -183,39 +187,143 @@ def resolve_room_choice(
 ):
     """Try to allocate rooms satisfying the choice lists.
     """
-    choice_lists = tt_lesson.room_choices
-    length = tt_lesson.length
     # Handle possibility of length > 1
     rslots = [
         allocation.room_weeks[i]
-        for i in range(timeslot, timeslot + length)
+        for i in range(timeslot, timeslot + tt_lesson.length)
     ]
+#TODO: Should I allocate the rooms which are possible even if others
+# are not possible? If the rooms are a soft constraint that would
+# probably be sensible.
+
+    # Reduce the lists to contain only available rooms
+    rclists = []
+    for rc in tt_lesson.room_choices:
+        l = []
+        rclists.append(l)
+        for r in rc:
+            for rs in rslots:
+                if rs[r] != 0:  # room in use
+                    break
+            else:
+                l.append(r)
+#TODO: Don't do this if I want partial allocation when some rooms
+# don't work:
+        if not l:
+            return None
     # Initialize result list
     rooms = [0] * len(choice_lists)
     # Recursive function to build room list using first possible
     # room combination
     def resolve(i, blocked):
         try:
-            choices = choice_lists[i]
+            choices = rclists[i]
         except IndexError:
             return True
         for r in choices:
             # Check that the room is free
-            if r in blocked:
-                continue
-            for rs in rslots:
-                if rs[r] != 0:  # room in use
-                    break
-            else:
+            if r not in blocked:
                 # Try to fill the remaining positions
                 if resolve(i + 1, blocked + {r}):
                     rooms[i] = r
                     return True
         return False
+#TODO: If returning also partial room lists, I would be faced with the
+# difficulty of deciding which imperfect allocation to return ...
     if resolve(0, set()):
         return rooms
     return None
 
+
+def seek_rooms(rlists):
+#def seek_rooms():
+#TODO: reduced room lists taking already allocated rooms into account
+    minzeros = 0
+    for rl in rlists:
+        if not rl:
+            minzeros += 1
+
+    bestzeros = len(rlists)
+    best = [0] * bestzeros
+    maxi = bestzeros - 1
+    zeros = 0
+    i = 0
+    used = []
+    filtered_lists = []
+    while i >= 0:
+        if i == maxi:
+            ## Done?
+            # Get the first free room
+            for r in rlists[i]:
+                if r not in used:
+                    if zeros == minzeros:
+                        # An optimal solution has been found
+                        used.append(r)
+                        return used
+                    if zeros < bestzeros:
+                        best = used.copy()
+                        best.append(r)
+                        bestzeros = zeros
+                    break
+            else:
+                # No free room
+                if zeros + 1 == minzeros:
+                    # An optimal solution has been found
+                    used.append(0)
+                    return used
+                if zeros + 1 < bestzeros:
+                    best = used.copy()
+                    best.append(0)
+                    bestzeros = zeros + 1
+            i -= 1
+        elif i < len(filtered_lists):
+            rl = filtered_lists[i]
+            if rl:
+                # Try next room
+                used[i] = rl.pop()
+                i += 1
+            else:
+                # No more rooms to try
+                if used.pop() == 0:
+                    zeros -= 1
+                del filtered_lists[i]
+                i -= 1
+        else:
+            # Build reversed filtered list (for popping rooms)
+            rl0 = rlists[i]
+            rl = []
+            x = len(rl0)
+            while x > 0:
+                x -= 1
+                r = rl0[x]
+                if r not in used:
+                    rl.append(r)
+            filtered_lists.append(rl)
+            if rl:
+                used.append(rl.pop())
+            else:
+                # No free room at this level
+                used.append(0)
+                zeros += 1
+            i += 1
+    return best
+
+
+"""rl0 = [
+    [1, 2],
+    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+    [1, 2],
+    [2, 3, 4, 5, 6, 7, 8, 9],
+    [1, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+]
+import timeit
+rlists = rl0
+nnn = 10000
+print(timeit.timeit(seek_rooms, number=nnn, globals=globals()))
+print("$$$$", seek_rooms())
+"""
+
+#########################################################
 
 def test_placement(
     allocation: ALLOCATION,
@@ -474,8 +582,9 @@ def test_room_allocation(
     timeslot: int,
     length: int
 ):
-    """Check the availability of the saved room list and try to
-    correlate it with the room requirements (choices) list.
+    """Check the availability of the saved room list – supplied as
+    <test_rooms> – and try to correlate it with the room requirements
+    (choices) list.
     Return true if successful (the rooms can be used).
     """
     # There must be the same number of entries in both lists

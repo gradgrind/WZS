@@ -1,0 +1,50 @@
+Activities can require certain rooms. Sometimes it is possible to choose
+one from a list of acceptable choices.
+
+I have decided to handle "fixed" rooms (where there is no choice) and
+selectable rooms separately because their allocation is so different.
+Fixed rooms can be allocated rather like teachers, in a fairly efficient
+manner. Handling choices can call for far more processing.
+
+I had considered attempting to allocate all room choices for each time-
+slot together. This ought to be able to find a solution if there is one,
+and indeed, if it was only a matter of single-period lessons, it might
+be feasible. However, where the individual lessons cover various time-
+slots, it begins to look a bit like a nightmare of complexity.
+
+As I am recording the source of blockages (which activity ocupies any
+room), it might be possible to deal with the problem in another way –
+not as thorough as the first idea, but maybe more workable. If I find
+that a certain lessons blocks the placement of a new one through its
+room choices, I could deallocate the blocking activity (at least its
+room choices), allocate the new one and then try to reallocate the old
+one. Actually, that's also rather messy, but perhaps less so than the
+first idea.
+
+Another possibility would be to allow placements even if not all
+"flexible" room requirements could be met, and to score missing rooms
+(at least from the choice lists) as fairly high penalties – i.e.
+treating them as soft constraints. I am not so convinced by this idea:
+when is a room optional?! I had already decided that all potential
+rooms should be included in choices. But perhaps if it is "only" a
+blocked room that stands in the way of a low-penalty timetable, it may
+be worth permitting it – the user would then have to find a resolution
+for the room problem manually. How large would the penalty really need
+to be for a missing room?
+With manual room allocation, I ought to be able to find out which
+activity is blocking a particular room (via the room selection dialog
+for the blocked activity) and decide whether to force a replacement.
+
+My basic idea was to collect "very hard" constraints – which must be
+easy to test – and use these for initial placements. A "full" timetable
+can thus hopefully be generated fairly quickly, if it is at all possible.
+I would then test the other hard constraints and this would determine
+whether the table is viable. The final stage would be to score the soft
+constraints, so that various attempts can be compared and the "best"
+one chosen.
+
+Algorithmically this should not be too difficult, and perhaps I should
+use basically the same approach for manual placement to keep it simple.
+Of course the separation of "very hard" constraints would then not make
+any sense, but modifying that aspect should be no problem.
+
