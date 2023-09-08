@@ -1,7 +1,7 @@
 """
 timetable/tt_placement.py
 
-Last updated:  2023-09-05
+Last updated:  2023-09-08
 
 Handle the basic information for timetable display and processing.
 
@@ -162,6 +162,8 @@ def very_hard_constraints(allocation, tt_lesson, timeslot):
 
 
 def hard_constraints():
+    """Test hard constraints for the placement of an activity.
+    """
     print("TODO")
 # Apart from going through the various hard constraints relevant to a
 # lesson placement, a list of rooms for the choice list should be
@@ -178,14 +180,46 @@ def hard_constraints():
 # might well turn out to be a touch more complex than I would like
 # (especially when considering varying activity lengths).
 
+#TODO
+    if room_choice_hard:
+        room_choice = resolve_room_choice(
+            allocation,
+            tt_lesson,
+            timeslot,
+            hard_constraint = True
+        )
+        if room_choice is None:
+            return False
+    else:
+        room_choice = []
+
+
+#TODO: test other constraints.
+# Which constraints should be tested here?
+# 1) not some gaps – these are relevant only when all placements have been done
+# 2) not some minimum constraints – see 1.
+# 3) maximum constraints:
+#     - lessons per day (teacher or class/group)
+#     - lessons without break (teacher or class/group?)
+# 4) min-days-between-activities
+# 5) not-after (direct or any time?)
+# 6) not-on-same-day (combine with min-days-between-activities?)
+# 7) lunch break
+
+    return room_choice
 
 
 def resolve_room_choice(
     allocation: ALLOCATION,
     tt_lesson: TT_LESSON,
     timeslot: int,
+    hard_constraint: bool
 ):
     """Try to allocate rooms satisfying the choice lists.
+    If <hard_constraint> is true, only full room lists will be
+    returned, otherwise <None>.
+    Otherwise, if a full room list is not possible with the available
+    rooms, the returned list will contain one or more null (0) rooms.
     """
     # Handle possibility of length > 1
     rslots = [
@@ -198,6 +232,7 @@ def resolve_room_choice(
 
     # Reduce the lists to contain only available rooms
     rclists = []
+    minzeros = 0
     for rc in tt_lesson.room_choices:
         l = []
         rclists.append(l)
@@ -207,32 +242,83 @@ def resolve_room_choice(
                     break
             else:
                 l.append(r)
-#TODO: Don't do this if I want partial allocation when some rooms
-# don't work:
         if not l:
-            return None
-    # Initialize result list
-    rooms = [0] * len(choice_lists)
-    # Recursive function to build room list using first possible
-    # room combination
-    def resolve(i, blocked):
-        try:
-            choices = rclists[i]
-        except IndexError:
-            return True
-        for r in choices:
-            # Check that the room is free
-            if r not in blocked:
-                # Try to fill the remaining positions
-                if resolve(i + 1, blocked + {r}):
-                    rooms[i] = r
-                    return True
-        return False
-#TODO: If returning also partial room lists, I would be faced with the
-# difficulty of deciding which imperfect allocation to return ...
-    if resolve(0, set()):
-        return rooms
-    return None
+            if hard_contraint:
+#TODO: Do I still want a list of blockages (somehow)?
+# Perhaps in manual mode the constraint could be always soft?
+                return None
+            minzeros += 1
+    bestzeros = len(rclists)
+    best = [0] * bestzeros
+    maxi = bestzeros - 1
+    zeros = 0
+    i = 0
+    used = []
+    filtered_lists = []
+    while i >= 0:
+        if i == maxi:
+            ## Done?
+            # Get the first free room
+            for r in rclists[i]:
+                if r not in used:
+                    if zeros == minzeros:
+                        # An optimal solution has been found
+                        used.append(r)
+                        return used
+                    if zeros < bestzeros:
+                        best = used.copy()
+                        best.append(r)
+                        bestzeros = zeros
+                    break
+            else:
+                # No free room
+                if hard_contraint:
+                    # Don't investigate further
+                    return None
+                if zeros + 1 == minzeros:
+                    # An optimal solution has been found
+                    used.append(0)
+                    return used
+                if zeros + 1 < bestzeros:
+                    best = used.copy()
+                    best.append(0)
+                    bestzeros = zeros + 1
+            i -= 1
+        elif i < len(filtered_lists):
+            rl = filtered_lists[i]
+            if rl:
+                # Try next room
+                used[i] = rl.pop()
+                i += 1
+            else:
+                # No more rooms to try
+                if used.pop() == 0:
+                    zeros -= 1
+                del filtered_lists[i]
+                i -= 1
+        else:
+            # Build reversed filtered list (for popping rooms)
+            rl0 = rclists[i]
+            rl = []
+            x = len(rl0)
+            while x > 0:
+                x -= 1
+                r = rl0[x]
+                if r not in used:
+                    rl.append(r)
+            if rl:
+                filtered_lists.append(rl)
+                used.append(rl.pop())
+            elif hard_contraint:
+                # No free rooms: don't investigate further
+                return None
+            else:
+                # No free rooms: leave unallocated
+                filtered_lists.append(rl)
+                used.append(0)
+                zeros += 1
+            i += 1
+    return best
 
 
 def seek_rooms(rlists):

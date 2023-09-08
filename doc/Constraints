@@ -1,0 +1,81 @@
+Which constraints have I been adding manually in fet?
+Possibly just plaing around with available times, number of gaps, etc.?
+
+
+HH: Very hard
+H: Hard
+h: Hard, but can only be evaluated when all activities have been placed
+    What should be the consequences of a failure? Continue shuffling?
+S: Soft (only evaluated when all activities have been placed)
+
+For manual placement it might be helpful to evaluate as many of the h
+and S constraints after each move, so that troublesome activities can
+be moved.
+
+
+Teachers:
+    * Available/blocked periods
+        # HH, S?
+    * Lunch breaks
+        # H, S
+    * Min lessons per day
+        # h, S
+        (ConstraintTeacherMinHoursDaily)
+    * Max lessons per day
+        # H, S
+        (ConstraintTeacherMaxHoursDaily?)
+    * Max gaps per day? per week
+        # h, S
+        (ConstraintTeacherMaxGapsPerDay?)
+        (ConstraintTeacherMaxGapsPerWeek)
+    * Max block length (periods without break)
+        # H, S
+        (ConstraintTeacherMaxHoursContinuously)
+    * Max days per week
+        # H, S?
+        (?)
+
+
+Classes/groups (are constraints always relevant for whole classes,
+or do some need to be restricted to groups?):
+    * Available/blocked periods
+        # HH, S?
+    * Lunch breaks
+        # H, S
+    * Min lessons per day
+        # h, S
+        (ConstraintStudentsSetMinHoursDaily)
+    * Max lessons per day?
+        # H, S
+    * Max gaps per day? per week?
+        # h, S
+        (?)
+        (ConstraintStudentsSetMaxGapsPerWeek)
+
+
+Activities:
+    * At start/end of day
+        # h (H for start?), S
+        (?)
+        (ConstraintActivityEndsStudentsDay)
+    * Not on same day
+        # H, S
+    * Min days between (combine with not-on-same-day?)
+        # H, S
+        (ConstraintMinDaysBetweenActivities)
+    * Not after (with or without intervening periods?)
+        # H, S
+        (ConstraintTwoActivitiesOrderedIfSameDay)
+    * Not consecutive (ConstraintMinGapsBetweenActivities)
+
+
+From fet, here probably implemented some other way:
+    *** ConstraintStudentsSetNotAvailableTimes
+    *** ConstraintTeacherNotAvailableTimes
+    *** ConstraintActivityPreferredStartingTime(s)
+    *** ConstraintActivitiesPreferredStartingTimes (double lesson start times)
+    *** ConstraintActivitiesSameStartingTime
+    *** ConstraintActivityPreferredRoom(s)
+
+
+
