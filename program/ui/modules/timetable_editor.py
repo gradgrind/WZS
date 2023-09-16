@@ -2,7 +2,7 @@
 """
 ui/modules/timetable_editor.py
 
-Last updated:  2023-08-13
+Last updated:  2023-09-16
 
 Show a timetable grid and allow placement of lesson tiles.
 
@@ -53,7 +53,7 @@ from core.basic_data import (
     get_rooms,
     timeslot2index,
 )
-from timetable.tt_base import read_tt_db, room_split
+from timetable.tt_basic_data import TimetableData
 from ui.ui_base import (
     ### QtWidgets:
     QListWidgetItem,
@@ -97,7 +97,7 @@ class TimetableEditor(Page):
         self.all_classes = []
         self.class_list.clear()
         for k, name in get_classes().get_class_list():
-            if tt.class_ttls.get(k):
+            if tt.tt_data.class_ttls.get(k):
                 self.all_classes.append(k)
                 item = QListWidgetItem(f"{k} – {name}")
                 self.class_list.addItem(item)
@@ -108,7 +108,7 @@ class TimetableEditor(Page):
         self.teacher_list.clear()
         teachers = get_teachers()
         for tid in teachers:
-            if tt.teacher_ttls.get(tid):
+            if tt.tt_data.teacher_ttls.get(tid):
                 self.all_teachers.append(tid)
                 item = QListWidgetItem(f"{tid} – {teachers.name(tid)}")
                 self.teacher_list.addItem(item)
@@ -164,24 +164,7 @@ class TimetableEditor(Page):
 class TimetableManager:
     def __init__(self):
         ### Read data from database
-        tt_data, tt_lists = read_tt_db()
-        self.tt_lessons, self.class_ttls, self.teacher_ttls = tt_lists
-
-        ### Build group-division map for each class
-        self.group_division = {}
-        for klass, cdata in get_classes().items():
-            divs = cdata.divisions.divisions
-            g2div = {GROUP_ALL: (-1, GROUP_ALL)}
-            self.group_division[klass] = g2div
-            for i, div in enumerate(divs):
-                dgas = []
-                for d, v in div:
-                    if v is None:
-                        dgas.append(d)
-                        g2div[d] = (i, [d])
-                    else:
-                        g2div[d] = (i, v)
-                g2div[f"%{i}"] = dgas
+        self.tt_data = TimetableData()
 
     def set_gui(self, gui):
         self.gui = gui
@@ -192,8 +175,9 @@ class TimetableManager:
         tile_list = self.gui.lessons
         tile_list.clearContents()
         # Sort activities on subject
+        tt_lessons = self.tt_data.tt_lessons
         class_activities = sorted(
-            (self.tt_lessons[i] for i in self.class_ttls[klass]),
+            (tt_lessons[i] for i in self.tt_data.class_ttls[klass]),
             key=lambda x: x.subject_tag
         )
         tile_list.setRowCount(len(class_activities))
@@ -203,25 +187,33 @@ class TimetableManager:
 #        print("\nCLASS", klass)
 
 # Can I share this with the teacher view?
+        fixed_time = []
+        to_place = []
+        unplaced = []
         for row, activity in enumerate(class_activities):
 #TODO--
             print("  --", activity)
 
-            fixed_time = activity.time
-
 #TODO: Keep non-fixed times separate from the database? When would they
 # be saved, then?
-            if fixed_time:
-                d, p = timeslot2index(fixed_time)
-#                print("   @", d, p)
 
+#TODO: What to do with these lists?!
+            if activity.time:
+                fixed_time.append((activity.time, activity))
+                p0 = activity.time
+            elif activity.placement0:
+                to_place.append((activity.placement0, activity))
+                p0 = activity.placement0
             else:
-                slot_time = activity.placement0
-                if slot_time:
-                    d, p = timeslot2index(slot_time)
-#                    print("   (@)", d, p)
+                unplaced.append(activity)
+                p0 = 0
 
-#TODO: display data
+#TODO: display data  ... first check placements (fixed first) ...
+# ... placements should be done "normally", i.e. with all checks,
+# in case the fixed times have changed (or there is an error in the
+# database).
+
+# ... Placed and unplaced tiles ...
 
 #TODO: rooms? Shouldn't the rooms per group be available????
 # Via the workload entry ... this can, however, be '$', potentially
@@ -236,7 +228,7 @@ class TimetableManager:
                     groups.add(c.group)
                     tids.add(c.tid)
                     # The rooms are the acceptable ones!
-                    rooms.update(room_split(c.room))
+                    rooms.update(self.tt_data.room_split(c.room))
                 else:
                     x = True
 #TODO: tool-tip (or whatever) to show parallel courses?
@@ -271,10 +263,6 @@ class TimetableManager:
 #            else:
 #                tile_list.showRow(row)
 
-# Perhaps placements should be done "normally", i.e. with all checks,
-# in case the fixed times have changed (or there is an error in the
-# database).
-
 #TODO: The rooms should have been checked by trying to place all
 # activities. The atual rooms used would be got from elsewhere!
 # The calls to get_rooms are very inefficient ...
@@ -282,6 +270,7 @@ class TimetableManager:
             #print("\n???", t_rooms)
             #print("   ->", t_rooms_str)
 
+            d, p = self.tt_data.period2day_period(p0)
             for i, l, n in tile_divisions:
                 tile_index = len(tiles)
                 tile = make_tile(
@@ -435,15 +424,17 @@ class TimetableManager:
 
     def tile_division(self, klass, groups):
         # Gather division components
-        g2div = self.group_division[klass]
+        div2pgroups, g2div = self.tt_data.group_division[klass]
         divi = -1
         for g in groups:
             i, dgs = g2div[g]
             if i < 0:
+                # Any other groups are irrelevant if the whole class is
+                # included
                 return (WHOLE_CLASS, [(0, 1, 1)])
             if divi != i:
                 if divi >= 0:
-                    # groups from multiple divisions, assume whole class
+                    # Groups from multiple divisions, assume whole class
                     return (WHOLE_CLASS, [(0, 1, 1)])
                 else:
                     divi = i
@@ -451,7 +442,7 @@ class TimetableManager:
             else:
                 dgset.update(dgs)
         # Construct tile divisions
-        div_groups = g2div[f"%{divi}"]
+        div_groups = div2pgroups[divi]
         n = len(div_groups)
         if len(dgset) == n:
             return (WHOLE_CLASS, [(0, 1, 1)])

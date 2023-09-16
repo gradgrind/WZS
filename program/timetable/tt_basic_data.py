@@ -99,40 +99,6 @@ def get_teacher_indexes():
     return timap
 
 
-def get_class_atoms():
-    """Each atomic group within a class gets a unique index.
-    The division groups need to be mapped to a list of these indexes.
-    """
-    c_rmap = {}     # { class: classroom }
-    c_g_map = {}    # { class: { group: [ index, ... ] } }
-    # The NO_CLASS entry might be superfluous: there shouldn't be any
-    # entries with a non-null group in the null class.
-    c_g_map[NO_CLASS] = {GROUP_ALL: [0]}
-    i = 0           # Maximum index in <c_g_map>, i.e. number of atomic
-                    # groups (valid indexing starts at 1)
-    for klass, cdata in get_classes().items():
-        #print("?", klass)
-        c_rmap[klass] = cdata.classroom
-        if klass != NO_CLASS:
-            gmap = {}
-            c_g_map[klass] = gmap
-            cg = cdata.divisions
-            amap = {}
-            for ag in cg.atomic_groups:
-                i += 1
-                amap[ag] = i
-            for g, ags in cg.group_atoms().items():
-                #print("???", g, ags)
-                gmap[g] = [amap[ag] for ag in ags]
-            if gmap:
-                gmap[GROUP_ALL] = list(amap.values())
-            else:
-                i += 1
-                gmap[GROUP_ALL] = [i]
-            #print("  gmap:", gmap)
-    return i, c_g_map, c_rmap
-
-
 def get_room_map():
     """Each room gets a unique index, so that integers can be used
     instead of the tag (str) in speed critical code.
@@ -239,6 +205,21 @@ def simplify_room_lists(roomlists: list[list[int]]
 
 class TimetableData:
     __slots__ = (
+        "periods_per_day", #: int
+        "group_division", #: dict[str, tuple[ # key: class
+        #     list[list[str]], # list of primary groups in each division
+        #     dict[str, tuple[ # key: group (also '*')
+        #         int,      # division index (-1 for '*')
+        #         list[str] # list of primary groups
+        #     ]]
+        # ]]
+        # The "groups" are all groups which can be used in specifying a
+        # "course". "Divisions" comprise "primary groups". These are
+        # also "groups", i.e. they can be used in specifying courses.
+        # The difference is that a "group" can comprise more than one
+        # "primary group" from a single division.
+        # The undivided class ('*') is not considered to be a division,
+        # it has the "index" -1 and contains no primary groups.
         "class_room", #: dict[str, str]
         "class_group_atoms", #: dict[str, dict[str, list[int]]]
         "n_class_group_atoms", #: int
@@ -252,11 +233,62 @@ class TimetableData:
         "teacher_ttls", #: dict[list[int]] (tid -> index to <tt_lessons>)
     )
 
-    def __init__(self, ):
-        n, cgimap, crmap = get_class_atoms()
-        self.class_room = crmap
-        self.class_group_atoms = cgimap
-        self.n_class_group_atoms = n
+    def period2day_period(self, px):
+        return divmod(px - 1, self.periods_per_day)
+
+    def __init__(self):
+        ## Each atomic group within a class gets a unique index.
+        ## The groups need to be mapped to a list of these indexes.
+        ## The groups within each division are also collected.
+        c_rmap = {}     # { class: classroom }
+        c_g_map = {}    # { class: { group: [ index, ... ] } }
+        # The NO_CLASS entry might be superfluous: there shouldn't be any
+        # entries with a non-null group in the null class.
+        c_g_map[NO_CLASS] = {GROUP_ALL: [0]}
+        i = 0           # Maximum index in <c_g_map>, i.e. number of atomic
+                        # groups (valid indexing starts at 1)
+        group_division = {} # { class: }
+        for klass, cdata in get_classes().items():
+            #print("?", klass)
+            c_rmap[klass] = cdata.classroom
+            if klass != NO_CLASS:
+                cg = cdata.divisions
+                ## Build group-division map
+                divs = cg.divisions
+#TODO: GROUP_ALL is not a list ... would an empty one do?
+                g2div = {GROUP_ALL: (-1, GROUP_ALL)}
+#                                        =========
+                dlist = []
+                group_division[klass] = (dlist, g2div)
+                for i, div in enumerate(divs):
+                    dgas = []
+                    for d, v in div:
+                        if v is None:
+                            dgas.append(d)
+                            g2div[d] = (i, [d])
+                        else:
+                            g2div[d] = (i, v)
+                    dlist.append(dgas)
+                ## Build atomic group map
+                gmap = {}
+                c_g_map[klass] = gmap
+                amap = {}
+                for ag in cg.atomic_groups:
+                    i += 1
+                    amap[ag] = i
+                for g, ags in cg.group_atoms().items():
+                    #print("???", g, ags)
+                    gmap[g] = [amap[ag] for ag in ags]
+                if gmap:
+                    gmap[GROUP_ALL] = list(amap.values())
+                else:
+                    i += 1
+                    gmap[GROUP_ALL] = [i]
+                #print("  gmap:", gmap)
+        self.group_division = group_division
+        self.class_room = c_rmap
+        self.class_group_atoms = c_g_map
+        self.n_class_group_atoms = i
         self.teacher_index = get_teacher_indexes()
         rimap = get_room_map()
         self.room_index = rimap
@@ -283,6 +315,7 @@ class TimetableData:
         day2index = get_days().index
         periods = get_periods()
         nperiods = len(periods)
+        self.periods_per_day = nperiods
         period2index = periods.index
         # Run through the lesson groups and their associated lessons
         tt_lessons = [None]
@@ -572,6 +605,11 @@ if __name__ == '__main__':
     print("\n TLESSONS  teacher MT:")
     for tli in tt_data.teacher_ttls["MT"]:
         print("   --", tt_data.tt_lessons[tli])
+
+    print("\n DIVISION GROUPS:")
+    for k, divs in tt_data.group_division.items():
+        print("  Class", k)
+        print("    ::", divs)
 
 
     from pympler import asizeof
