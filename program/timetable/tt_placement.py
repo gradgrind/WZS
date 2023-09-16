@@ -1,7 +1,7 @@
 """
 timetable/tt_placement.py
 
-Last updated:  2023-09-08
+Last updated:  2023-09-16
 
 Handle the basic information for timetable display and processing.
 
@@ -189,7 +189,8 @@ def hard_constraints():
             hard_constraint = True
         )
         if room_choice is None:
-            return False
+            # Don't need to test other constraints
+            return None
     else:
         room_choice = []
 
@@ -423,9 +424,12 @@ def test_placement(
         return False
 
 #TODO: Is this at all appropriate here? Isn't it rather a question of
-# whether a placement is at all possible. If the saved rooms fit, this
-# should be done when actually doing the placement. If they don't fit,
-# then others will be used.
+# whether a placement is at all possible. Saved rooms are relevant when
+# entering the timetable app (or loading an alternative configuration?).
+# If the saved rooms fit (and other hard constraints are satisfied) the
+# placement will be done. If they don't fit, the placement will fail.
+# However, note that fixed placements should probably be done first!
+
     # Check the saved rooms, if supplied
     if saved_rooms and not test_room_allocation(
         allocation,
@@ -559,7 +563,8 @@ def place_lesson_initial(
 
 
 #TODO
-def full_placement(tt_data, tt_lessons, saved_state=None):
+def full_placement(tt_data, saved_state=None):
+    tt_lessons = tt_data.tt_lessons
     allocation = data_structures(
         len(tt_data.teacher_index),
         tt_data.n_class_group_atoms + 1,
@@ -730,12 +735,11 @@ if __name__ == '__main__':
     quit(1)
     """
 
-    from timetable.tt_basic_data import read_tt_db
-    tt_data, tt_lists = read_tt_db()
-    tt_lessons, class_ttls, teacher_ttls = tt_lists
+    from timetable.tt_basic_data import TimetableData
+    tt_data = TimetableData()
 
-    saved_state = get_saved_state(tt_lessons)
-    full_placement(tt_data, tt_lessons, saved_state)
+    saved_state = get_saved_state(tt_data.tt_lessons)
+    full_placement(tt_data, saved_state)
 
     quit(0)
 

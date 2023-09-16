@@ -1,7 +1,7 @@
 """
 timetable/tt_basic_data.py
 
-Last updated:  2023-09-03
+Last updated:  2023-09-16
 
 Handle the basic information for timetable display and processing.
 
@@ -50,16 +50,6 @@ from core.basic_data import (
     NO_TEACHER
 )
 from core.db_access import db_select, db_query, db_read_fields
-
-class TT_BASE_DATA(NamedTuple):
-    class_room: dict[str, str]
-    class_group_atoms: dict[str, dict[str, list[int]]]
-    n_class_group_atoms: int
-    # <n_class_group_atoms> is provided because <class_group_atoms>
-    # (being a dict of dicts) doesn't directly provide the needed number.
-    teacher_index: dict[str, int]
-    room_index: dict[str, int]
-    room_groups: dict[str, list[int]]
 
 class COURSE_INFO(NamedTuple):
     klass: str
@@ -165,117 +155,11 @@ def get_room_groups():
     return rgroups
 
 
-def get_activity_groups(tt_data: TT_BASE_DATA):
-    """Return a mapping of "activity groups" – that is, a collection of
-    data for each non-null Lesson_group value.
-    """
-    q = """select
-
-        Lesson_group,
-        --Lesson_data,
-        CLASS,
-        GRP,
-        SUBJECT,
-        TEACHER,
-        BLOCK_SID,
-        --BLOCK_TAG,
-        ROOM
-
-        from COURSE_LESSONS
-        inner join COURSES using (Course)
-        inner join LESSON_GROUPS using (Lesson_group)
-        inner join LESSON_DATA using (Lesson_data)
-
-        where Lesson_group != '0'
-    """
-    lg_map = {}
-    r_map = tt_data.room_index
-    t_map = tt_data.teacher_index
-    for rec in db_select(q):
-        lg = rec["Lesson_group"]
-        klass = rec["CLASS"]
-        rm = tt_data.class_room[klass]
-        if rm:
-            room = rec["ROOM"].replace("$", rm)
-        else:
-            room = rec["ROOM"]
-            assert "$" not in room
-        group = rec["GRP"]
-        sid = rec["SUBJECT"]
-        bsid = rec["BLOCK_SID"]
-        tid = rec ["TEACHER"]
-        row = COURSE_INFO(
-            klass,
-            group,
-            sid,
-            tid,
-            bsid,
-            room
-        )
-        cgalist = tt_data.class_group_atoms[klass][group] if group else []
-        ti = t_map[tid]
-        try:
-            lg_data = lg_map[lg]
-            if ti:
-                lg_data[0].add(ti)
-            if cgalist:
-                lg_data[1].update(cgalist)
-            lg_data[2].append(row)
-            if room:
-                lg_data[3].add(room)
-        except KeyError:
-            lg_map[lg] = (
-                {ti} if ti else set(),
-                set(cgalist),
-                [row],
-                {room} if room else set()
-            )
-    agmap = {}
-    for lg, lg_data in lg_map.items():
-        rsl = []
-        for rx in lg_data[3]:
-            try:
-                rsl.append(room_split(tt_data, rx))
-            except KeyError:
-                cdata = lg_data[2][0]
-                sbj = cdata.bsid or cdata.sid
-                cstr = f"{cdata.klass}.{cdata.group},{cdata.tid},{sbj}"
-                if len(lg_data[2]) > 1:
-                    cstr += " ..."
-                REPORT(
-                    "ERROR",
-                    T["UNKNOWN_ROOM_GROUP"].format(
-                        course = cstr,
-                        rooms = rx,
-                    )
-                )
-        srl = simplify_room_lists(rsl)
-        print("???", rsl)
-        print("   -->", srl)
-        if not srl:
-            cdata = lg_data[2][0]
-            sbj = cdata.bsid or cdata.sid
-            cstr = f"{cdata.klass}.{cdata.group},{cdata.tid},{sbj} ..."
-            assert len(lg_data[2]) > 1
-            # I think an error can only occur when there are
-            # multiple courses, so the assertion is a check.
-            REPORT(
-                "ERROR",
-                T["ROOM_ERROR"].format(
-                    course = cstr,
-                    rooms = ", ".join(lg_data[3]),
-                )
-            )
-            srl = ([], [])
-        agmap[lg] = ACTIVITY_GROUP(*lg_data[:3], *srl)
-    return agmap
-
-
-# Each lg will have one or more classes (though the null class is
-# possible, too) and one or more teachers (though the null teacher is
-# possible, too).
-
 def get_lg_lessons():
+    """Each lesson-group will have one or more classes (though the null
+    class is possible, too) and one or more teachers (though the null
+    teacher is possible, too).
+    """
     q = """select
 
         Lesson_group,
@@ -297,130 +181,6 @@ def get_lg_lessons():
         except KeyError:
             lg_ll[lg] = [r]
     return lg_ll
-
-
-def collate_lessons(
-    lg_ll: dict[int, list],
-    lg_map: dict[int, list[int, set[str], list[tuple]]],
-    rmap_i: dict[str, int],
-):
-    """Combine the data for the lesson groups and the individual lessons
-    to a list of TT_LESSON items.
-    For more effective placement checks teachers, groups and rooms are
-    replaced by integers (there is a somewhat dynamic correspondence of
-    the various tags to the indexes, which may vary from run to run).
-    Information from the "courses" connected with such an item, is
-    retained as a list with the original values, not the numeric
-    equivalents.
-    """
-    # The following is for converting lesson "times" to week-vector indexes:
-    day2index = get_days().index
-    periods = get_periods()
-    nperiods = len(periods)
-    period2index = periods.index
-    # Run through the lesson groups and their associated lessons
-    tt_lessons = [None]   # (checkbits, list of room-choice lists, ???)
-    class_activities = {}       # class -> list of tt_lesson indexes
-    teacher_activities = {}     # teacher -> list of tt_lesson indexes
-    for lg, ll in lg_ll.items():
-        ag = lg_map[lg]
-        tlist = sorted(ag.teacher_set)
-        cglist = sorted(ag.classgroup_set)
-        tids = set()
-        classes = set()
-        sid0, bsid0 = None, None
-        for course in ag.courses:
-            # Each row <courselist> must have the same bsid and, if bsid
-            # is null, the same sid.
-            # <sid0> will be the lesson subject.
-            bsid = course.bsid
-            sid = course.sid
-            if bsid != bsid0:
-                assert bsid0 is None
-                bsid0 = bsid
-                if bsid0:
-                    sid0 = bsid0
-                else:
-                    sid0 = sid
-            elif not bsid:
-                assert sid == sid0
-            # Extend teacher and class lists
-            tid = course.tid
-            assert tid
-            if tid != NO_TEACHER:
-                tids.add(tid)
-            klass = course.klass
-            assert klass
-            if klass != NO_CLASS and course.group:
-                classes.add(klass)
-        for lid, l, t, p0, rr0 in ll:
-            tt_index = len(tt_lessons)
-            for tid in tids:
-                try:
-                    teacher_activities[tid].append(tt_index)
-                except KeyError:
-                    teacher_activities[tid] = [tt_index]
-            for klass in classes:
-                try:
-                    class_activities[klass].append(tt_index)
-                except KeyError:
-                    class_activities[klass] = [tt_index]
-            if t:
-#TODO: What if it is a reference (starting with "^")?
-                d, p = t.split(".")
-                t_index = day2index(d) * nperiods + period2index(p) + 1
-            else:
-                t_index = 0
-#TODO: Consider moving p0 and rr0 out of this data structure
-            if p0:
-                d, p = p0.split(".")
-                p0_index = day2index(d) * nperiods + period2index(p) + 1
-            else:
-                p0_index = 0
-            if rr0:
-                rplist = [rmap_i[r] for r in rr0.split(",")]
-            else:
-                rplist = []
-            tt_lessons.append(TT_LESSON(
-                tlist,
-                cglist,
-                ag.fixed_rooms,
-                ag.room_choices,
-                ag.courses,
-                lid,
-                sid0,
-                l,
-                lg,
-                t_index,
-                p0_index,
-                rplist
-            ))
-    return tt_lessons, class_activities, teacher_activities
-
-
-def room_split(tt_data: TT_BASE_DATA, room_choice: str) -> list[int]:
-    """Split a room (choice) string into components.
-    If there is a '+', it must be followed by a valid room-group name,
-    not preceded by a '/' and be the last item in the string. The group
-    is replaced by its contents, though rooms are not included more than
-    once in the resulting list.
-    The rooms are returned as indexes.
-    """
-    rs = room_choice.split('+')
-    if len(rs) == 1:
-        rgl = []
-    else:
-        room_choice, rg = rs            # ValueError if not 2 items
-        rgl = tt_data.room_groups[rg]   # KeyError if invalid
-    if room_choice:
-        r_map = tt_data.room_index
-        rl = [r_map[r] for r in room_choice.split('/')]
-    else:
-        rl = []
-    for rx in rgl:
-        if rx not in rl:
-            rl.append(rx)
-    return rl
 
 
 def simplify_room_lists(roomlists: list[list[int]]
@@ -477,28 +237,262 @@ def simplify_room_lists(roomlists: list[list[int]]
     return (list(srooms), rooms)
 
 
-def read_tt_db():
-    """Read all timetable-relevant information from the database.
-    """
-    timap = get_teacher_indexes()
-    n, cgimap, crmap = get_class_atoms()
-    rimap = get_room_map()
-    rgmap = {
-        rg: [rimap[r] for r in rl]
-        for rg, rl in get_room_groups().items()
-    }
-    tt_data = TT_BASE_DATA(
-        crmap,
-        cgimap,
-        n,
-        timap,
-        rimap,
-        rgmap,
+class TimetableData:
+    __slots__ = (
+        "class_room", #: dict[str, str]
+        "class_group_atoms", #: dict[str, dict[str, list[int]]]
+        "n_class_group_atoms", #: int
+        # <n_class_group_atoms> is provided because <class_group_atoms>
+        # (being a dict of dicts) doesn't directly provide the needed number.
+        "teacher_index", #: dict[str, int]
+        "room_index", #: dict[str, int]
+        "room_groups", #: dict[str, list[int]]
+        "tt_lessons", #: list[TT_LESSON]
+        "class_ttls", #: dict[str, list[int]] (class -> index to <tt_lessons>)
+        "teacher_ttls", #: dict[list[int]] (tid -> index to <tt_lessons>)
     )
-    lg_map = get_activity_groups(tt_data)
-    lg_ll = get_lg_lessons()
-    return tt_data, collate_lessons(lg_ll, lg_map, rimap)
 
+    def __init__(self, ):
+        n, cgimap, crmap = get_class_atoms()
+        self.class_room = crmap
+        self.class_group_atoms = cgimap
+        self.n_class_group_atoms = n
+        self.teacher_index = get_teacher_indexes()
+        rimap = get_room_map()
+        self.room_index = rimap
+        self.room_groups = {
+            rg: [rimap[r] for r in rl]
+            for rg, rl in get_room_groups().items()
+        }
+        lg_map = self.get_activity_groups()
+        lg_ll = get_lg_lessons()
+#        self.collate_lessons(lg_ll, lg_map, rimap)
+
+        ## Combine the data for the lesson groups and the individual
+        ## lessons to a list of TT_LESSON items.
+        ## For more effective placement checks teachers, groups and
+        ## rooms are replaced by integers (there is a somewhat dynamic
+        ## correspondence of the various tags to the indexes, which may
+        ## vary from run to run).
+        ## Information from the "courses" connected with such an item is
+        ## retained as a list with the original values, not the numeric
+        ## equivalents.
+
+        # The following is for converting lesson "times" to week-vector
+        # indexes:
+        day2index = get_days().index
+        periods = get_periods()
+        nperiods = len(periods)
+        period2index = periods.index
+        # Run through the lesson groups and their associated lessons
+        tt_lessons = [None]
+        class_activities = {}       # class -> list of tt_lesson indexes
+        teacher_activities = {}     # teacher -> list of tt_lesson indexes
+        for lg, ll in lg_ll.items():
+            ag = lg_map[lg]
+            tlist = sorted(ag.teacher_set)
+            cglist = sorted(ag.classgroup_set)
+            tids = set()
+            classes = set()
+            sid0, bsid0 = None, None
+            for course in ag.courses:
+                # Each row <courselist> must have the same bsid and, if
+                # bsid is null, the same sid.
+                # <sid0> will be the lesson subject.
+                bsid = course.bsid
+                sid = course.sid
+                if bsid != bsid0:
+                    assert bsid0 is None
+                    bsid0 = bsid
+                    if bsid0:
+                        sid0 = bsid0
+                    else:
+                        sid0 = sid
+                elif not bsid:
+                    assert sid == sid0
+                # Extend teacher and class lists
+                tid = course.tid
+                assert tid
+                if tid != NO_TEACHER:
+                    tids.add(tid)
+                klass = course.klass
+                assert klass
+                if klass != NO_CLASS and course.group:
+                    classes.add(klass)
+            for lid, l, t, p0, rr0 in ll:
+                tt_index = len(tt_lessons)
+                for tid in tids:
+                    try:
+                        teacher_activities[tid].append(tt_index)
+                    except KeyError:
+                        teacher_activities[tid] = [tt_index]
+                for klass in classes:
+                    try:
+                        class_activities[klass].append(tt_index)
+                    except KeyError:
+                        class_activities[klass] = [tt_index]
+                if t:
+#TODO: What if it is a reference (starting with "^")?
+                    d, p = t.split(".")
+                    t_index = day2index(d) * nperiods + period2index(p) + 1
+                else:
+                    t_index = 0
+#TODO: Consider moving p0 and rr0 out of this data structure
+                if p0:
+                    d, p = p0.split(".")
+                    p0_index = day2index(d) * nperiods + period2index(p) + 1
+                else:
+                    p0_index = 0
+                if rr0:
+                    rplist = [rimap[r] for r in rr0.split(",")]
+                else:
+                    rplist = []
+                tt_lessons.append(TT_LESSON(
+                    tlist,
+                    cglist,
+                    ag.fixed_rooms,
+                    ag.room_choices,
+                    ag.courses,
+                    lid,
+                    sid0,
+                    l,
+                    lg,
+                    t_index,
+                    p0_index,
+                    rplist
+                ))
+        self.tt_lessons = tt_lessons
+        self.class_ttls = class_activities
+        self.teacher_ttls = teacher_activities
+
+    def get_activity_groups(self):
+        """Return a mapping of "activity groups" – that is, a collection
+        of data for each non-null Lesson_group value.
+        """
+        q = """select
+
+            Lesson_group,
+            --Lesson_data,
+            CLASS,
+            GRP,
+            SUBJECT,
+            TEACHER,
+            BLOCK_SID,
+            --BLOCK_TAG,
+            ROOM
+
+            from COURSE_LESSONS
+            inner join COURSES using (Course)
+            inner join LESSON_GROUPS using (Lesson_group)
+            inner join LESSON_DATA using (Lesson_data)
+
+            where Lesson_group != '0'
+        """
+        lg_map = {}
+        r_map = self.room_index
+        t_map = self.teacher_index
+        for rec in db_select(q):
+            lg = rec["Lesson_group"]
+            klass = rec["CLASS"]
+            rm = self.class_room[klass]
+            if rm:
+                room = rec["ROOM"].replace("$", rm)
+            else:
+                room = rec["ROOM"]
+                assert "$" not in room
+            group = rec["GRP"]
+            sid = rec["SUBJECT"]
+            bsid = rec["BLOCK_SID"]
+            tid = rec ["TEACHER"]
+            row = COURSE_INFO(
+                klass,
+                group,
+                sid,
+                tid,
+                bsid,
+                room
+            )
+            cgalist = self.class_group_atoms[klass][group] if group else []
+            ti = t_map[tid]
+            try:
+                lg_data = lg_map[lg]
+                if ti:
+                    lg_data[0].add(ti)
+                if cgalist:
+                    lg_data[1].update(cgalist)
+                lg_data[2].append(row)
+                if room:
+                    lg_data[3].add(room)
+            except KeyError:
+                lg_map[lg] = (
+                    {ti} if ti else set(),
+                    set(cgalist),
+                    [row],
+                    {room} if room else set()
+                )
+        agmap = {}
+        for lg, lg_data in lg_map.items():
+            rsl = []
+            for rx in lg_data[3]:
+                try:
+                    rsl.append(self.room_split(rx))
+                except KeyError:
+                    cdata = lg_data[2][0]
+                    sbj = cdata.bsid or cdata.sid
+                    cstr = f"{cdata.klass}.{cdata.group},{cdata.tid},{sbj}"
+                    if len(lg_data[2]) > 1:
+                        cstr += " ..."
+                    REPORT(
+                        "ERROR",
+                        T["UNKNOWN_ROOM_GROUP"].format(
+                            course = cstr,
+                            rooms = rx,
+                        )
+                    )
+            srl = simplify_room_lists(rsl)
+            #print("???", rsl)
+            #print("   -->", srl)
+            if not srl:
+                cdata = lg_data[2][0]
+                sbj = cdata.bsid or cdata.sid
+                cstr = f"{cdata.klass}.{cdata.group},{cdata.tid},{sbj} ..."
+                assert len(lg_data[2]) > 1
+                # I think an error can only occur when there are
+                # multiple courses, so the assertion is a check.
+                REPORT(
+                    "ERROR",
+                    T["ROOM_ERROR"].format(
+                        course = cstr,
+                        rooms = ", ".join(lg_data[3]),
+                    )
+                )
+                srl = ([], [])
+            agmap[lg] = ACTIVITY_GROUP(*lg_data[:3], *srl)
+        return agmap
+
+    def room_split(self, room_choice: str) -> list[int]:
+        """Split a room (choice) string into components.
+        If there is a '+', it must be followed by a valid room-group
+        name, not preceded by a '/', and be the last item in the string.
+        The group is replaced by its contents, though rooms are not
+        included more than once in the resulting list.
+        The rooms are returned as indexes.
+        """
+        rs = room_choice.split('+')
+        if len(rs) == 1:
+            rgl = []
+        else:
+            room_choice, rg = rs            # ValueError if not 2 items
+            rgl = self.room_groups[rg]      # KeyError if invalid
+        if room_choice:
+            r_map = self.room_index
+            rl = [r_map[r] for r in room_choice.split('/')]
+        else:
+            rl = []
+        for rx in rgl:
+            if rx not in rl:
+                rl.append(rx)
+        return rl
 
 
 #TODO: This is the version for "3a", using the PARALLEL_LESSONS table.
@@ -548,7 +542,7 @@ if __name__ == '__main__':
     for rg, rlist in get_room_groups().items():
         print(f"  -- {rg:10}", rlist)
 
-    tt_data, collated_lessons = read_tt_db()
+    tt_data = TimetableData()
 
     print("\n TEACHER INDEXES:")
     for tid, i in tt_data.teacher_index.items():
@@ -571,16 +565,14 @@ if __name__ == '__main__':
     for tag in sorted(pmap):
         print(f"  // {tag:10} : {pmap[tag]}")
 
-    tlessons, class_activities, teacher_activities = collated_lessons
-
     print("\n TLESSONS  class 11G:")
-    for tli in class_activities["11G"]:
-        print("   --", tlessons[tli])
+    for tli in tt_data.class_ttls["11G"]:
+        print("   --", tt_data.tt_lessons[tli])
 
     print("\n TLESSONS  teacher MT:")
-    for tli in teacher_activities["MT"]:
-        print("   --", tlessons[tli])
+    for tli in tt_data.teacher_ttls["MT"]:
+        print("   --", tt_data.tt_lessons[tli])
 
 
     from pympler import asizeof
-    print("\nSIZE:", asizeof.asizeof(tlessons))
+    print("\nSIZE:", asizeof.asizeof(tt_data.tt_lessons))
