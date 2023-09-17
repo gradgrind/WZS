@@ -1,4 +1,5 @@
-#TODO: Already deprecated? See tt_basic_data.
+# Deprecated, replaced by tt_basic_data.
+# Some of the code might be of interest if I want bitmaps ...
 """
 timetable/tt_base.py
 

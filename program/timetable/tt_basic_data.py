@@ -1,7 +1,7 @@
 """
 timetable/tt_basic_data.py
 
-Last updated:  2023-09-16
+Last updated:  2023-09-17
 
 Handle the basic information for timetable display and processing.
 
@@ -242,11 +242,11 @@ class TimetableData:
         ## The groups within each division are also collected.
         c_rmap = {}     # { class: classroom }
         c_g_map = {}    # { class: { group: [ index, ... ] } }
-        # The NO_CLASS entry might be superfluous: there shouldn't be any
-        # entries with a non-null group in the null class.
+        # The NO_CLASS entry might be superfluous: there shouldn't be
+        # any entries with a non-null group in the null class.
         c_g_map[NO_CLASS] = {GROUP_ALL: [0]}
-        i = 0           # Maximum index in <c_g_map>, i.e. number of atomic
-                        # groups (valid indexing starts at 1)
+        cgi = 0     # Maximum index in <c_g_map>, i.e. number of atomic
+                    # groups (valid indexing starts at 1)
         group_division = {} # { class: }
         for klass, cdata in get_classes().items():
             #print("?", klass)
@@ -274,21 +274,21 @@ class TimetableData:
                 c_g_map[klass] = gmap
                 amap = {}
                 for ag in cg.atomic_groups:
-                    i += 1
-                    amap[ag] = i
+                    cgi += 1
+                    amap[ag] = cgi
                 for g, ags in cg.group_atoms().items():
                     #print("???", g, ags)
                     gmap[g] = [amap[ag] for ag in ags]
                 if gmap:
                     gmap[GROUP_ALL] = list(amap.values())
                 else:
-                    i += 1
-                    gmap[GROUP_ALL] = [i]
+                    cgi += 1
+                    gmap[GROUP_ALL] = [cgi]
                 #print("  gmap:", gmap)
         self.group_division = group_division
         self.class_room = c_rmap
         self.class_group_atoms = c_g_map
-        self.n_class_group_atoms = i
+        self.n_class_group_atoms = cgi
         self.teacher_index = get_teacher_indexes()
         rimap = get_room_map()
         self.room_index = rimap

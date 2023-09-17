@@ -1,7 +1,7 @@
 """
 timetable/tt_placement.py
 
-Last updated:  2023-09-16
+Last updated:  2023-09-17
 
 Handle the basic information for timetable display and processing.
 
@@ -55,55 +55,50 @@ class PlacementEngine:
 # would ideally be correlatable with the room requirements. There could also
 # be entries for unallocated room requirements?
 
-class ALLOCATION(NamedTuple):
-    teacher_weeks: list[list[int]]
-    group_weeks: list[list[int]]
-    room_weeks: list[list[int]]
-
-
-def data_structures(n_teachers, n_groups, n_rooms):
-    """Return an empty data structure to contain teacher, group and
-    room placements. There is a cell for each time slot, which can
-    contain the index of an activity (0 for empty).
-    The primary division of each table is the time slot because most
-    allocating and testing will be done with regard to a single time slot.
-    All "real" indexes start at 1, 0 being used as "null".
-    """
-    n_week_cells = len(get_days()) * len(get_periods()) + 1
-    return ALLOCATION(
-        [[0] * n_teachers for i in range(n_week_cells)],
-        [[0] * n_groups for i in range(n_week_cells)],
-        [[0] * n_rooms for i in range(n_week_cells)],
+class Allocation:
+    __slots__ = (
+        "teacher_weeks", #: list[list[int]]
+        "group_weeks", #: list[list[int]]
+        "room_weeks", #: list[list[int]]
+        "allocation_state", #: list[list[int, list[int]]]
     )
 
-# I also need a simple representation of the allocation state (time and
-# rooms) of each tt_lesson. The data structure should be appropriate for
-# storing a complete allocation state, which can be used to restore a
-# previous state. A list (one entry per tt_lesson) of lists (e.g.
-# [time, room, room, ... ]) would be a possibility. To preserve this
-# over runs, the tt_lessons should be converted to lesson-ids and the
-# times and rooms converted to their text forms. Unallocated rooms
-# would not need to appear in the persistent version.
+    def __init__(self, tt_data):
+        """Set up an empty data structure for the collection of lesson
+        placements for the timetable.
+        Teacher, group and room placements are stored in arrays of cells,
+        one for each time slot, each containing the index of an actiity
+        (0 for empty). The primary division of each of these arrays is
+        the time slot because most allocating and testing will be done
+        with regard to a single time slot.
+        In addition there is an array with entries for each lesson
+        (activity). This contains, for each lesson, a pair of values,
+        firstly the time slot – 0 for unallocated – and secondly a list
+        of chosen room indexes (not the "fixed" ones) – again 0 for
+        unallocated / no room selected.
+        All "real" indexes start at 1, 0 generaaly being used as a "null".
+        """
+        n_week_cells = len(get_days()) * len(get_periods()) + 1
+        n_teachers = len(tt_data.teacher_index)
+        self.teacher_weeks = [[0] * n_teachers for i in range(n_week_cells)]
+        n_groups = tt_data.n_class_group_atoms + 1
+        self.group_weeks = [[0] * n_groups for i in range(n_week_cells)]
+        n_rooms = len(tt_data.room_index)
+        self.room_weeks = [[0] * n_rooms for i in range(n_week_cells)]
+        # Now the lesson allocation space
+        state = [[0, []]]
+        for ttl in tt_data.tt_lessons[1:]:
+            state.append([0, [0] * len(ttl.room_choices)])
+        self.allocation_state = state
+
+# To preserve the allocation state over runs, the tt_lesson indexes
+# should be converted to lesson-ids and the times and rooms converted
+# to their text forms. Unallocated rooms would not need to appear in the
+# persistent version.
 # Would it make sense to save this data separately from the LESSONS
 # table? Perhaps if multiple results with the same configuration are
 # to be saved? But saving the whole database is also a serious contender
 # for this scenario.
-def get_state_vector(tt_lessons):
-    """Return an empty state vector.
-    This contains an entry for each activity. Each entry is a list of
-    integers: The timeslot (0 for unallocated) followed by the rooms
-    where there is a choice – the "fixed" rooms are not included.
-    A room value is 0 when it is not yet allocated (otherwise 1+).
-    """
-    state = [[0]] # First entry is null (not a lesson)
-    for ttl in tt_lessons:
-        if ttl:
-            lstate = [0]
-            state.append(lstate)
-            for rc in ttl.room_choices:
-                lstate.append(0)
-    return state
-
 #NOTE: As the compulsory single rooms of an activity must be available
 # for a placement to be successful, there is no need to have them as
 # part of the "state". Of course, also a deallocation will have to
@@ -132,7 +127,7 @@ def very_hard_constraints(allocation, tt_lesson, timeslot):
     length = tt_lesson.length
     blockers = set()
     #print("TIMESLOT", timeslot, allocation.teacher_weeks[timeslot])
-    #print("TIMESLOT", 1, allocation.teacher_weeks[1])
+    #print("TIMESLOT", timeslot, allocation.group_weeks[timeslot])
     while length > 0:
         # Test teachers
         pslot = allocation.teacher_weeks[timeslot]
@@ -161,7 +156,12 @@ def very_hard_constraints(allocation, tt_lesson, timeslot):
     return blockers
 
 
-def hard_constraints():
+def hard_constraints(
+    allocation,
+    tt_lesson,
+    room_choice_hard,
+    undo
+):
     """Test hard constraints for the placement of an activity.
     """
     print("TODO")
@@ -194,6 +194,13 @@ def hard_constraints():
     else:
         room_choice = []
 
+#TODO: Would I want to know which rooms / lessons were blocking the allocation?
+
+    changes = allocate_lesson()
+    hc_blocked = test_hard_constraints()
+
+    if undo or hc_blocked:
+        undo_changes(changes)
 
 #TODO: test other constraints.
 # Which constraints should be tested here?
@@ -207,11 +214,11 @@ def hard_constraints():
 # 6) not-on-same-day (combine with min-days-between-activities?)
 # 7) lunch break
 
-    return room_choice
+    return hc_blocked #? include room choices?
 
 
 def resolve_room_choice(
-    allocation: ALLOCATION,
+    allocation: Allocation,
     tt_lesson: TT_LESSON,
     timeslot: int,
     hard_constraint: bool
@@ -244,7 +251,7 @@ def resolve_room_choice(
             else:
                 l.append(r)
         if not l:
-            if hard_contraint:
+            if hard_constraint:
 #TODO: Do I still want a list of blockages (somehow)?
 # Perhaps in manual mode the constraint could be always soft?
                 return None
@@ -273,7 +280,7 @@ def resolve_room_choice(
                     break
             else:
                 # No free room
-                if hard_contraint:
+                if hard_constraint:
                     # Don't investigate further
                     return None
                 if zeros + 1 == minzeros:
@@ -310,7 +317,7 @@ def resolve_room_choice(
             if rl:
                 filtered_lists.append(rl)
                 used.append(rl.pop())
-            elif hard_contraint:
+            elif hard_constraint:
                 # No free rooms: don't investigate further
                 return None
             else:
@@ -325,7 +332,7 @@ def resolve_room_choice(
 #########################################################
 
 def test_placement(
-    allocation: ALLOCATION,
+    allocation: Allocation,
     tt_lesson: TT_LESSON,
     timeslot: int,
     saved_rooms: Optional[list[int]]
@@ -356,7 +363,7 @@ def test_placement(
 
 
 def place_with_room_choices(
-    allocation: ALLOCATION,
+    allocation: Allocation,
     tt_lessons: list[Optional[TT_LESSON]],  # only the first entry is <None>
     ttli: int,
     timeslot: int,
@@ -413,31 +420,29 @@ def place_with_room_choices(
 
 
 def place_lesson_initial(
-    allocation: ALLOCATION,
+    allocation: Allocation,
     tt_lessons: list[Optional[TT_LESSON]],  # only the first entry is <None>
     ttli: int,
     timeslot: int,
-    state_vector: list[list[int]],
 ):
     """Place the given activity in the specified time slot.
-    !!! Only do this when the allocation slots are really empty, that is
+    !!! Only do this when the allocation slots are really empty, which is
     not checked here.
 
     allocation: placement data structures
     tt_lessons: the activity vector
     ttli: index of the activity to test (1+)
     timeslot: index of the time slot to test (1+)
-    state_vector: current placements of all activities (time, rooms)
     """
+#TODO: Record changes – to enable their reversal.
     ttl = tt_lessons[ttli]
     #print("\n??? TTL:", ttli, timeslot)
     #print("[]", len(allocation.teacher_weeks), allocation.teacher_weeks)
     length = ttl.length
-    state = state_vector[ttli]
+    state = allocation.allocation_state[ttli]
     state[0] = timeslot
 
 #TODO: deal with length (number of periods)
-    i = 0
     # Place teachers
     pslot = allocation.teacher_weeks[timeslot]
     for t in ttl.teachers:
@@ -452,10 +457,15 @@ def place_lesson_initial(
     # Skip the compulsory single rooms (see comment to <get_state_vector()>)
     for r in ttl.fixed_rooms:
         pslot[r] = ttli
+#?
     # Room choices are not allocated here
-    for rc in ttl.room_choices:
-        i += 1
-        state[i] = 0
+    rclist = state[1]
+    for i in range(len(rclist)):
+        rclist[i] = 0
+    #i = 0
+    #for rc in ttl.room_choices:
+    #    rclist[i] = 0
+    #    i += 1
     #print("[]", timeslot, allocation.teacher_weeks)
 
 
@@ -475,14 +485,9 @@ def place_lesson_initial(
 
 
 #TODO
-def full_placement(tt_data, saved_state=None):
+def load_timetable(tt_data, state):
     tt_lessons = tt_data.tt_lessons
-    allocation = data_structures(
-        len(tt_data.teacher_index),
-        tt_data.n_class_group_atoms + 1,
-        len(tt_data.room_index),
-    )
-    tt_state = get_state_vector(tt_lessons)
+    allocation = Allocation(tt_data)
     i = 0
     imax = len(tt_lessons) - 1
     while i < imax:
@@ -491,7 +496,9 @@ def full_placement(tt_data, saved_state=None):
         timeslot = ttl.time
         if timeslot != 0:
 #TODO: Could have been "^ ..." (lesson reference)!
-            blockers = very_hard_constraints(allocation, tt_lessons[i], timeslot)
+            blockers = very_hard_constraints(
+                allocation, tt_lessons[i], timeslot
+            )
             if blockers:
                 #print("   BLOCKERS", i, blockers)
                 ttlx = tt_lessons[list(blockers)[0]]
@@ -504,24 +511,30 @@ def full_placement(tt_data, saved_state=None):
                     )
                 )
                 continue
-        elif saved_state:
-            timeslot = saved_state[i][0]
+        elif state:
+#TODO: rather add to pending list, for processing after all fixed
+# placements?
+
+            timeslot = state[i][0]
             if timeslot == 0:
                 continue
-            blockers = very_hard_constraints(allocation, tt_lessons[i], timeslot)
+            blockers = very_hard_constraints(
+                allocation, tt_lessons[i], timeslot
+            )
 #--
-#            print("?????", i, timeslot, blockers)
+            #print("?????", i, timeslot, blockers)
 
             if blockers:
                 continue
         else:
             continue
 
-# if no blockers, do the placement, otherwise add to unallocated list/map
-# when all done (?) calculate penalties?
-# Penalties are probably only relevant when all tt_lessons have been
-# placed ...
-        place_lesson_initial(allocation, tt_lessons, i, timeslot, tt_state)
+# If no blockers, do the placement, otherwise add to unallocated list/map.
+# When all done (?) calculate penalties?
+# Penalties are only relevant when all tt_lessons have been placed ...
+
+# What about (other) hard constraints, like room choices?
+        place_lesson_initial(allocation, tt_lessons, i, timeslot)
 
     #for data in tt_state:
     #    print(" --", data)
@@ -535,21 +548,18 @@ def print_activity(tlesson):
 
 
 # Do I want to keep this structure?
-def get_saved_state(tt_lessons):
+def get_saved_state(tt_lessons) -> list[tuple[int, list[int]]]:
     """Extract the placements from the LESSONS table (via the activities
     list).
     """
-    state = [None]
-    for ttli in range(1, len(tt_lessons)):
-        ttl = tt_lessons[ttli]
-        time = ttl.placement0
-        if time > 0:
-            rooms = ttl.rooms0
-            # The rooms might not correspond (even in number) to those
-            # expected ...
-            state.append([time] + ttl.rooms0)
+    state = [(0, [])]
+    for ttl in tt_lessons[1:]:
+        # The rooms might not correspond (even in number) to those
+        # expected ...
+        if ttl.placement0 > 0:
+            state.append((ttl.placement0, ttl.rooms0))
         else:
-            state.append([0])
+            state.append((0, []))
     return state
 
 
@@ -579,7 +589,7 @@ def init_timeslot_text():
 
 
 def test_room_allocation(
-    allocation: ALLOCATION,
+    allocation: Allocation,
     requirements: list[list[int]],
     test_rooms: list[int],
     timeslot: int,
@@ -648,10 +658,19 @@ if __name__ == '__main__':
     """
 
     from timetable.tt_basic_data import TimetableData
-    tt_data = TimetableData()
+    TT_DATA = TimetableData()
 
-    saved_state = get_saved_state(tt_data.tt_lessons)
-    full_placement(tt_data, saved_state)
+    print("\n+ get_saved_state")
+    state = get_saved_state(TT_DATA.tt_lessons)
+    print(" ... done")
+    #i = 0
+    #for s in state:
+    #    i += 1
+    #    print("  §§", s)
+
+    print("\n+ load timetable using saved placements")
+    load_timetable(TT_DATA, state)
+    print(" ... done")
 
     quit(0)
 
