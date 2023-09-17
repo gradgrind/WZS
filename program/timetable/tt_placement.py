@@ -57,6 +57,7 @@ class PlacementEngine:
 
 class Allocation:
     __slots__ = (
+        "tt_data", #: TimetableData
         "teacher_weeks", #: list[list[int]]
         "group_weeks", #: list[list[int]]
         "room_weeks", #: list[list[int]]
@@ -78,7 +79,8 @@ class Allocation:
         unallocated / no room selected.
         All "real" indexes start at 1, 0 generaaly being used as a "null".
         """
-        n_week_cells = len(get_days()) * len(get_periods()) + 1
+        self.tt_data = tt_data
+        n_week_cells = tt_data.days_per_week * tt_data.periods_per_day + 1
         n_teachers = len(tt_data.teacher_index)
         self.teacher_weeks = [[0] * n_teachers for i in range(n_week_cells)]
         n_groups = tt_data.n_class_group_atoms + 1
@@ -105,6 +107,7 @@ class Allocation:
 # seek rooms in two places, the "fixed" ones and the "chosen" ones.
 
 
+#TODO: Return blockage causes somehow ...
 def very_hard_constraints(allocation, tt_lesson, timeslot):
     """Test whether the lesson/activity can be placed in the specified
     slot.
@@ -117,42 +120,48 @@ def very_hard_constraints(allocation, tt_lesson, timeslot):
     evaluation of other hard constraints.
 
     allocation: placement data structures
-    tt_lessons: the activity vector
-    ttli: index of the activity to test (1+)
+    tt_lesson: the lesson / activity
     timeslot: index of the time slot to test (1+)
 
     Return a set of blocking activity indexes, empty if the allocation
     is possible in the given time-slot.
     """
-    length = tt_lesson.length
     blockers = set()
     #print("TIMESLOT", timeslot, allocation.teacher_weeks[timeslot])
     #print("TIMESLOT", timeslot, allocation.group_weeks[timeslot])
-    while length > 0:
+
+    # Check that the start time is not too late to fit in the day
+    nperiods = allocation.tt_data.periods_per_day
+    if (timeslot - 1) % nperiods + tt_lesson.length > nperiods:
+#TODO: Some more appropriate return value?
+        print("!!! DAY overflow:", timeslot, tt_lesson.length, tt_lesson.lesson_id)
+        return None
+    t = timeslot
+    tmax = t + tt_lesson.length
+    while t < tmax:
         # Test teachers
-        pslot = allocation.teacher_weeks[timeslot]
-        for t in tt_lesson.teachers:
-            i = pslot[t]
+        pslot = allocation.teacher_weeks[t]
+        for tx in tt_lesson.teachers:
+            i = pslot[tx]
             if i != 0:
-                print("TEACHER", t, i, timeslot)
+                print("TEACHER", tx, i, t)
                 blockers.add(i)
         # Test class-groups
-        pslot = allocation.group_weeks[timeslot]
+        pslot = allocation.group_weeks[t]
         for cg in tt_lesson.classgroups:
             i = pslot[cg]
             if i != 0:
-                print("GROUP", cg, i, timeslot)
+                print("GROUP", cg, i, t)
                 blockers.add(i)
         # Test single compulsory rooms
-        pslot = allocation.room_weeks[timeslot]
+        pslot = allocation.room_weeks[t]
         for r in tt_lesson.fixed_rooms:
             i = pslot[r]
             if i != 0:
-                print("ROOM", r, i, timeslot)
+                print("ROOM", r, i, t)
                 blockers.add(i)
         # Room choices are ignored here
-        length -= 1
-        timeslot += 1
+        t += 1
     return blockers
 
 
@@ -364,8 +373,7 @@ def test_placement(
 
 def place_with_room_choices(
     allocation: Allocation,
-    tt_lessons: list[Optional[TT_LESSON]],  # only the first entry is <None>
-    ttli: int,
+    tt_lesson: TT_LESSON,
     timeslot: int,
     state_vector: list[list[int]],
     saved_rooms: Optional[list[int]]
@@ -375,37 +383,39 @@ def place_with_room_choices(
     It is assumed that the possibility of the placement has been
     checked already!
     """
-    ttl = tt_lessons[ttli]
-    #print("\n??? TTL:", ttli, timeslot)
-    #print("[]", len(allocation.teacher_weeks), allocation.teacher_weeks)
-    length = ttl.length
-    state = state_vector[ttli]
+    length = tt_lesson.length
+    ttli = tt_lesson.index
+    state = allocation.allocation_state[ttli]
     state[0] = timeslot
 
-#TODO: deal with length (number of periods)
-    i = 0
-    # Place teachers
-    pslot = allocation.teacher_weeks[timeslot]
-    for t in ttl.teachers:
-        pslot[t] = ttli
-    # Place class-groups
-    pslot = allocation.group_weeks[timeslot]
-    for cg in ttl.classgroups:
-        pslot[cg] = ttli
+    # Deal with length (number of periods)
+    t = timeslot
+    tmax = timeslot + length
+    while t < tmax:
+        # Place teachers
+        pslot = allocation.teacher_weeks[t]
+        for t in ttl.teachers:
+            pslot[t] = ttli
+        # Place class-groups
+        pslot = allocation.group_weeks[t]
+        for cg in ttl.classgroups:
+            pslot[cg] = ttli
 #TODO: comments not clear!
-    # Place single compulsory rooms
-    pslot = allocation.room_weeks[timeslot]
-    # Skip the compulsory single rooms (see comment to <get_state_vector()>)
-    for r in ttl.fixed_rooms:
-        pslot[r] = ttli
+        # Place single compulsory rooms
+        pslot = allocation.room_weeks[t]
+        # Skip the compulsory single rooms (see comment to <get_state_vector()>)
+        for r in ttl.fixed_rooms:
+            pslot[r] = ttli
+        t += 1
+
 
     # Room choices ...
     if saved_rooms and test_room_allocation(
         allocation,
-        ttl.room_choices,
+        tt_lesson.room_choices,
         saved_rooms,
         timeslot,
-        ttl.length
+        tt_lesson.length
     ):
         pass
 
@@ -413,7 +423,7 @@ def place_with_room_choices(
     # Deal with no saved rooms
 
 
-    for rc in ttl.room_choices:
+    for rc in tt_lesson.room_choices:
         i += 1
         state[i] = 0
     #print("[]", timeslot, allocation.teacher_weeks)
@@ -497,7 +507,7 @@ def load_timetable(tt_data, state):
         if timeslot != 0:
 #TODO: Could have been "^ ..." (lesson reference)!
             blockers = very_hard_constraints(
-                allocation, tt_lessons[i], timeslot
+                allocation, ttl, timeslot
             )
             if blockers:
                 #print("   BLOCKERS", i, blockers)
@@ -511,6 +521,18 @@ def load_timetable(tt_data, state):
                     )
                 )
                 continue
+#TODO: room choices
+            if ttl.placement0 == timeslot:
+                print("+++ CHECK ROOM CHOICES", state[i][1], "\n", ttl.room_choices)
+                if not test_room_allocation(
+                    allocation,
+                    ttl.room_choices,
+                    state[i][1],
+                    timeslot,
+                    ttl.length,
+                ):
+                    print("??? ROOM MISMATCH")
+
         elif state:
 #TODO: rather add to pending list, for processing after all fixed
 # placements?
@@ -611,18 +633,27 @@ def test_room_allocation(
                 return False
         timeslot += 1
         length -= 1
-    # Attempt to correlate requested rooms with required rooms
-    def select(rs, ri):
-        # A recursive function
-        try:
-            rs.intersection(requirements[ri])
-        except IndexError:
-            return True # all requirements tested
-        for r in intersects.pop():
-            if select(rs - {r}, ri + 1):
-                return True
-        return False
-    return select(set(test_rooms), 0)
+    # Check that the rooms are in the requirements lists.
+#TODO: Check this:
+    # This assumes correct ordering!
+    for i, r in enumerate(test_rooms):
+        if r not in requirements[i]:
+            return False
+    return True
+
+# A more complicated alternative to the last bit (probably unnecessary):
+#    # Attempt to correlate requested rooms with required rooms
+#    def select(rs, ri):
+#        # A recursive function
+#        try:
+#            rs.intersection(requirements[ri])
+#        except IndexError:
+#            return True # all requirements tested
+#        for r in intersects.pop():
+#            if select(rs - {r}, ri + 1):
+#                return True
+#        return False
+#    return select(set(test_rooms), 0)
 
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#

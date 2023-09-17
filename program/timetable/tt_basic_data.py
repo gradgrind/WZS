@@ -67,6 +67,7 @@ class ACTIVITY_GROUP(NamedTuple):
     room_choices: list[list[int]]
 
 class TT_LESSON(NamedTuple):
+    index: int
     teachers: list[int]
     classgroups: list[int]
     fixed_rooms: list[int]
@@ -206,6 +207,7 @@ def simplify_room_lists(roomlists: list[list[int]]
 class TimetableData:
     __slots__ = (
         "periods_per_day", #: int
+        "days_per_week", #: int
         "group_division", #: dict[str, tuple[ # key: class
         #     list[list[str]], # list of primary groups in each division
         #     dict[str, tuple[ # key: group (also '*')
@@ -312,7 +314,9 @@ class TimetableData:
 
         # The following is for converting lesson "times" to week-vector
         # indexes:
-        day2index = get_days().index
+        days = get_days()
+        day2index = days.index
+        self.days_per_week = len(days)
         periods = get_periods()
         nperiods = len(periods)
         self.periods_per_day = nperiods
@@ -381,6 +385,7 @@ class TimetableData:
                 else:
                     rplist = []
                 tt_lessons.append(TT_LESSON(
+                    tt_index,
                     tlist,
                     cglist,
                     ag.fixed_rooms,
