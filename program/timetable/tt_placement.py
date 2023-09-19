@@ -1,7 +1,7 @@
 """
 timetable/tt_placement.py
 
-Last updated:  2023-09-17
+Last updated:  2023-09-19
 
 Handle the basic information for timetable display and processing.
 
@@ -247,19 +247,39 @@ def resolve_room_choice(
 # are not possible? If the rooms are a soft constraint that would
 # probably be sensible.
 
-    # Reduce the lists to contain only available rooms
+#    # Reduce the lists to contain only available rooms
+
+    # Check availability of rooms, noting blocking lessons
+
+
     rclists = []
     minzeros = 0
     for rc in tt_lesson.room_choices:
         l = []
         rclists.append(l)
+
+        noroom = True
+
         for r in rc:
+            blist = []
             for rs in rslots:
-                if rs[r] != 0:  # room in use
-                    break
-            else:
-                l.append(r)
-        if not l:
+                blocker = rs[r]
+
+                if blocker != 0:  # room in use
+                    if blocker not in blist:
+                        blist.append(blocker)
+
+
+#                    break
+#            else:
+#                l.append(r)
+
+            l.append((r, blist))
+            if not blist:
+                noroom = False
+
+        if noroom:
+#        if not l:
             if hard_constraint:
 #TODO: Do I still want a list of blockages (somehow)?
 # Perhaps in manual mode the constraint could be always soft?
@@ -276,6 +296,8 @@ def resolve_room_choice(
         if i == maxi:
             ## Done?
             # Get the first free room
+
+#TODO: Handle new rclists ...
             for r in rclists[i]:
                 if r not in used:
                     if zeros == minzeros:

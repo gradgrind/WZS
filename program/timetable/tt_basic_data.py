@@ -1,7 +1,7 @@
 """
 timetable/tt_basic_data.py
 
-Last updated:  2023-09-17
+Last updated:  2023-09-19
 
 Handle the basic information for timetable display and processing.
 
@@ -151,7 +151,7 @@ def get_lg_lessons():
 
 
 def simplify_room_lists(roomlists: list[list[int]]
-) -> Optional[tuple[list[int], list[list[int]]]]:
+) -> Optional[tuple[list[int], list[tuple[int, Optional[list]]]]]:
     """Simplify room lists, where possible, and check for room conflicts.
 
     The basic room specifications for the individual "tlessons" are
@@ -161,47 +161,77 @@ def simplify_room_lists(roomlists: list[list[int]]
     difficulties of specifying concisely the room requirements for
     blocks containing multiple courses, it seemed a reasonable compromise.
 
+    The structure containing the room choices is rather complex. The
+    whole question of room choices is not easy to handle in a really
+    satisfying way. Here I have chosen a rather elaborate structure
+    which can – hopefully – reduce complexity and time in the search for
+    available room combinations.
+
     <roomlists>: A list of lists. Each entry in the outer list
         corresponds to one required room. Such an entry is a list
         containing the indexes of the permissible rooms.
 
     Return:
         List of required rooms (indexes) where there is no choice.
-        List of choice lists.
+        List of room choice structures.
 
     A <None> return value indicates invalid data.
     """
-    ## Collect single room "choices" and remove redundant entries
-    srooms = set()      # (single) fixed room
-    rooms = []          # room choice list
-    for rchoice in roomlists:
-        if len(rchoice) == 1:
-            r = rchoice[0]
-            if r in srooms:
-                return None     # Internal conflict!
-            srooms.add(r)
+    results = []
+    used = []
+    selection_sets = set()
+    set0 = set()
+    if not roomlists:
+        return ([], [])
+    nentries = len(roomlists)
+
+    def rcall():
+        i = len(used)
+        if i < nentries:
+            for r in roomlists[i]:
+                if r not in used:
+                    used.append(r)
+                    rc = rcall()
+                    del used[-1]
         else:
-            rooms.append(rchoice)
-    # Filter already-claimed rooms from the choice lists, but retain
-    # ordering of choices
-    i = 0
-    while i < len(rooms):
-        rl = rooms[i]
-        for r in srooms.intersection(rl):
-            rl.remove(r)
-        if rl:
-            if len(rl) == 1:
-                # new single room
-                srooms.add(rl[0])
-                del rooms[i]
-                i = 0
+            # A possible room list is in <used>.
+            # Skip lists where the set of rooms has already been covered.
+            rs = frozenset(used)
+            if rs not in selection_sets:
+                if results:
+                    set0.intersection_update(rs)
+                else:
+                    set0.update(rs)
+                selection_sets.add(rs)
+                results.append(tuple(used))
+    rcall()
+    if not results:
+        return None
+    rsearch = []
+    imax = nentries - len(set0) - 1
+    for rl in results:
+        rp = rsearch
+        for i, r in enumerate(rl):
+            if r in set0: continue
+            for rpr in rp:
+                if rpr[0] == r:
+                    rp = rpr[1]
+                    break
             else:
-                i += 1
-        else:
-            return None     # No rooms left, internal conflict!
-    # Sort according to list length
-    rooms.sort(key=len)
-    return (list(srooms), rooms)
+                # "New" room choice
+                rpr = (r, None if i == imax else [])
+                rp.append(rpr)
+                rp = rpr[1]
+
+    #print("%%%", set0)
+    #def rprint(rcl, level=0):
+    #    if rcl:
+    #        for rl in rcl:
+    #            print("  "*level + "  **", rl[0])
+    #            rprint(rl[1], level + 1)
+    #rprint(rsearch)
+
+    return (list(set0), rsearch)
 
 
 class TimetableData:
@@ -580,6 +610,20 @@ if __name__ == '__main__':
     for rg, rlist in get_room_groups().items():
         print(f"  -- {rg:10}", rlist)
 
+    print("\n SIMPLIFY ROOM LISTS:")
+    rll = [
+        [1,2,3,4,5],
+        [3,1,2,4,5],
+    #    [6,1,7],
+    #    [7,2],
+    #    [6,1],
+        [1],
+        [6],
+        [1,6,7],
+        [2,6,7],
+    ]
+    print(simplify_room_lists(rll))
+
     tt_data = TimetableData()
 
     print("\n TEACHER INDEXES:")
@@ -615,7 +659,6 @@ if __name__ == '__main__':
     for k, divs in tt_data.group_division.items():
         print("  Class", k)
         print("    ::", divs)
-
 
     from pympler import asizeof
     print("\nSIZE:", asizeof.asizeof(tt_data.tt_lessons))
