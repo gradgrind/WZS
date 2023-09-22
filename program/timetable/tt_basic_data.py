@@ -1,7 +1,7 @@
 """
 timetable/tt_basic_data.py
 
-Last updated:  2023-09-19
+Last updated:  2023-09-20
 
 Handle the basic information for timetable display and processing.
 
@@ -161,19 +161,13 @@ def simplify_room_lists(roomlists: list[list[int]]
     difficulties of specifying concisely the room requirements for
     blocks containing multiple courses, it seemed a reasonable compromise.
 
-    The structure containing the room choices is rather complex. The
-    whole question of room choices is not easy to handle in a really
-    satisfying way. Here I have chosen a rather elaborate structure
-    which can – hopefully – reduce complexity and time in the search for
-    available room combinations.
-
     <roomlists>: A list of lists. Each entry in the outer list
         corresponds to one required room. Such an entry is a list
         containing the indexes of the permissible rooms.
 
     Return:
         List of required rooms (indexes) where there is no choice.
-        List of room choice structures.
+        List of possible room-choice vectors (lists).
 
     A <None> return value indicates invalid data.
     """
@@ -207,31 +201,19 @@ def simplify_room_lists(roomlists: list[list[int]]
     rcall()
     if not results:
         return None
-    rsearch = []
-    imax = nentries - len(set0) - 1
+#Note: This can produce long, rather inefficient room-choice lists.
+    filtered = []
     for rl in results:
-        rp = rsearch
-        for i, r in enumerate(rl):
-            if r in set0: continue
-            for rpr in rp:
-                if rpr[0] == r:
-                    rp = rpr[1]
-                    break
-            else:
-                # "New" room choice
-                rpr = (r, None if i == imax else [])
-                rp.append(rpr)
-                rp = rpr[1]
-
-    #print("%%%", set0)
-    #def rprint(rcl, level=0):
-    #    if rcl:
-    #        for rl in rcl:
-    #            print("  "*level + "  **", rl[0])
-    #            rprint(rl[1], level + 1)
-    #rprint(rsearch)
-
-    return (list(set0), rsearch)
+        frl = [r for r in rl if r not in set0]
+        #if len(frl) > 1:
+        #    print("$$$$", rl, "-", set0)
+        #    print("  --->", frl)
+        if frl:
+            filtered.append(frl)
+    #if filtered and len(filtered[0]) > 1:
+    #    print("§§§§", results)
+    #    print("  -->", filtered)
+    return (list(set0), filtered)
 
 
 class TimetableData:
@@ -614,15 +596,18 @@ if __name__ == '__main__':
     rll = [
         [1,2,3,4,5],
         [3,1,2,4,5],
-    #    [6,1,7],
+        [6,1,7],
     #    [7,2],
     #    [6,1],
-        [1],
-        [6],
+    #    [1],
+    #    [6],
         [1,6,7],
         [2,6,7],
     ]
-    print(simplify_room_lists(rll))
+    rf, rc = simplify_room_lists(rll)
+    print(" ... fixed:", rf)
+    for rl in rc:
+        print("  ++ choice:", rl)
 
     tt_data = TimetableData()
 

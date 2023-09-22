@@ -1,7 +1,7 @@
 """
 timetable/tt_placement.py
 
-Last updated:  2023-09-19
+Last updated:  2023-09-22
 
 Handle the basic information for timetable display and processing.
 
@@ -168,7 +168,6 @@ def very_hard_constraints(allocation, tt_lesson, timeslot):
 def hard_constraints(
     allocation,
     tt_lesson,
-    room_choice_hard,
     undo
 ):
     """Test hard constraints for the placement of an activity.
@@ -189,19 +188,16 @@ def hard_constraints(
 # might well turn out to be a touch more complex than I would like
 # (especially when considering varying activity lengths).
 
-#TODO
-    if room_choice_hard:
-        room_choice = resolve_room_choice(
-            allocation,
-            tt_lesson,
-            timeslot,
-            hard_constraint = True
-        )
-        if room_choice is None:
-            # Don't need to test other constraints
-            return None
-    else:
-        room_choice = []
+#TODO: Only for manual placement? ...
+# But it's not a blocking constraint anyway!
+#    zeros, room_choice = resolve_room_choice(
+#        allocation,
+#        tt_lesson,
+#        timeslot
+#    )
+#    if zeros > 0:
+#        # Don't need to test other constraints
+#        return None
 
 #TODO: Would I want to know which rooms / lessons were blocking the allocation?
 
@@ -225,16 +221,20 @@ def hard_constraints(
 
     return hc_blocked #? include room choices?
 
+# It should be possible to detect blocking lessons automatically so that
+# the placement of a particular lesson can be forced. Perhaps not the
+# room choices, though?
+
 
 def resolve_room_choice(
     allocation: Allocation,
     tt_lesson: TT_LESSON,
     timeslot: int,
-    hard_constraint: bool
 ):
     """Try to allocate rooms satisfying the choice lists.
     If <hard_constraint> is true, only full room lists will be
     returned, otherwise <None>.
+#?
     Otherwise, if a full room list is not possible with the available
     rooms, the returned list will contain one or more null (0) rooms.
     """
@@ -251,113 +251,69 @@ def resolve_room_choice(
 
     # Check availability of rooms, noting blocking lessons
 
+# Note the new room_choices structure! Would it be better to include
+# various permutations of the possible combinations after all?
+# What should happen now if no full match is found?
+# I suppose some fancy structure with shared sub-trees might make things
+# easier here (?), but would be difficult to set up ...
+# Actually, on reflection, I'm not really sure that the added complexity
+# is worth it at all. Yes the tree structure requires fewer comparisons
+# in general, but potentially not so very many fewer and the total
+# cost may be similar or higher. Perhaps I should just accept that
+# matching choice lists is time-consuming and keep it simple?
+# So, revert to simple lists???
+# Consider also making room allocation a purely soft constraint, though
+# perhaps with an especially large penalty for "+"-weighting.
+# Actually, wouldn't purely hard make more sense? In the end, the lessons
+# will need their rooms! The big question is, at what stage the checks
+# should be done, especially as handling the room-choice lists could be
+# quite "expensive". It is probably important to take into account that
+# the satisfaction of room choices can be difficult and it may be
+# better to leave at least tricky cases for manual handling.
 
-    rclists = []
-    minzeros = 0
-    for rc in tt_lesson.room_choices:
-        l = []
-        rclists.append(l)
+# Special consideration:
+# When resolving room choices manually, the possible rooms for each
+# requirement should be shown, so that the one to be chosen can be
+# selected. However, at present I just have a list of possible solution
+# vectors. I suppose I could collect a set from each index?
+# When forcing a particular room, it could be that another lesson gets
+# removed, but if only a room-choice is concerned, that could also
+# stay placed, but get a penalty. Would a room-choice conflict even
+# count as a clash? I suppose actually not ... but if a lesson is to be
+# placed and its fixed room is occupied by a choice, it should be
+# possible to remove the choice and reevaluate the penalty (perform a
+# reallocation). So with rooms I would need to be able to detect
+# (quickly?) whether a room allocation is fixed or choice. Perhaps all
+# room choices should be deallocated before an automatic placement run?
+# Manual changes should not do such a deallocation (unless a fixed room
+# needs to be satisfied), so there would have to be a special handler
+# for this case.
 
-        noroom = True
-
+    rclist = tt_lesson.room_choices
+    if rclist:
+        rvlen = len(rclist[0])
+    else:
+        return (0, [])
+    best = None
+    bestzeros = rvlen
+    for rc in rclist:
+        zeros = 0
+        rl = []
         for r in rc:
-            blist = []
             for rs in rslots:
-                blocker = rs[r]
-
-                if blocker != 0:  # room in use
-                    if blocker not in blist:
-                        blist.append(blocker)
-
-
-#                    break
-#            else:
-#                l.append(r)
-
-            l.append((r, blist))
-            if not blist:
-                noroom = False
-
-        if noroom:
-#        if not l:
-            if hard_constraint:
-#TODO: Do I still want a list of blockages (somehow)?
-# Perhaps in manual mode the constraint could be always soft?
-                return None
-            minzeros += 1
-    bestzeros = len(rclists)
-    best = [0] * bestzeros
-    maxi = bestzeros - 1
-    zeros = 0
-    i = 0
-    used = []
-    filtered_lists = []
-    while i >= 0:
-        if i == maxi:
-            ## Done?
-            # Get the first free room
-
-#TODO: Handle new rclists ...
-            for r in rclists[i]:
-                if r not in used:
-                    if zeros == minzeros:
-                        # An optimal solution has been found
-                        used.append(r)
-                        return used
-                    if zeros < bestzeros:
-                        best = used.copy()
-                        best.append(r)
-                        bestzeros = zeros
+                if rs[r] != 0:
+                    rl.append(0)
+                    zeros += 1
                     break
             else:
-                # No free room
-                if hard_constraint:
-                    # Don't investigate further
-                    return None
-                if zeros + 1 == minzeros:
-                    # An optimal solution has been found
-                    used.append(0)
-                    return used
-                if zeros + 1 < bestzeros:
-                    best = used.copy()
-                    best.append(0)
-                    bestzeros = zeros + 1
-            i -= 1
-        elif i < len(filtered_lists):
-            rl = filtered_lists[i]
-            if rl:
-                # Try next room
-                used[i] = rl.pop()
-                i += 1
-            else:
-                # No more rooms to try
-                if used.pop() == 0:
-                    zeros -= 1
-                del filtered_lists[i]
-                i -= 1
-        else:
-            # Build reversed filtered list (for popping rooms)
-            rl0 = rclists[i]
-            rl = []
-            x = len(rl0)
-            while x > 0:
-                x -= 1
-                r = rl0[x]
-                if r not in used:
-                    rl.append(r)
-            if rl:
-                filtered_lists.append(rl)
-                used.append(rl.pop())
-            elif hard_constraint:
-                # No free rooms: don't investigate further
-                return None
-            else:
-                # No free rooms: leave unallocated
-                filtered_lists.append(rl)
-                used.append(0)
-                zeros += 1
-            i += 1
-    return best
+                rl.append(r)
+        if zeros == 0:
+            return (0, rl)
+        if zeros < bestzeros:
+            bestzeros = zeros
+            best = rl
+    # Return the "best" result, if no rooms are free return all zeros.
+    return (bestzeros, best or [0] * rvlen)
 
 
 #########################################################
@@ -525,6 +481,7 @@ def load_timetable(tt_data, state):
     while i < imax:
         i += 1
         ttl = tt_lessons[i]
+        #print("???", ttl.room_choices)
         timeslot = ttl.time
         if timeslot != 0:
 #TODO: Could have been "^ ..." (lesson reference)!
@@ -545,15 +502,26 @@ def load_timetable(tt_data, state):
                 continue
 #TODO: room choices
             if ttl.placement0 == timeslot:
-                print("+++ CHECK ROOM CHOICES", state[i][1], "\n", ttl.room_choices)
+                r0 = state[i][1]
+                for r in ttl.fixed_rooms:
+                    try:
+                        r0.remove(r)
+                    except ValueError:
+                        pass
+                #print("+++ CHECK ROOM CHOICES", r0)
                 if not test_room_allocation(
                     allocation,
                     ttl.room_choices,
-                    state[i][1],
+                    r0,
                     timeslot,
                     ttl.length,
                 ):
-                    print("??? ROOM MISMATCH")
+                    print(
+                        "??? ROOM MISMATCH: ",
+                        state[i][1],
+                        r0
+                    )
+                    print(" ~~", ttl)
 
         elif state:
 #TODO: rather add to pending list, for processing after all fixed
@@ -566,7 +534,7 @@ def load_timetable(tt_data, state):
                 allocation, tt_lessons[i], timeslot
             )
 #--
-            #print("?????", i, timeslot, blockers)
+            print("?????", i, timeslot, blockers)
 
             if blockers:
                 continue
@@ -646,12 +614,14 @@ def test_room_allocation(
     """
     # There must be the same number of entries in both lists
     if len(requirements) != len(test_rooms):
+        print("  ====> length mismatch")
         return False
     # Check availability of requested rooms
     while length > 0:
         pslot = allocation.room_weeks[timeslot]
         for r in test_rooms:
             if pslot[r] != 0:
+                print("  ====> room not avaiable:", r)
                 return False
         timeslot += 1
         length -= 1
@@ -660,6 +630,7 @@ def test_room_allocation(
     # This assumes correct ordering!
     for i, r in enumerate(test_rooms):
         if r not in requirements[i]:
+            print("  ====> choice mismatch:", test_rooms, "\n vs.", requirements)
             return False
     return True
 
