@@ -1,7 +1,7 @@
 """
 timetable/tt_placement.py
 
-Last updated:  2023-09-22
+Last updated:  2023-09-25
 
 Handle the basic information for timetable display and processing.
 
@@ -42,18 +42,28 @@ from typing import NamedTuple, Optional
 from core.basic_data import get_days, get_periods
 from timetable.tt_basic_data import TT_LESSON
 
+#TODO: What should these be?! As they are collected in a set they must
+# be hashable.
+DAY_OVERFLOW = "Day overflow"
+TEACHER_BLOCKED = "Teacher(s) unavailable"
+GROUP_BLOCKED = "Group(s) unavailable"
+ROOM_BLOCKED = "Room(s) unavailable"
+
 ### -----
 
-
+#?
 class PlacementEngine:
     def __init__(self):
 
         return
 
-# Index 0 in TT_LESSONS is reserved for null/"empty", it is not a TT_LESSON.
+# Index 0 in TT_LESSONS is reserved for null/"empty", it is not a
+# TT_LESSON.
 # I would need allocations for each tt_lesson (time + rooms). The rooms
-# would ideally be correlatable with the room requirements. There could also
-# be entries for unallocated room requirements?
+# would ideally be correlatable with the room requirements, but this
+# might not be very feasible. There could also be entries for
+# unallocated room requirements?
+
 
 class Allocation:
     __slots__ = (
@@ -107,35 +117,50 @@ class Allocation:
 # seek rooms in two places, the "fixed" ones and the "chosen" ones.
 
 
-#TODO: Return blockage causes somehow ...
-def very_hard_constraints(allocation, tt_lesson, timeslot):
+def critical_constraints(
+    allocation: Allocation,
+    tt_lesson: TT_LESSON,
+    timeslot: int
+):
     """Test whether the lesson/activity can be placed in the specified
     slot.
     The teachers, class-groups and compulsory single rooms are tested.
-    Let's call these "very hard constraints". It can be seen as a first
-    stage, which will filter out many non-fitting placement attempts
-    quite quickly.
+    Let's call these "critical constraints", where a breach would be
+    physically impossible. It should filter out many non-fitting
+    placement attempts quite quickly.
+
     Room requirements where there is a choice are handled separately,
-    as that is quite a bit more complicated. That is postponed to the
-    evaluation of other hard constraints.
+    as that is quite a bit more complicated. That is regarded as a
+    "somewhat" soft constraint.
 
-    allocation: placement data structures
-    tt_lesson: the lesson / activity
-    timeslot: index of the time slot to test (1+)
+    Parameters:
+        allocation: placement data structures
+        tt_lesson: the lesson / activity
+        timeslot: index of the time slot to test (1+)
 
-    Return a set of blocking activity indexes, empty if the allocation
-    is possible in the given time-slot.
+    Return blocking information:
+        {lesson-id: [cause, ...]}
+
+    The result will be empty if the allocation is possible in the given
+    time-slot. Where the cause of blockage is not another lesson, the
+    lesson-id field will be -1.
     """
-    blockers = set()
+#TODO: Using a dict may be okay for manual placement, but for automatic
+# placement, this function should be replaced by one which returns, say,
+# false as soon as it detects a problem.
+    blockers = {}   # {lesson-id: [cause, ...]}
     #print("TIMESLOT", timeslot, allocation.teacher_weeks[timeslot])
     #print("TIMESLOT", timeslot, allocation.group_weeks[timeslot])
 
     # Check that the start time is not too late to fit in the day
     nperiods = allocation.tt_data.periods_per_day
     if (timeslot - 1) % nperiods + tt_lesson.length > nperiods:
-#TODO: Some more appropriate return value?
+#TODO--
         print("!!! DAY overflow:", timeslot, tt_lesson.length, tt_lesson.lesson_id)
-        return None
+
+        blockers[-1] = {DAY_OVERFLOW}
+        return blockers
+
     t = timeslot
     tmax = t + tt_lesson.length
     while t < tmax:
@@ -144,35 +169,84 @@ def very_hard_constraints(allocation, tt_lesson, timeslot):
         for tx in tt_lesson.teachers:
             i = pslot[tx]
             if i != 0:
+#TODO--
                 print("TEACHER", tx, i, t)
-                blockers.add(i)
+
+                try:
+                    blockers[i].add(TEACHER_BLOCKED)
+                except KeyError:
+                    blockers[i] = {TEACHER_BLOCKED}
         # Test class-groups
         pslot = allocation.group_weeks[t]
         for cg in tt_lesson.classgroups:
             i = pslot[cg]
             if i != 0:
+#TODO--
                 print("GROUP", cg, i, t)
-                blockers.add(i)
+
+                try:
+                    blockers[i].add(GROUP_BLOCKED)
+                except KeyError:
+                    blockers[i] = {GROUP_BLOCKED}
+
+#TODO:  if allocation.rooms_weighting == "":
+# ... otherwise room allocation is regarded as a soft constraint
         # Test single compulsory rooms
         pslot = allocation.room_weeks[t]
         for r in tt_lesson.fixed_rooms:
             i = pslot[r]
             if i != 0:
+#TODO--
                 print("ROOM", r, i, t)
-                blockers.add(i)
+
+                try:
+                    blockers[i].add(GROUP_BLOCKED)
+                except KeyError:
+                    blockers[i] = {GROUP_BLOCKED}
+
         # Room choices are ignored here
+
         t += 1
     return blockers
 
 
-def hard_constraints(
-    allocation,
-    tt_lesson,
-    undo
+#TODO: As far as constraint handling is concerned, it looks like it
+# might be best to handle all non-critical constraints together. Hard
+# constraints could be placed at the head of the processing queue. They
+# can be given very large penalties in manual mode; in automatic mode
+# they could cause processing of the queue to be aborted.
+# Room choices may be only available as soft constraints, but perhaps
+# with a high penalty? Alternatively there could be a configuration
+# value to determine the hardness of room requirements – perhaps with
+# distinct values for fixed rooms and room choice lists.
+def test_constraints(
+    allocation: Allocation,
+    tt_lesson: TT_LESSON,
+    timeslot: int,
+    undo: bool
 ):
-    """Test hard constraints for the placement of an activity.
+    """Test non-critical constraints for the placement of an activity.
+    Some of the tests require that the activity is actually placed, so
+    if this is only a test, the activity must be removed afterwards.
+    The parameter <undo> acts as a switch for the removal (a true value
+    will cause the activity to be removed again).
     """
     print("TODO")
+
+# In general, the evaluation of penalties should perhaps be ordered
+# according to the weightings. It might be possible to speed up some
+# uses of the function by, for example, stopping when the first
+# constraint fails – if the exact penalty is not critical. For testing
+# placement possibilities – where perhaps many slots or lessons must
+# be tested – a very rough estimate of the penalty might be enough.
+# Especially for very high priority constraints ("+") this could be
+# enough.
+
+# A further optimisation would be to check only constraints which might
+# have been affected by a move. The constraints would then need to be
+# associated with activities, classes and teachers. That could make
+# the priority-sorting tricky.
+
 # Apart from going through the various hard constraints relevant to a
 # lesson placement, a list of rooms for the choice list should be
 # produced, which then needs to be available for the actual placement.
@@ -219,6 +293,18 @@ def hard_constraints(
 # 6) not-on-same-day (combine with min-days-between-activities?)
 # 7) lunch break
 
+# Basically, I would just need to evaluate all (relevant?) constraints.
+# Something like:
+    #for c in constraints:
+    #    p = c.evaluate()
+    #    #? if p < 0: ... break
+    #    penalty += p
+# Of course, if I want to know the penalty due to placing a particular
+# activity, I would need to restrict the evaluation to the constraints
+# whose value changes. Or else see how the total changes ... (does the
+# existence of hard constraints, or special high-penalty constraints
+# affect this?)
+
     return hc_blocked #? include room choices?
 
 # It should be possible to detect blocking lessons automatically so that
@@ -232,24 +318,23 @@ def resolve_room_choice(
     timeslot: int,
 ):
     """Try to allocate rooms satisfying the choice lists.
-    If <hard_constraint> is true, only full room lists will be
-    returned, otherwise <None>.
-#?
-    Otherwise, if a full room list is not possible with the available
-    rooms, the returned list will contain one or more null (0) rooms.
+    If a full room list is not possible with the available rooms,
+    the returned list will contain one or more null (0) rooms.
     """
+#TODO: Perhaps I don't need to return the number of zeros – it depends
+# on how the results are used. It could be that the result is always
+# used, in which case the zeros could be counted. Are the rooms
+# directly allocated?
     # Handle possibility of length > 1
     rslots = [
         allocation.room_weeks[i]
         for i in range(timeslot, timeslot + tt_lesson.length)
     ]
-#TODO: Should I allocate the rooms which are possible even if others
-# are not possible? If the rooms are a soft constraint that would
-# probably be sensible.
 
-#    # Reduce the lists to contain only available rooms
-
-    # Check availability of rooms, noting blocking lessons
+    # Check availability of rooms, noting blocking lessons?
+    # Maybe the blocking lessons are only needed when manually choosing
+    # a room. For the penalty calculation, only the fact of the blockage
+    # is relevant.
 
 # Note the new room_choices structure! Would it be better to include
 # various permutations of the possible combinations after all?
@@ -312,7 +397,7 @@ def resolve_room_choice(
         if zeros < bestzeros:
             bestzeros = zeros
             best = rl
-    # Return the "best" result, if no rooms are free return all zeros.
+    # Return the "best" result, all zeros if no rooms are free.
     return (bestzeros, best or [0] * rvlen)
 
 
@@ -326,7 +411,7 @@ def test_placement(
 ) -> bool:
     """Check all hard contraints for the given placement.
     """
-    if very_hard_constraints(allocation, tt_lesson, timeslot):
+    if critical_constraints(allocation, tt_lesson, timeslot):
         return False
 
 #TODO: Is this at all appropriate here? Isn't it rather a question of
@@ -349,11 +434,20 @@ def test_placement(
     return not hard_constraints(allocation, tt_lesson, timeslot)
 
 
+# When placing or removing a single lesson, it might be possible to
+# check a greatly reduced subset of the constraints – only those
+# associated directly with the lesson and those relating to the
+# teachers and classgroups connected with the lesson ...
+# On the other hand, it might be simpler to reevaluate all constraints.
+# As this latter function probably needs to be evaluated very often, it
+# would need to be reasonably fast ...
+# Let's have a go at evaluating all constraints: it would probably be
+# good to have the highest weightings first (hard constraints can break
+# off the processing early if not fulfilled).
 def place_with_room_choices(
     allocation: Allocation,
     tt_lesson: TT_LESSON,
     timeslot: int,
-    state_vector: list[list[int]],
     saved_rooms: Optional[list[int]]
 ):
     """The activity is to be placed in the given time-slot.
@@ -379,10 +473,22 @@ def place_with_room_choices(
         for cg in ttl.classgroups:
             pslot[cg] = ttli
 #TODO: comments not clear!
+#TODO:  if allocation.rooms_weighting != "":
+# ... if room allocation is regarded as a soft constraint ...
+#           need to check whether the rooms are free!
+        fixed_rooms = ttl.fixed_rooms
+# Note that if also the fixed rooms can remain unsatisfied (soft room
+# constraint), then I would also need to record which of these have
+# been allocated – or check that the allocated rooms have really been
+# assigned to the lesson in question.
+# I suspect allowing the fixed rooms to be anything less than "critical"
+# might cause no end of algorithmic difficulties. At what benefit? Is
+# there really a scenario where this behaviour would be desirable?
+
         # Place single compulsory rooms
         pslot = allocation.room_weeks[t]
         # Skip the compulsory single rooms (see comment to <get_state_vector()>)
-        for r in ttl.fixed_rooms:
+        for r in fixed_rooms:
             pslot[r] = ttli
         t += 1
 
@@ -485,7 +591,7 @@ def load_timetable(tt_data, state):
         timeslot = ttl.time
         if timeslot != 0:
 #TODO: Could have been "^ ..." (lesson reference)!
-            blockers = very_hard_constraints(
+            blockers = critical_constraints(
                 allocation, ttl, timeslot
             )
             if blockers:
@@ -502,6 +608,9 @@ def load_timetable(tt_data, state):
                 continue
 #TODO: room choices
             if ttl.placement0 == timeslot:
+                # Remove rooms from saved list if they are in the fixed
+                # list.
+#TODO: Is that sensible? Maybe just fail because soething has changed?
                 r0 = state[i][1]
                 for r in ttl.fixed_rooms:
                     try:
@@ -530,7 +639,7 @@ def load_timetable(tt_data, state):
             timeslot = state[i][0]
             if timeslot == 0:
                 continue
-            blockers = very_hard_constraints(
+            blockers = critical_constraints(
                 allocation, tt_lessons[i], timeslot
             )
 #--
