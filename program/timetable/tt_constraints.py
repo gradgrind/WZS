@@ -1,7 +1,7 @@
 """
 timetable/tt_constraints.py
 
-Last updated:  2023-09-25
+Last updated:  2023-09-29
 
 Implementation of the timetable constraints.
 
@@ -47,7 +47,8 @@ if __name__ == "__main__":
 
 #TODO: test other constraints.
 # Which constraints should be tested here?
-# 1) not some gaps – these are relevant only when all placements have been done
+# 1) not some gaps – these fully are relevant only when all placements
+#    have been done
 # 2) not some minimum constraints – see 1.
 # 3) maximum constraints:
 #     - lessons per day (teacher or class/group)
@@ -78,7 +79,12 @@ if __name__ == "__main__":
 # Would inheritance from a base class <Constraint> help? Or is it
 # enough to provide the <evaluate> method (to adhere to the "interface")?
 
-class MaxGapsPerDay:
+#deprecated?
+class MaxGapsPerDay_Teacher:
+    """This constraint checks that at most the given number of
+    time-slots is free on each day. In this case, "unavailable" doesn't
+    count as free, but also not as occupied.
+    """
 # Do I want to know where exactly all breaking gaps are? Would a
 # visual representation of a breakage be possible and helpful, or rather
 # contribute to information overload?
@@ -87,33 +93,274 @@ class MaxGapsPerDay:
 # this teacher or group?
 # Let's go for a simple approach first, only recording the fact of the
 # breakage (not even the number of breakages).
-    def __init__(self, allocation, ix, max_gaps, penalty):
+    def __init__(self, allocation, ix, max_gaps, weight):
         self.max_gaps = max_gaps
-# Does this need processing?
-        self.penalty = penalty
-        self.ix = ix
-
-# Let's do this for teachers first, class-groups might then just need
-# to override __init__ (or a setup method).
+        self.weight = weight    # Needed for priority sorting?
+#TODO: Is the penalty a simple mapping from the weight?
+#        self.penalty = ???
+        self.ix = ix # index of the slot-owner to be tested
         tt_data = allocation.tt_data
         self.ppd = tt_data.periods_per_day
         self.dpw = tt_data.days_per_week
+        self.setup(allocation)
 
+    def setup(self, allocation):
         self.slots = allocation.teacher_weeks
 
     def evaluate():
 # Move self variables to local ones?
         i = 0
-        for day in self.dpw:
-            # Don't count gaps at start of day
-            started = False
+        for day in range(self.dpw):
+            # Don't count gaps at start of day or at end of day.
+            # Initially, <pending> is -1, indicating "no lessons yet".
+            # Afer a lesson has been found, <pending> is used to count
+            # the length of a gap. When the next lesson is found, this
+            # gap length is added to the accumulator, <gaps>.
+            pending = -1
             gaps = 0
-            for p in self.ppd:
+            for p in range(self.ppd):
                 i += 1
-                if self.slots[i][self.ix] != 0:
-                    started = True
-                elif started:
-                    gaps += 1
-                    if gaps > self.max_gap:
-                        return self.penalty
+                aix = self.slots[i][self.ix]
+                if aix > 0:     # (using -1 for hard-blocked slots?)
+                    if pending > 0:
+                        gaps += pending
+                        if gaps > self.max_gap:
+                            return self.penalty
+                    pending = 0
+                elif pending >= 0:
+                    pending += 1
         return 0
+
+class MaxGapsPerDay_Group(MaxGapsPerDay_Teacher):
+    def setup(self, allocation):
+        self.slots = allocation.group_weeks
+
+# ... or both could be a subset of a sort of virtual class ...
+
+
+
+#TODO: Actually, it would surely make sense to combine the weekly and
+# daily versions, the algorithms being basically the same. Of course
+# if only one of the two was used for a particular teacher, it might be
+# better to keep them separate.
+# Would it be reasonable to use a single penalty? In the case of a "hard"
+# constraint, there would probably be no difference. Even for "soft"
+# constraints it might be a reasonable compromise – worth a try.
+# There is (then) no point in setting max_gaps_weekly <= max_gaps_daily.
+# In that case, max_gaps_daily could be ignored here.
+class MaxGaps_Teacher:
+    """This constraint checks that at most the given number of
+    time-slots is free in each day or week. In this case, an
+    "unavailable" time-slot doesn't count as free, but also not as
+    occupied.
+    """
+# Do I want to know where exactly all breaking gaps are? Would a
+# visual representation of a breakage be possible and helpful, or rather
+# contribute to information overload?
+# Perhaps each breakage should be recorded?
+# Or perhaps it would suffice to know that this condition is broken for
+# this teacher or group?
+# Let's go for a simple approach first, only recording the fact of the
+# breakage (not even the number of breakages).
+# Should gaps at the beginning of the day be counted? Or should that be
+# a separate constraint? For the moment I'll assume it should be
+# separate.
+    def __init__(
+        self,
+        allocation,
+        ix,
+        max_gaps_daily,
+        max_gaps_weekly,
+        weight
+    ):
+        self.max_gaps_daily = max_gaps_daily
+        self.max_gaps_weekly = max_gaps_weekly
+        self.weight = weight    # Needed for priority sorting?
+#TODO: Is the penalty a simple mapping from the weight?
+#        self.penalty = ???
+        self.ix = ix # index of the slot-owner to be tested
+        tt_data = allocation.tt_data
+        self.ppd = tt_data.periods_per_day
+        self.dpw = tt_data.days_per_week
+        self.setup(allocation)
+
+    def setup(self, allocation):
+        self.slots = allocation.teacher_weeks
+
+    def evaluate():
+# Move self variables to local ones?
+        i = 0
+        wgaps = 0   # weekly gaps
+        for day in range(self.dpw):
+            # Don't count gaps at start of day or at end of day.
+            # Initially, <pending> is -1, indicating "no lessons yet".
+            # Afer a lesson has been found, <pending> is used to count
+            # the length of a gap. When the next lesson is found, this
+            # gap length is added to the accumulator, <gaps>.
+            pending = -1
+            gaps = 0    # daily gaps
+            for p in range(self.ppd):
+                i += 1
+                aix = self.slots[i][self.ix]
+                if aix > 0:     # (using -1 for hard-blocked slots?)
+                    if pending > 0:
+                        gaps += pending
+#TODO: Handle constraint-not-set (by means of a large max value?)
+                        if gaps > self.max_gaps_daily:
+                            return self.penalty
+                        wgaps += pending
+                        if wgaps > self.max_gaps_weekly:
+                            return self.penalty
+                    pending = 0
+                elif pending >= 0:
+                    pending += 1
+        return 0
+
+class MaxGaps_Group(MaxGapsPerDay_Teacher):
+    def setup(self, allocation):
+        self.slots = allocation.group_weeks
+
+# ... or both could be a subset of a sort of virtual class ...
+
+
+class LunchBreak_Teacher:
+    """This constraint checks that at least one of a selection of
+    time-slots is free on each day. In this case, "unavailable" also
+    counts as free.
+    """
+    def __init__(self, allocation, ix, lunch_slots, weight):
+        self.ix = ix # index of the slot-owner to be tested
+#TODO: Rather get the slots from config / db?
+        self.lunch_slots = lunch_slots
+        tt_data = allocation.tt_data
+        self.ppd = tt_data.periods_per_day
+        self.dpw = tt_data.days_per_week
+#TODO: Is the penalty a simple mapping from the weight?
+#        self.penalty = ???
+        self.setup(allocation)
+
+    def setup(self, allocation):
+        self.slots = allocation.teacher_weeks
+
+    def evaluate(self):
+        i = 1
+        for day in range(self.dpw):
+            for p in self.lunch_slots:
+                # (using -1 for hard-blocked slots?)
+                if self.slots[i + p][self.ix] <= 0:
+                    break
+            else:
+                return self.penalty
+        return 0
+
+class LunchBreak_Group:
+    def setup(self, allocation):
+        self.slots = allocation.group_weeks
+
+# ... or both could be a subset of a sort of virtual class ...
+
+
+class MinLessonsPerDay_Teacher:
+    """This constraint checks that there are at least the given number
+    of lessons in each day.
+    """
+# Do I want to know which days break the constraint? Would a
+# visual representation of a breakage be possible and helpful, or rather
+# contribute to information overload?
+# Perhaps each breakage should be recorded?
+# Or perhaps it would suffice to know that this condition is broken for
+# this teacher or group?
+# Let's go for a simple approach first, only recording the fact of the
+# breakage (not even the number of breakages).
+    def __init__(
+        self,
+        allocation,
+        ix,
+        min_lessons_daily,
+        weight
+    ):
+        self.min_lessons_daily = min_lessons_daily
+        self.weight = weight    # Needed for priority sorting?
+#TODO: Is the penalty a simple mapping from the weight?
+#        self.penalty = ???
+        self.ix = ix # index of the slot-owner to be tested
+        tt_data = allocation.tt_data
+        self.ppd = tt_data.periods_per_day
+        self.dpw = tt_data.days_per_week
+        self.setup(allocation)
+
+    def setup(self, allocation):
+        self.slots = allocation.teacher_weeks
+
+    def evaluate():
+# Move self variables to local ones?
+        i = 0
+        for day in range(self.dpw):
+            lessons = 0    # lessons on current day
+            for p in range(self.ppd):
+                i += 1
+                aix = self.slots[i][self.ix]
+                if aix > 0:     # (using -1 for hard-blocked slots?)
+                    lessons += 1
+#?
+                    if lessons >= self.min_lessons_daily:
+                        break
+            else:
+                return self.penalty
+        return 0
+
+class MinLessonsPerDay_Group(MaxGapsPerDay_Teacher):
+    def setup(self, allocation):
+        self.slots = allocation.group_weeks
+
+# ... or both could be a subset of a sort of virtual class ...
+
+
+class MaxBlock_Teacher:
+    """This constraint checks that at most the given number of
+    consecutive lessons (without a break) is to be given. In this case,
+    an "unavailable" time-slot counts as free.
+    """
+    def __init__(
+        self,
+        allocation,
+        ix,
+        max_block_length,
+        weight
+    ):
+        self.max_blocks = max_block_length
+        self.weight = weight    # Needed for priority sorting?
+#TODO: Is the penalty a simple mapping from the weight?
+#        self.penalty = ???
+        self.ix = ix # index of the slot-owner to be tested
+        tt_data = allocation.tt_data
+        self.ppd = tt_data.periods_per_day
+        self.dpw = tt_data.days_per_week
+        self.setup(allocation)
+
+    def setup(self, allocation):
+        self.slots = allocation.teacher_weeks
+
+    def evaluate():
+# Move self variables to local ones?
+        i = 0
+        for day in range(self.dpw):
+            blen = 0
+            for p in range(self.ppd):
+                i += 1
+                aix = self.slots[i][self.ix]
+                if aix > 0:     # (using -1 for hard-blocked slots?)
+                    blen += 1
+                    if blen > self.max_blocks:
+                        return self.penalty
+                    continue
+                blen = 0
+        return 0
+
+class MaxGaps_Group(MaxGapsPerDay_Teacher):
+    def setup(self, allocation):
+        self.slots = allocation.group_weeks
+
+# ... or both could be a subset of a sort of virtual class ...
+
+
