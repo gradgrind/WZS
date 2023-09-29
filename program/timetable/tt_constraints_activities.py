@@ -44,11 +44,6 @@ if __name__ == "__main__":
 
 ### -----
 
-    * At start/end of day
-        # h (H for start?), S
-        (?)
-        (ConstraintActivityEndsStudentsDay)
-
 #TODO: Should this really allow previous empty slots?
 class ActivityStartsDay:
     """This constraint checks that the activity is the first lesson of
@@ -109,17 +104,63 @@ class ActivityEndsDay:
         return 0
 
 
+class ActivitiesNotOnSameDay:
+    """This constraint checks that the activities are on different
+    days of the week.
+    """
+    def __init__(self, allocation, aixlist, weight):
+        self.weight = weight    # Needed for priority sorting?
+#TODO: Is the penalty a simple mapping from the weight?
+#        self.penalty = ???
+        self.aixlist = aixlist
+        tt_data = allocation.tt_data
+        self.ppd = tt_data.periods_per_day
+        #self.dpw = tt_data.days_per_week
+        self.states = allocation.allocation_state
 
-
-
-#    * Not on same day
-#        # H, S
+    def evaluate():
+        days = []
+        for aix in self.aixlist:
+            t = self.states[aix][0]
+            if t > 0:
+                d = (t - 1) // self.ppd
+                if d in days:
+                    return self.penalty
+                days.append(d)
+        return 0
+#TODO:
 #    * Min days between (combine with not-on-same-day?)
 #        # H, S
 #        (ConstraintMinDaysBetweenActivities)
-#    * Not after (with or without intervening periods?)
-#        # H, S
-#        (ConstraintTwoActivitiesOrderedIfSameDay)
+
+
+class ActivitiesNotAfter:
+    """This constraint checks that the first activity is not after the
+    second activity on the same day.
+    """
+#TODO: Should this apply only to the slot immediately after the earlier
+# activity?
+    def __init__(self, allocation, aix, aix0, weight):
+        self.weight = weight    # Needed for priority sorting?
+#TODO: Is the penalty a simple mapping from the weight?
+#        self.penalty = ???
+        tt_data = allocation.tt_data
+        self.ppd = tt_data.periods_per_day
+        #self.dpw = tt_data.days_per_week
+        self.state = allocation.allocation_state[aix]
+        self.state0 = allocation.allocation_state[aix0]
+
+    def evaluate():
+        t, t0 = self.state[0], self.state0[0]
+        if t0 > 0 and t > t0:
+            d, p = divmod(t, self.ppd)
+            d0, p0 = divmod(t0, self.ppd)
+            if d == d0:
+                return self.penalty
+        return 0
+
+
+
 #    * Not consecutive (ConstraintMinGapsBetweenActivities)
 
 
