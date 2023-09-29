@@ -1,5 +1,5 @@
 Which constraints have I been adding manually in fet?
-Possibly just plaing around with available times, number of gaps, etc.?
+Possibly just playing around with available times, number of gaps, etc.?
 
 
 HH: Very hard
@@ -9,8 +9,8 @@ h: Hard, but can only be evaluated when all activities have been placed
 S: Soft (only evaluated when all activities have been placed)
 
 For manual placement it might be helpful to evaluate as many of the h
-and S constraints after each move, so that troublesome activities can
-be moved.
+and S constraints as possible after each move, so that troublesome
+activities can be moved.
 
 
 Teachers:
@@ -76,6 +76,3 @@ From fet, here probably implemented some other way:
     *** ConstraintActivitiesPreferredStartingTimes (double lesson start times)
     *** ConstraintActivitiesSameStartingTime
     *** ConstraintActivityPreferredRoom(s)
-
-
-

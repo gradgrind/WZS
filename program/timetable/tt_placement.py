@@ -1,7 +1,7 @@
 """
 timetable/tt_placement.py
 
-Last updated:  2023-09-25
+Last updated:  2023-09-29
 
 Handle the basic information for timetable display and processing.
 
@@ -52,10 +52,10 @@ ROOM_BLOCKED = "Room(s) unavailable"
 ### -----
 
 #?
-class PlacementEngine:
-    def __init__(self):
+#class PlacementEngine:
+#    def __init__(self):
 
-        return
+#        return
 
 # Index 0 in TT_LESSONS is reserved for null/"empty", it is not a
 # TT_LESSON.
@@ -87,7 +87,7 @@ class Allocation:
         firstly the time slot – 0 for unallocated – and secondly a list
         of chosen room indexes (not the "fixed" ones) – again 0 for
         unallocated / no room selected.
-        All "real" indexes start at 1, 0 generaaly being used as a "null".
+        All "real" indexes start at 1, 0 generally being used as a "null".
         """
         self.tt_data = tt_data
         n_week_cells = tt_data.days_per_week * tt_data.periods_per_day + 1
