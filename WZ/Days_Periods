@@ -1,0 +1,21 @@
+It looks like I am using a single array/vector for all the time slots in
+a "week" (where a week is effectively the "period" of the timetable,
+the repeating, complete timetable time-span).
+This has advantages for fast access on a purely time-slot focussed view,
+but does not clearly present the non-contiguous nature of the time
+flow – the jump from the end of one day to the beginning of another has
+no counterpart in the data structure. When a day-based view of the data
+is required, this needs extra code to find the boundaries.
+
+It might be useful to use a single integer to represent a time-slot.
+The one-vector approach is a good match for this. There can be further
+data structures (array/vector) to map these indexes to day/time-slot
+views.
+
+In the rather unlikely event of wanting to change the weekly time
+structure (days, time-slots per day), a somewhat complicated approach
+would be necessary if existing time allocations are to be retained.
+The old indexes would need to be mapped to new indexes, so that all the
+entries in the TIME and PLACEMENT fields of the lesson-units can be
+updated. In doing this the effect of foreign key constraints would need
+to be taken into account.

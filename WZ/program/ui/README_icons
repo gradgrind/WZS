@@ -1,0 +1,3 @@
+The icons symlink is a bodge for pyside to get the icon paths working.
+Try to fix this ... either setting directories, or something, or
+if necessary using resource files.
