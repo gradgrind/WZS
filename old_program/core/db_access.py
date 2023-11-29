@@ -1,7 +1,7 @@
 """
 core/db_access.py
 
-Last updated:  2023-10-02
+Last updated:  2023-08-10
 
 Helper functions for accessing the database.
 
@@ -30,7 +30,7 @@ Copyright 2023 Michael Towers
 =-LICENCE========================================
 """
 
-DATABASE = "wzx.sqlite"
+DATABASE = "wzs_db.sqlite"
 
 ########################################################################
 

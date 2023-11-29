@@ -1,7 +1,7 @@
 """
 ui/modules/course_editor.py
 
-Last updated:  2023-10-08
+Last updated:  2023-08-10
 
 Edit course and blocks+lessons data.
 
@@ -136,7 +136,7 @@ class CourseEditorPage(Page):
             self.payment, self.wish_room, self.block_name,
             self.notes,
             #self.lesson_length,
-            self.report_title, self.report_teachers,
+            self.wish_time, self.parallel,
         ):
             w.installEventFilter(self)
         self.filter_field = "CLASS"
@@ -169,7 +169,7 @@ class CourseEditorPage(Page):
         elif self.filter_field == "TEACHER": pb = self.pb_TEACHER
         else: pb = self.pb_SUBJECT
         pb.setChecked(True)
-        #self.set_combo(self.filter_field)
+        self.set_combo(self.filter_field)
 
 # ++++++++++++++ The widget implementation fine details ++++++++++++++
 
@@ -185,13 +185,6 @@ class CourseEditorPage(Page):
         }
         self.course_field_editor = None
         self.course_field_changer = None
-
-    @Slot(int, int)
-    def on_lesson_table_cellClicked(self, row, col):
-#TODO:
-        r = self.lesson_table.currentRow()
-        c = self.lesson_table.currentColumn()
-        print(f"§CLICK: (r: {row} , c: {col}) // current = (r: {r}, c: {c})")
 
     @Slot(QAbstractButton)
     def on_buttonGroup_buttonClicked(self, pb):
@@ -544,15 +537,7 @@ class CourseEditorPage(Page):
             self.course_field_editor = CourseEditorForm(self.filter_list, self)
         return self.course_field_editor.activate(course_dict)
 
-    def on_lesson_table_currentCellChanged(self, r, c, r0, c0):
-        print(f"§CURRENT: (r: {r}, c: {c}) from (r: {r0}, c: {c0})")
-
     def on_lesson_table_itemSelectionChanged(self):
-        r = self.lesson_table.currentRow()
-        c = self.lesson_table.currentColumn()
-        print(f"§SELECT: (r: {r}, c: {c})")
-        return
-#TODO?
         if self.suppress_handlers: return
         # Populate the form fields
         self.lesson_sub.setEnabled(False)

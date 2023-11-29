@@ -1,7 +1,7 @@
 """
 core/base.py
 
-Last updated:  2023-10-08
+Last updated:  2023-08-10
 
 Basic configuration and structural stuff.
 
@@ -43,7 +43,7 @@ def __programdata(path):
     """Return a path within the school-data folder.
     <path> is a '/'-separated path relative to this folder.
     """
-    return os.path.join(basedir, "program-data", *path.split("/"))
+    return os.path.join(basedir, "wz-data", *path.split("/"))
 builtins.APPDATAPATH = __programdata
 
 ### +++++
