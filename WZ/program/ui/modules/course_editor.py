@@ -1,7 +1,7 @@
 """
 ui/modules/course_editor.py
 
-Last updated:  2023-11-27
+Last updated:  2023-11-30
 
 Edit course and blocks+lessons data.
 
@@ -59,6 +59,7 @@ from ui.ui_base import (
     Slot,
 )
 from ui.course_table import CourseTable, CourseTableRow
+from ui.table_support import Table
 
 from core.base import REPORT_CRITICAL
 from core.db_access import db_TableRow
@@ -77,14 +78,6 @@ from core.course_base import (
     grade_report_field,
     subject_print_name,
     teachers_print_names,
-    blocks_info,
-#    course_rooms,
-#    update_course_rooms,
-#    COURSE_INFO,
-#    get_lesson_list,
-#    get_teacher_pay_value,
-#    read_room_list,
-#    lesson_pay_display,
 )
 
 #from ui.dialogs.dialog_course_fields import CourseEditorForm
@@ -94,7 +87,7 @@ from ui.dialogs.dialog_room_choice import (
     roomChoiceDialog,
     print_room_choice,
 )
-#from ui.dialogs.dialog_workload import WorkloadDialog
+from ui.dialogs.dialog_workload import workloadDialog
 #from ui.dialogs.dialog_new_course_lesson import NewCourseLessonDialog
 from ui.dialogs.dialog_block_name import blockNameDialog
 #from ui.dialogs.dialog_parallel_lessons import ParallelsDialog
@@ -102,38 +95,6 @@ from ui.dialogs.dialog_text_line import textLineDialog
 #from ui.dialogs.dialog_make_course_tables import ExportTable
 
 ### -----
-
-
-class Table:
-    """A wrapper around a QTableWidget to encapsulate the interface
-    needed in the course editor.
-    """
-    def __init__(self,
-        qtablewidget: QTableWidget,
-        centre: set[int] = None,
-    ):
-        self.qtable = qtablewidget
-        self.align_centre = centre or set()
-
-    def set_row_count(self, n):
-        n0 = self.qtable.rowCount()
-        if n > n0:
-            self.qtable.setRowCount(n)
-            nc = self.qtable.columnCount()
-            for r in range(n0, n):
-                for c in range(nc):
-                    item = QTableWidgetItem()
-                    if c in self.align_centre:
-                        item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                    self.qtable.setItem(r, c, item)
-        elif n < n0:
-            self.qtable.setRowCount(n)
-
-    def write(self, row: int, column: int, text: str):
-        self.qtable.item(row, column).setText(text)
-
-    def current_row(self):
-        return self.qtable.currentRow()
 
 
 class CourseEditorPage(QObject):
@@ -465,7 +426,7 @@ class CourseEditorPage(QObject):
                 start_value = ([r.id for r in rlist], rxtra.id),
                 classroom = self.course_data.course_line.get_classroom(),
                 rooms = self.all_room_lists,
-                parent = self.ui,
+                parent = self.ui.wish_room,
 #                pos = self.ui.wish_room.mapToGlobal(QPoint(0,0))
             )
         if new_rooms:
@@ -526,7 +487,7 @@ class CourseEditorPage(QObject):
             title,
             default = subject_print_name(self.course_data),
             title = T["REPORT_TITLE_LABEL"],
-            parent = self.ui,
+            parent = self.ui.report_title,
         )
         if new_text is not None:
             # Save result in REPORT field and update display
@@ -539,7 +500,7 @@ class CourseEditorPage(QObject):
             sig,
             default = teachers_print_names(self.course_data),
             title = T["REPORT_TEACHERS_LABEL"],
-            parent = self.ui,
+            parent = self.ui.report_teachers,
         )
         if new_text is not None:
             # Save result in REPORT field and update display
@@ -550,37 +511,33 @@ class CourseEditorPage(QObject):
         new_text = textLineDialog(
             self.course_data.course.INFO,
             title = T["COURSE_INFO_LABEL"],
-            parent = self.ui,
+            parent = self.ui.notes,
         )
         if new_text is not None:
             # Save result in INFO field and update display
-            self.course_data.course._write("INFO", new_text)
-            self.ui.notes.setText(new_text)
+            if self.course_data.course._write("INFO", new_text):
+                self.ui.notes.setText(new_text)
 
     def edit_block_name(self):
         lb = self.course_data.course.Lesson_block
-        new_name = blockNameDialog(lb, blocks_info())
+        new_name = blockNameDialog(lb, parent = self.ui.block_name)
         print("§edit_block_name ->", new_name)
-        #self.ui.block_name
-
-        return
-
-        if block.id == 0:
-            # Any block name which isn't already in use can be entered.
-            # Of course, I need a set/map of existing block names to
-            # check this.
-            regex = r"^(\w+):([^*]+)(?:\*(\w+))(?:#(.*))$"
-            re.match(
-                regex, "HU:Hauptunterricht*OS#Für die Oberstufe"
-            ).groups()
-            # The comment as tooltip?
-
-            #block_courses(block_id: int) -> list[COURSE_LINE]
-
-
+        if new_name:
+            val = str(new_name)
+            if lb._write("BLOCK", val):
+                self.set_block_name(val)
 
     def edit_payment(self):
-        assert False, "TODO: edit_payment"
+        """There are two relevant elements:
+            - field WORKLOAD in the LESSON_BLOCKS table,
+            - field PAY_FACTOR in the COURSE_TEACHERS table.
+        These are both text fields which are interpreted as fixed-point
+        numbers.
+        """
+        workloadDialog(self.course_data.course, self.ui.payment)
+        print("§edit_payment: TODO")
+#get_pay_value(course_data: COURSE_LINE, nlessons: int) -> str
+#self.total_calc()
 
     ### supporting functions ###
 
@@ -608,6 +565,15 @@ class CourseEditorPage(QObject):
         self.ui.report_title.setText(title)
         self.ui.report_teachers.setText(sig)
         self.suppress_handlers = _sh
+
+    def set_block_name(self, val):
+        try:
+            val0, val1 = val.split('#', 1)
+            self.ui.block_name.setText(val0)
+            self.ui.block_name.setToolTip(val1)
+        except ValueError:
+            self.ui.block_name.setText(val)
+            self.ui.block_name.setToolTip("")
 
     def on_course_table_itemSelectionChanged(self):
         if self.suppress_handlers: return
@@ -641,7 +607,7 @@ class CourseEditorPage(QObject):
             self.ui.report_title.clear()
             self.ui.report_teachers.clear()
             self.ui.notes.clear()
-            self.ui.block_name.clear()
+            self.set_block_name("")
             self.ui.payment.clear()
             self.suppress_handlers = False
             return
@@ -668,9 +634,7 @@ class CourseEditorPage(QObject):
         self.suppress_handlers = False
         # The course info text:
         self.ui.notes.setText(self.course_data.course.INFO)
-        self.ui.block_name.setText(
-            self.course_data.course.Lesson_block.BLOCK
-        )
+        self.set_block_name(self.course_data.course.Lesson_block.BLOCK)
         self.set_payment()
 
     def set_payment(self):

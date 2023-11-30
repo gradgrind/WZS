@@ -1,0 +1,206 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>Dialog</class>
+ <widget class="QDialog" name="Dialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>629</width>
+    <height>596</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Deputatsanteil festlegen</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout_2">
+   <item>
+    <widget class="QLabel" name="info">
+     <property name="text">
+      <string>Zuerst wird die Gewichtung des Unterrichtblocks berücksichtigt.
+Diese kann von der Anzahl der Unterrichtsstunden abhängen. Diese Anzahl wird mit einem hier gesetzen Faktor multipliziert.
+Die Gewichtung kann auch unabhängig von der Anzahl der Unterrichsstunden angegeben werden.
+Für „Epochen“ kann diese Gewichtung als Epochengewichtung betrachtet werden.
+Die resultierenden Deputatsstunden werden für jede beteiligte Lehrkraft mit einer persönlichen Faktor multipliziert. Bei Epochenunterricht wäre dieser Faktor wahrscheinlich die Anzahl der Epochen.</string>
+     </property>
+     <property name="wordWrap">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="Line" name="line_3">
+     <property name="orientation">
+      <enum>Qt::Horizontal</enum>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QRadioButton" name="rb_lessons">
+     <property name="text">
+      <string>Deputat anhand der Unterrichtsstunden</string>
+     </property>
+     <property name="checked">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QRadioButton" name="rb_blocks">
+     <property name="text">
+      <string>Epochen</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QRadioButton" name="rb_direct">
+     <property name="text">
+      <string>Deputat direkt angeben</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="Line" name="line_2">
+     <property name="orientation">
+      <enum>Qt::Horizontal</enum>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QFrame" name="frame">
+     <property name="frameShape">
+      <enum>QFrame::StyledPanel</enum>
+     </property>
+     <property name="frameShadow">
+      <enum>QFrame::Raised</enum>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout">
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayout">
+        <item>
+         <widget class="QLabel" name="workload_label">
+          <property name="text">
+           <string>Stundenfaktor</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="horizontalSpacer">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+          <property name="sizeType">
+           <enum>QSizePolicy::Fixed</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>40</width>
+            <height>20</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+        <item>
+         <widget class="QLineEdit" name="lineEdit"/>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <widget class="QTableWidget" name="teacher_table">
+        <attribute name="horizontalHeaderVisible">
+         <bool>false</bool>
+        </attribute>
+        <attribute name="horizontalHeaderStretchLastSection">
+         <bool>false</bool>
+        </attribute>
+        <attribute name="verticalHeaderVisible">
+         <bool>false</bool>
+        </attribute>
+        <row>
+         <property name="text">
+          <string>New Row</string>
+         </property>
+        </row>
+        <column>
+         <property name="text">
+          <string>person</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>factor</string>
+         </property>
+        </column>
+        <item row="0" column="0">
+         <property name="text">
+          <string>Sandra Schmidt</string>
+         </property>
+        </item>
+        <item row="0" column="1">
+         <property name="text">
+          <string>1,0</string>
+         </property>
+        </item>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="Line" name="line">
+     <property name="orientation">
+      <enum>Qt::Horizontal</enum>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QDialogButtonBox" name="buttonBox">
+     <property name="toolTip">
+      <string>So setzen, dass mit diesem „Kurs“ keine Deputatsstunden verbunden sind.</string>
+     </property>
+     <property name="orientation">
+      <enum>Qt::Horizontal</enum>
+     </property>
+     <property name="standardButtons">
+      <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok|QDialogButtonBox::Reset</set>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections>
+  <connection>
+   <sender>buttonBox</sender>
+   <signal>accepted()</signal>
+   <receiver>Dialog</receiver>
+   <slot>accept()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>270</x>
+     <y>324</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>157</x>
+     <y>274</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>buttonBox</sender>
+   <signal>rejected()</signal>
+   <receiver>Dialog</receiver>
+   <slot>reject()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>338</x>
+     <y>324</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>286</x>
+     <y>274</y>
+    </hint>
+   </hints>
+  </connection>
+ </connections>
+</ui>

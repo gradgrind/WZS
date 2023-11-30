@@ -1,7 +1,7 @@
 """
 ui/dialogs/dialog_course_groups.py
 
-Last updated:  2023-11-19
+Last updated:  2023-11-29
 
 Supporting "dialog" for the course editor – edit the groups in a course.
 
@@ -50,7 +50,6 @@ from ui.ui_base import (
     ### QtGui:
     ### QtCore:
     Qt,
-    QPoint,
     Slot,
     ### other
     load_ui,
@@ -78,7 +77,6 @@ def courseGroupsDialog(
     class_groups: list,
     basic_entries: list[str] = None,
     parent: Optional[QWidget] = None,
-    pos: Optional[QPoint] = None,
 ) -> Optional[str]:
 
     if basic_entries is None:
@@ -133,7 +131,9 @@ def courseGroupsDialog(
 
     ##### dialog main ######
 
-    ui = load_ui("dialog_course_groups.ui", parent, locals())
+    # Don't pass a parent because that would add a child with each call of
+    # the dialog.
+    ui = load_ui("dialog_course_groups.ui", None, locals())
 #    delegate = ComboBoxDelegate()
 #    ui.class_table.setItemDelegateForColumn(1, delegate)
     pb_accept = ui.buttonBox.button(
@@ -181,9 +181,8 @@ def courseGroupsDialog(
         groups0.append(g)
     pb_accept.setEnabled(False)
     suppress_events = False
-    # In case a screen position was passed in:
-    if pos:
-        ui.move(pos)
+    if parent:
+        ui.move(parent.mapToGlobal(parent.pos()))
     # Activate the dialog
     ui.exec()
     return result

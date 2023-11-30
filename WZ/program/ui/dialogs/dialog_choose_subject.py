@@ -1,7 +1,7 @@
 """
 ui/dialogs/dialog_choose_subject.py
 
-Last updated:  2023-11-19
+Last updated:  2023-11-29
 
 Supporting "dialog" – select a subject.
 
@@ -50,7 +50,6 @@ from ui.ui_base import (
     QObject,
     QEvent,
     Qt,
-    QPoint,
     Slot,
     ### other
     load_ui,
@@ -85,7 +84,6 @@ def chooseSubjectDialog(
     start_value: int,
     subjects: list[tuple[int, str, str]],
     parent: Optional[QWidget] = None,
-    pos: Optional[QPoint] = None,
 ) -> Optional[str]:
 
     ##### slots #####
@@ -109,7 +107,9 @@ def chooseSubjectDialog(
 
     ##### dialog main ######
 
-    ui = load_ui("dialog_choose_subject.ui", parent, locals())
+    # Don't pass a parent because that would add a child with each call of
+    # the dialog.
+    ui = load_ui("dialog_choose_subject.ui", None, locals())
     pb_accept = ui.buttonBox.button(
         QDialogButtonBox.StandardButton.Ok
     )
@@ -138,8 +138,8 @@ def chooseSubjectDialog(
     suppress_events = False
 
     # In case a screen position was passed in:
-    if pos:
-        ui.move(pos)
+    if parent:
+        ui.move(parent.mapToGlobal(parent.pos()))
     # Activate the dialog
     ui.exec()
     return result

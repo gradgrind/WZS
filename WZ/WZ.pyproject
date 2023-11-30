@@ -22,7 +22,9 @@
         "program/ui/dialogs/dialog_course_teachers.py",
         "program/ui/dialogs/dialog_room_choice.py",
         "program/ui/dialogs/dialog_text_line.py",
+        "program/ui/dialogs/dialog_workload.py",
         "program/ui/modules/course_editor.py",
+        "program/ui/table_support.py",
         "program/ui/ui_base.py"
     ]
 }

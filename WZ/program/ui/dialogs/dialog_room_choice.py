@@ -1,7 +1,7 @@
 """
 ui/dialogs/dialog_room_choice.py
 
-Last updated:  2023-11-25
+Last updated:  2023-11-29
 
 Supporting "dialog" for the course editor – select room(s).
 
@@ -50,7 +50,6 @@ from ui.ui_base import (
     ### QtGui:
     ### QtCore:
     Qt,
-    QPoint,
     Slot,
     ### other
     load_ui,
@@ -88,7 +87,6 @@ def roomChoiceDialog(
     classroom: int,
     rooms: tuple,
     parent: Optional[QWidget] = None,
-    pos: Optional[QPoint] = None,
 ) -> Optional[tuple]:
 
     # <choices> is the list of "chosen" rooms: [ROOMS-id, ... ]
@@ -239,7 +237,9 @@ def roomChoiceDialog(
 
     ##### dialog main ######
 
-    ui = load_ui("dialog_room_choice.ui", parent, locals())
+    # Don't pass a parent because that would add a child with each call of
+    # the dialog.
+    ui = load_ui("dialog_room_choice.ui", None, locals())
     pb_reset = ui.buttonBox.button(
         QDialogButtonBox.StandardButton.Reset
     )
@@ -306,9 +306,8 @@ def roomChoiceDialog(
     result = None
     write_choices()
     suppress_events = False
-    # In case a screen position was passed in:
-    if pos:
-        ui.move(pos)
+    if parent:
+        ui.move(parent.mapToGlobal(parent.pos()))
     # Activate the dialog
     ui.home.setVisible(classroom > 0)
     ui.roomlist.selectRow(0)

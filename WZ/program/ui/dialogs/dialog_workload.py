@@ -1,9 +1,9 @@
 """
-ui/dialogs/dialog_text_line.py
+ui/dialogs/dialog_workload.py
 
-Last updated:  2023-11-29
+Last updated:  2023-11-30
 
-Supporting "dialog" for the course editor – edit a line of text.
+Supporting "dialog" for the course editor – set workload/pay.
 
 
 =+LICENCE=============================
@@ -34,31 +34,33 @@ if __name__ == "__main__":
     from core.base import setup
     setup(os.path.join(basedir, 'TESTDATA'))
 
-#from core.base import TRANSLATIONS, REPORT_ERROR
-#T = TRANSLATIONS("ui.dialogs.dialog_text_line")
+#from core.base import TRANSLATIONS
+#T = TRANSLATIONS("ui.dialogs.dialog_workload")
 
 ### +++++
 
 from typing import Optional
 
+from core.db_access import db_TableRow
 from ui.ui_base import (
     ### QtWidgets:
     QWidget,
     QDialogButtonBox,
+    QHeaderView,
     ### QtGui:
     ### QtCore:
+    Qt,
     Slot,
     ### other
     load_ui,
 )
+from ui.table_support import Table
 
 ### -----
 
-
-def textLineDialog(
-    start_value: str,
-    default: str = "",
-    title: str = None,
+#TODO ...
+def workloadDialog(
+    start_value: Optional[db_TableRow] = None,  # a COURSE_BASE row
     parent: Optional[QWidget] = None,
 ) -> Optional[str]:
 
@@ -67,58 +69,64 @@ def textLineDialog(
     @Slot()
     def on_accepted():
         nonlocal result
-        result = ui.textline.text()
+#        result = new_block
 
-    @Slot()
-    def reset():
-        ui.textline.clear()
-        ui.accept()
-
-    @Slot(str)
-    def on_textline_textEdited(text):
-        if start_value:
-            pb_accept.setDisabled(text == start_value)
-        else:
-            pb_accept.setDisabled(text == start_value or text == default)
+    @Slot(int, int)
+    def changed_pay_factor(row, column):
+        if suppress_handlers: return
+        print(
+            f"§TODO: changed_pay_factor ({row}):",
+            ui.teacher_table.item(row, column).text()
+        )
 
     ##### functions #####
+
+    def shrink():
+        ui.resize(0, 0)
+
+    def reset():
+        assert False, "TODO: reset"
 
     ##### dialog main ######
 
     # Don't pass a parent because that would add a child with each call of
     # the dialog.
-    ui = load_ui("dialog_text_line.ui", None, locals())
-    pb_reset = ui.buttonBox.button(
-        QDialogButtonBox.StandardButton.Reset
-    )
+    ui = load_ui("dialog_workload.ui", None, locals())
+    pb_accept = ui.buttonBox.button(QDialogButtonBox.StandardButton.Ok)
+    pb_reset = ui.buttonBox.button(QDialogButtonBox.StandardButton.Reset)
     pb_reset.clicked.connect(reset)
-    pb_accept = ui.buttonBox.button(
-        QDialogButtonBox.StandardButton.Ok
-    )
+    table = Table(ui.teacher_table)
+    hh = ui.teacher_table.horizontalHeader()
+    hh.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+    ui.teacher_table.cellChanged.connect(changed_pay_factor)
+    shrink() # minimize dialog window
 
-    # Data initialization
-    #suppress_events = True
-    if title:
-        ui.label.setText(title)
-    ui.textline.setText(start_value or default)
-    if not start_value:
-        pb_reset.hide()
-    pb_accept.setDisabled(True)
-    #suppress_events = False
+
+    ## Data initialization
+#    block_map = blocks_info()
+    suppress_handlers = True
+
+    table.set_row_count(1)
+    ui.teacher_table.item(0, 0).setFlags(Qt.ItemFlag.NoItemFlags)
+    ui.teacher_table.item(0, 0).setText("Fred Bloggs")
+    ui.teacher_table.item(0, 1).setData(Qt.ItemDataRole.EditRole, 1.0)
+
+    suppress_handlers = False
+
     if parent:
         ui.move(parent.mapToGlobal(parent.pos()))
     # Activate the dialog
     result = None
-    #ui.textline.setFocus()
+    #widget.setFocus()
     ui.exec()
     return result
+
+
 
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
 
 if __name__ == "__main__":
-    from core.db_access import open_database
-    open_database()
-
-    print("----->", textLineDialog(start_value=""))
-    print("----->", textLineDialog(start_value="Hello World!"))
+    from core.basic_data import get_database
+    get_database()
+    workloadDialog()

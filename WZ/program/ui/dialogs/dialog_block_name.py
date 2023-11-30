@@ -61,7 +61,6 @@ from ui.ui_base import (
     QDialogButtonBox,
     ### QtGui:
     ### QtCore:
-    QPoint,
     Slot,
     ### other
     load_ui,
@@ -73,7 +72,6 @@ from ui.ui_base import (
 def blockNameDialog(
     start_value: Optional[db_TableRow] = None,  # a BLOCK_LESSONS row
     parent: Optional[QWidget] = None,
-    pos: Optional[QPoint] = None,
 ) -> Optional[str]:
 
     new_block = None
@@ -213,7 +211,9 @@ def blockNameDialog(
 
     ##### dialog main ######
 
-    ui = load_ui("dialog_block_name.ui", parent, locals())
+    # Don't pass a parent because that would add a child with each call of
+    # the dialog.
+    ui = load_ui("dialog_block_name.ui", None, locals())
     pb_accept = ui.buttonBox.button(
         QDialogButtonBox.StandardButton.Ok
     )
@@ -259,9 +259,8 @@ def blockNameDialog(
     suppress_handlers = False
     on_block_select_currentTextChanged(key0)
 
-    # In case a screen position was passed in:
-    if pos:
-        ui.move(pos)
+    if parent:
+        ui.move(parent.mapToGlobal(parent.pos()))
     # Activate the dialog
     result = None
     #widget.setFocus()

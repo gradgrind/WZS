@@ -1,7 +1,7 @@
 """
 ui/dialogs/dialog_choose_timeslot.py
 
-Last updated:  2023-11-31
+Last updated:  2023-11-29
 
 Supporting "dialog" for the course editor – select a timeslot.
 
@@ -50,7 +50,6 @@ from ui.ui_base import (
     QButtonGroup,
     ### QtGui:
     ### QtCore:
-    QPoint,
     Slot,
     ### other
     load_ui,
@@ -61,7 +60,6 @@ from ui.ui_base import (
 
 def chooseTimeslotDialog(
     parent: Optional[QWidget] = None,
-    pos: Optional[QPoint] = None,
 ) -> Optional[str]:
 
     ##### slots #####
@@ -83,7 +81,9 @@ def chooseTimeslotDialog(
 
     ##### dialog main ######
 
-    ui = load_ui("dialog_choose_timeslot.ui", parent, locals())
+    # Don't pass a parent because that would add a child with each call of
+    # the dialog.
+    ui = load_ui("dialog_choose_timeslot.ui", None, locals())
     pb_reset = ui.buttonBox.button(
         QDialogButtonBox.StandardButton.Reset
     )
@@ -101,9 +101,8 @@ def chooseTimeslotDialog(
         buttons.addButton(w, i)
         ui.grid.addWidget(w, ts.period, ts.day)
 
-    # In case a screen position was passed in:
-    if pos:
-        ui.move(pos)
+    if parent:
+        ui.move(parent.mapToGlobal(parent.pos()))
     # Activate the dialog
     result = None
     ui.exec()

@@ -1,7 +1,7 @@
 """
 ui/dialogs/dialog_course_teachers.py
 
-Last updated:  2023-11-18
+Last updated:  2023-11-29
 
 Supporting "dialog" for the course editor – edit the teachers of a course.
 
@@ -49,7 +49,6 @@ from ui.ui_base import (
     ### QtGui:
     ### QtCore:
     Qt,
-    QPoint,
     Slot,
     ### other
     load_ui,
@@ -62,7 +61,6 @@ def courseTeachersDialog(
     start_value: list,
     teachers: list,
     parent: Optional[QWidget] = None,
-    pos: Optional[QPoint] = None,
 ) -> Optional[str]:
 
     ##### slots #####
@@ -94,7 +92,9 @@ def courseTeachersDialog(
 
     ##### dialog main ######
 
-    ui = load_ui("dialog_course_teachers.ui", parent, locals())
+    # Don't pass a parent because that would add a child with each call of
+    # the dialog.
+    ui = load_ui("dialog_course_teachers.ui", None, locals())
     pb_accept = ui.buttonBox.button(
         QDialogButtonBox.StandardButton.Ok
     )
@@ -128,9 +128,8 @@ def courseTeachersDialog(
     pb_accept.setEnabled(False)
     suppress_events = False
 
-    # In case a screen position was passed in:
-    if pos:
-        ui.move(pos)
+    if parent:
+        ui.move(parent.mapToGlobal(parent.pos()))
     # Activate the dialog
     ui.exec()
     return result
