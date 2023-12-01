@@ -289,9 +289,10 @@ ui.dialogs.dialog_room_choice: {
 #ui.dialogs.dialog_text_line: {
 #}
 
-#ui.dialogs.dialog_workload: {
-#    INVALID_PAY_VALUE: "Ungültige Deputatszahl: {p}"
-#}
+ui.dialogs.dialog_workload: {
+    VIA_LESSONS:    "Stundenfaktor:"
+    DIRECT:         "Grunddeputat:"
+}
 
 ui.grid_base: {
 #TODO ... not yet implemented/adapted

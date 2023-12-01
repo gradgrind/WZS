@@ -1,7 +1,7 @@
 """
 ui/modules/course_editor.py
 
-Last updated:  2023-11-30
+Last updated:  2023-12-01
 
 Edit course and blocks+lessons data.
 
@@ -63,7 +63,7 @@ from ui.table_support import Table
 
 from core.base import REPORT_CRITICAL
 from core.db_access import db_TableRow
-from core.basic_data import get_database, REPORT_SPLITTER
+from core.basic_data import get_database, REPORT_SPLITTER, print_fix
 #from core.classes import Classes
 #from core.teachers import Teachers
 #from core.subjects import Subjects
@@ -71,7 +71,7 @@ from core.basic_data import get_database, REPORT_SPLITTER
 from core.rooms import get_db_rooms
 from core.course_base import (
     filter_activities,
-    get_pay_value,
+    print_workload,
     workload_class,
     workload_teacher,
     text_report_field,
@@ -291,9 +291,9 @@ class CourseEditorPage(QObject):
         """
         lesson_units = self.db.table("LESSON_UNITS")
         lessons = lesson_units.get_block_units(lesson_block.id)
+        self.lesson_list = lessons
         self.lesson_table = Table(self.ui.lesson_table)
         self.lesson_table.set_row_count(len(lessons))
-#TODO: Is the number of lessons really needed (for the workload/payment)?
         self.n_lessons = 0
 
         for row, l in enumerate(lessons):
@@ -325,14 +325,12 @@ class CourseEditorPage(QObject):
 
     @Slot(int, int)
     def on_lesson_table_cellActivated(self, row, col):
-        #print("§on_lesson_table_cellActivated:", row, col)
-        #if col == 0: return
-        ldata = self.lesson_lists[self.course_data["Lesson_block_id"]]
-        llist = ldata[1]
+        print("§on_lesson_table_cellActivated:", row, col)
+        if col == 0: return
+        ldata = self.lesson_list[row]
         if col == 1:
             # Edit lesson length
-            lrow = llist[row]
-            l0 = lrow["LENGTH"]
+            l0 = ldata.LENGTH
             #print("§lesson length:", l0)
             new_length, ok = QInputDialog.getInt(
                 self.ui.lesson_table,
@@ -341,13 +339,14 @@ class CourseEditorPage(QObject):
                 value = l0,
                 minValue = 1,
                 # Use periods-per-day as maximum value
-                maxValue = len(self.slot_data.period_map) - 1
+                maxValue = len(self.db.table("TT_PERIODS").records) - 1
                 #step = 1,
                 #flags = Qt::WindowFlags()
             )
             #print("§lesson length -->", ok, new_length)
             if new_length != l0:
                 # Change stored value
+                ldata._write("LENGTH", new_length)
                 #print("§lesson length =", new_length)
                 #print("§llist[row]:", lrow)
                 db_query(
@@ -534,10 +533,23 @@ class CourseEditorPage(QObject):
         These are both text fields which are interpreted as fixed-point
         numbers.
         """
-        workloadDialog(self.course_data.course, self.ui.payment)
-        print("§edit_payment: TODO")
-#get_pay_value(course_data: COURSE_LINE, nlessons: int) -> str
-#self.total_calc()
+        delta = workloadDialog(
+            self.course_data,
+            self.n_lessons,
+            self.ui.payment
+        )
+        print("§edit_payment (TODO):", delta)
+        if delta:
+            tlist = self.course_data.teacher_list
+            for i, val in delta:
+                if i < 0:
+                    lb = self.course_data.course.Lesson_block
+                    lb._write("WORKLOAD", print_fix(val))
+                else:
+                    t = tlist[i]
+                    t._write("PAY_FACTOR", print_fix(val))
+            self.set_payment()
+            self.total_calc()
 
     ### supporting functions ###
 
@@ -647,7 +659,14 @@ class CourseEditorPage(QObject):
         with their own personal value.
         """
         self.ui.payment.setText(
-            get_pay_value(self.course_data, self.n_lessons)
+            print_workload(
+                self.course_data.course.Lesson_block.WORKLOAD,
+                self.n_lessons,
+                [
+                    (ct.Teacher.TID, ct.PAY_FACTOR)
+                    for ct in self.course_data.teacher_list
+                ]
+            )
         )
 
     @Slot(int,int)
@@ -897,9 +916,9 @@ class CourseEditorPage(QObject):
                 nlessons, total = workload_teacher(
                     self.filter_value, self.course_table.records
                 )
-            self.ui.total.setText(T["TEACHER_TOTAL"].format(
-                n=nlessons, total=total
-            ))
+                self.ui.total.setText(T["TEACHER_TOTAL"].format(
+                    n=nlessons, total=print_fix(total)
+                ))
             self.ui.total.setEnabled(True)
         else:
             self.ui.total.clear()

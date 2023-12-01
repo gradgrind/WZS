@@ -1,7 +1,7 @@
 """
 ui/dialogs/dialog_workload.py
 
-Last updated:  2023-11-30
+Last updated:  2023-12-01
 
 Supporting "dialog" for the course editor – set workload/pay.
 
@@ -34,19 +34,23 @@ if __name__ == "__main__":
     from core.base import setup
     setup(os.path.join(basedir, 'TESTDATA'))
 
-#from core.base import TRANSLATIONS
-#T = TRANSLATIONS("ui.dialogs.dialog_workload")
+from core.base import TRANSLATIONS
+T = TRANSLATIONS("ui.dialogs.dialog_workload")
 
 ### +++++
 
 from typing import Optional
 
-from core.db_access import db_TableRow
+from core.course_base import COURSE_LINE, print_workload
+from core.basic_data import CONFIG, print_fix
+from core.teachers import Teachers
 from ui.ui_base import (
     ### QtWidgets:
     QWidget,
     QDialogButtonBox,
     QHeaderView,
+    QStyledItemDelegate,
+    QDoubleSpinBox,
     ### QtGui:
     ### QtCore:
     Qt,
@@ -58,26 +62,65 @@ from ui.table_support import Table
 
 ### -----
 
-#TODO ...
+
+class SpinDelegate(QStyledItemDelegate):
+    def createEditor(self, parent, option, index):
+        editor = QDoubleSpinBox(parent)
+        editor.setFrame(False)
+        editor.setMinimum(0.0)
+        editor.setMaximum(20.0)
+        editor.setDecimals(CONFIG.DECIMAL_PLACES)
+        return editor
+
+#    def setEditorData(self, editor, index):
+#        value = index.model().data(index, Qt.ItemDataRole.EditRole)
+#        editor.setValue(float(value))
+
+    def displayText(self, value, locale):
+        return print_fix(value)
+
+
 def workloadDialog(
-    start_value: Optional[db_TableRow] = None,  # a COURSE_BASE row
+    start_value: Optional[COURSE_LINE] = None,  # a COURSE_BASE row
+    nlessons: int = 0,
     parent: Optional[QWidget] = None,
-) -> Optional[str]:
+) -> Optional[list[tuple[int, float]]]:
 
     ##### slots #####
 
     @Slot()
     def on_accepted():
         nonlocal result
-#        result = new_block
+        result = delta
 
     @Slot(int, int)
     def changed_pay_factor(row, column):
         if suppress_handlers: return
-        print(
-            f"§TODO: changed_pay_factor ({row}):",
-            ui.teacher_table.item(row, column).text()
-        )
+        if column == 1:
+            item = ui.teacher_table.item(row, column)
+            val = item.data(Qt.ItemDataRole.EditRole)
+            t, _ = teacher_list[row]
+            teacher_list[row] = (t, val)
+            value_changed()
+
+    @Slot(bool)
+    def on_rb_lessons_toggled(on):
+        if on:
+            ui.workload_label.setText(T["VIA_LESSONS"])
+            if suppress_handlers: return
+            value_changed()
+
+    @Slot(bool)
+    def on_rb_direct_toggled(on):
+        if on:
+            ui.workload_label.setText(T["DIRECT"])
+            if suppress_handlers: return
+            value_changed()
+
+    @Slot(float)
+    def on_workload_valueChanged(value):
+        if suppress_handlers: return
+        value_changed()
 
     ##### functions #####
 
@@ -85,7 +128,39 @@ def workloadDialog(
         ui.resize(0, 0)
 
     def reset():
-        assert False, "TODO: reset"
+        """Set WORKLOAD to 0.0 and all PAY_FACTORs to 1.0."
+        """
+        delta.clear()
+        if workload0 != 0.0:
+            delta.append((-1, 0.0))
+        for i, pf in enumerate(pay_factor_list0):
+            if pf != 1.0:
+                delta.append((i, 1.0))
+        ui.accept()
+
+    def value_changed():
+        workload = ui.workload.value()
+        if ui.rb_lessons.isChecked() and workload > 0.0:
+            workload = - workload
+        ui.payment.setText(print_workload(
+            workload, nlessons, teacher_list
+        ))
+        # Compare with original values
+        delta.clear()
+        # ... and with "null" values
+        null_delta.clear()
+        if workload != 0.0:
+            null_delta.append((-1, 0.0))
+        if workload != workload0:
+            delta.append((-1, workload))
+        for i, t in enumerate(teacher_list):
+            pf = t[1]
+            if pf != 1.0:
+                null_delta.append((i, 1.0))
+            if pf != pay_factor_list0[i]:
+                delta.append((i, pf))
+        pb_accept.setEnabled(bool(delta))
+        #pb_reset.setEnabled(bool(null_delta))
 
     ##### dialog main ######
 
@@ -98,30 +173,66 @@ def workloadDialog(
     table = Table(ui.teacher_table)
     hh = ui.teacher_table.horizontalHeader()
     hh.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+    delegate = SpinDelegate()
+    ui.teacher_table.setItemDelegateForColumn(1, delegate)
     ui.teacher_table.cellChanged.connect(changed_pay_factor)
     shrink() # minimize dialog window
 
-
     ## Data initialization
-#    block_map = blocks_info()
     suppress_handlers = True
 
-    table.set_row_count(1)
-    ui.teacher_table.item(0, 0).setFlags(Qt.ItemFlag.NoItemFlags)
-    ui.teacher_table.item(0, 0).setText("Fred Bloggs")
-    ui.teacher_table.item(0, 1).setData(Qt.ItemDataRole.EditRole, 1.0)
+    teacher_list = []
+    pay_factor_list0 = []
+    # A negative WORKLOAD indicates a lesson-count factor
+    if start_value:
+        workload0 = start_value.course.Lesson_block.WORKLOAD
+        if workload0 < 0.0:
+            ui.workload.setValue(- workload0)
+            ui.rb_lessons.setChecked(True)
+        else:
+            ui.workload.setValue(workload0)
+            ui.rb_direct.setChecked(True)
+        table.set_row_count(len(start_value.teacher_list))
+        for row, ct in enumerate(start_value.teacher_list):
+            name = Teachers.get_name(ct.Teacher)
+            ui.teacher_table.item(row, 0).setFlags(Qt.ItemFlag.NoItemFlags)
+            ui.teacher_table.item(row, 0).setText(name)
+            item1 = ui.teacher_table.item(row, 1)
+            item1.setData(Qt.ItemDataRole.EditRole, ct.PAY_FACTOR)
+            pf = item1.data(Qt.ItemDataRole.EditRole)
+            teacher_list.append((ct.Teacher.TID, pf))
+            pay_factor_list0.append(pf)
+    else:
+        # for testing only
+        workload0 = -1.0
+        if workload0 < 0.0:
+            ui.workload.setValue(- workload0)
+            ui.rb_lessons.setChecked(True)
+        else:
+            ui.workload.setValue(workload0)
+            ui.rb_direct.setChecked(True)
+        table.set_row_count(1)
+        ui.teacher_table.item(0, 0).setFlags(Qt.ItemFlag.NoItemFlags)
+        ui.teacher_table.item(0, 0).setText("Fred Bloggs")
+        item1 = ui.teacher_table.item(0, 1)
+        item1.setData(Qt.ItemDataRole.EditRole, 1.345678)
+        pf = item1.data(Qt.ItemDataRole.EditRole)
+        teacher_list.append(("FB", pf))
+        pay_factor_list0.append(pf)
+    # Set initial "changed" status
+    delta = []
+    null_delta = []
+    result = None
+    value_changed()
+    pb_reset.setEnabled(bool(null_delta))
 
     suppress_handlers = False
-
     if parent:
         ui.move(parent.mapToGlobal(parent.pos()))
     # Activate the dialog
-    result = None
     #widget.setFocus()
     ui.exec()
     return result
-
-
 
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
@@ -129,4 +240,5 @@ def workloadDialog(
 if __name__ == "__main__":
     from core.basic_data import get_database
     get_database()
-    workloadDialog()
+    print("----->", workloadDialog())
+    print("----->", workloadDialog(nlessons = 3))

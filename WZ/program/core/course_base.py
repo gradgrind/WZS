@@ -1,7 +1,7 @@
 """
 core/course_base.py
 
-Last updated:  2023-11-29
+Last updated:  2023-12-01
 
 Support functions dealing with courses, lessons, etc.
 
@@ -59,7 +59,12 @@ from core.db_access import (
     DB_FIELD_INTEGER,
     DB_FIELD_FIX,
 )
-from core.basic_data import get_database, REPORT_SPLITTER, SUBJECT_SPLITTER
+from core.basic_data import (
+    get_database,
+    REPORT_SPLITTER,
+    SUBJECT_SPLITTER,
+    print_fix,
+)
 from core.classes import Classes
 from core.teachers import Teachers
 from core.subjects import Subjects
@@ -664,22 +669,20 @@ def teachers_print_names(course_data: COURSE_LINE) -> str:
         for t in course_data.teacher_list
     )
 
-#TODO ...
-from core.basic_data import print_fix
-def get_pay_value(course_data: COURSE_LINE, nlessons: int) -> str:
-    """Get the workload/pay figure for the teacher(s) of the given course,
-    returning the value as a string.
-    This is calculated taking into account:
-        LESSON_BLOCKS.WORKLOAD
-        nlessons
-        COURSE_TEACHERS.PAY_FACTOR
+
+def print_workload(
+    workload: float,
+    nlessons: int,
+    teacher_list: list[tuple[str, float]]
+) -> str:
+    """Return a text representation of the workload (payment basis)
+    for the given data.
     """
-    workload = course_data.course.Lesson_block.WORKLOAD
     if workload < 0.0:
-        workload *= - nlessons
+        workload = abs(workload * nlessons)
     tlist = [
-        f"{t.Teacher.TID}: {print_fix(workload * t.PAY_FACTOR)}"
-        for t in course_data.teacher_list
+        f"{tid}: {print_fix(workload * pf)}"
+        for tid, pf in teacher_list
     ]
     return "; ".join(tlist)
 
@@ -687,11 +690,14 @@ def get_pay_value(course_data: COURSE_LINE, nlessons: int) -> str:
 def get_pay(teacher: int, course_data: COURSE_LINE, nlessons: int) -> float:
     workload = course_data.course.Lesson_block.WORKLOAD
     if workload < 0.0:
-        workload *= - nlessons
+        workload = abs(workload * nlessons)
     for t in course_data.teacher_list:
-        if t.id == teacher:
+        if t.Teacher.id == teacher:
             return workload * t.PAY_FACTOR
-    REPORT_ERROR(f"Bug in course {course_data}: teacher {t} not found")
+    REPORT_ERROR(
+        f"Bug in course_base::get_pay. In course {course_data}:\n"
+        f" teacher {t.Teacher} not found"
+    )
     return 0.0
 
 

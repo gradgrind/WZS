@@ -1,7 +1,7 @@
 """
 ui/ui_base.py
 
-Last updated:  2023-11-03
+Last updated:  2023-12-01
 
 Support stuff for the GUI: application initialization, dialogs, etc.
 
@@ -95,6 +95,15 @@ LOAD_UI_MARGIN = 0
 
 ### -----
 
+#TODO?. Would it be worth considering a sort of cache of loaded ui files?
+# I assume that the space used by a dialog will be available for release by
+# the garbage collector after the dialog is closed – as long as the dialog
+# is not added as a child to some permanent structure. But I haven't been
+# able to confirm this, the memory footprint seems to grow with each new
+# dialog call.
+# If a cache was used, it would be necessary to fully initialize a dialog
+# on entry and not rely on settings in the ui-file which might be changed
+# on useage.
 
 #import inspect
 def load_ui(uipath:str, parent:QWidget, frame:dict = None):

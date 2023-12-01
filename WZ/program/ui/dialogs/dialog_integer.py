@@ -1,9 +1,10 @@
 """
-ui/dialogs/dialog_text_line.py
+ui/dialogs/dialog_integer.py
 
 Last updated:  2023-12-01
 
-Supporting "dialog" for the course editor – edit a line of text.
+Supporting "dialog" for the course editor – edit an integer (e.g. lesson
+length).
 
 
 =+LICENCE=============================
@@ -35,7 +36,7 @@ if __name__ == "__main__":
     setup(os.path.join(basedir, 'TESTDATA'))
 
 #from core.base import TRANSLATIONS, REPORT_ERROR
-#T = TRANSLATIONS("ui.dialogs.dialog_text_line")
+#T = TRANSLATIONS("ui.dialogs.dialog_integer")
 
 ### +++++
 
@@ -55,31 +56,31 @@ from ui.ui_base import (
 ### -----
 
 
-def textLineDialog(
-    start_value: str,
-    default: str = "",
+def integerDialog(
+    start_value: Optional[int] = None,
+    default: Optional[int] = None,
     title: str = None,
+    min: int = 0,
+    max: int = 9,
     parent: Optional[QWidget] = None,
-) -> Optional[str]:
+) -> Optional[int]:
 
     ##### slots #####
 
     @Slot()
     def on_accepted():
         nonlocal result
-        result = ui.textline.text()
+        result = ui.number.value()
 
     @Slot()
     def reset():
-        ui.textline.clear()
+        if default is not None:
+            ui.number.setValue(default)
         ui.accept()
 
-    @Slot(str)
-    def on_textline_textEdited(text):
-        if start_value:
-            pb_accept.setDisabled(text == start_value)
-        else:
-            pb_accept.setDisabled(text == start_value or text == default)
+    @Slot(int)
+    def on_number_valueChanged(value: int):
+        pb_accept.setEnabled(value != start_value)
 
     ##### functions #####
 
@@ -87,7 +88,9 @@ def textLineDialog(
 
     # Don't pass a parent because that would add a child with each call of
     # the dialog.
-    ui = load_ui("dialog_text_line.ui", None, locals())
+    ui = load_ui("dialog_integer.ui", None, locals())
+    ui.number.setMinimum(min)
+    ui.number.setMaximum(max)
     pb_reset = ui.buttonBox.button(
         QDialogButtonBox.StandardButton.Reset
     )
@@ -100,9 +103,13 @@ def textLineDialog(
     #suppress_events = True
     if title:
         ui.label.setText(title)
-    ui.textline.setText(start_value or default)
-    if not start_value:
-        pb_reset.hide()
+
+    if default is None:
+        v0 = min if start_value is None else start_value
+    else:
+        v0 = default if start_value is None else start_value
+    ui.number.setValue(v0)
+    pb_reset.setVisible(default is not None and start_value != default)
     pb_accept.setDisabled(True)
     #suppress_events = False
     if parent:
@@ -117,5 +124,5 @@ def textLineDialog(
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
 
 if __name__ == "__main__":
-    print("----->", textLineDialog(start_value=""))
-    print("----->", textLineDialog(start_value="Hello World!"))
+    print("----->", integerDialog())
+    print("----->", integerDialog(start_value=2, default=1))
