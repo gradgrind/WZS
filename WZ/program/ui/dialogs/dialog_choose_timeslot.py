@@ -1,7 +1,7 @@
 """
 ui/dialogs/dialog_choose_timeslot.py
 
-Last updated:  2023-11-29
+Last updated:  2023-12-02
 
 Supporting "dialog" for the course editor – select a timeslot.
 
@@ -41,6 +41,7 @@ if __name__ == "__main__":
 
 from typing import Optional
 
+from core.basic_data import get_database
 from core.time_slots import TimeSlots
 from ui.ui_base import (
     ### QtWidgets:
@@ -91,9 +92,9 @@ def chooseTimeslotDialog(
 
     buttons = QButtonGroup(ui.frame)
     buttons.idClicked.connect(choose)
-    timeslots = TimeSlots.read()
+    timeslots = get_database().table("TT_TIME_SLOTS")
 
-    for i, ts in enumerate(timeslots.timeslots):
+    for i, ts in enumerate(timeslots.get_timeslots()):
         if i == 0: continue
         col = ts.day
         row = ts.period
@@ -112,7 +113,5 @@ def chooseTimeslotDialog(
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
 
 if __name__ == "__main__":
-    from core.db_access import open_database
-    open_database()
 
     print("----->", chooseTimeslotDialog())

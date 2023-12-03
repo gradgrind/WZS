@@ -129,19 +129,36 @@ class TimeSlots(db_Table):
         return TIMESLOT(dx-1, px-1, f"{d}.{p}" if dx > 0 else "")
 
     def get_timeslots(self):
-        timeslots = []
+        """Return (all) the timeslots as a list of TIMESLOT items.
+        The first item is a "null" timeslot.
+        """
+        try:
+            ts = self.__timeslots
+            if ts:
+                return ts
+        except AttributeError:
+            ts = []
+            self.__timeslots = ts
         for i, row in enumerate(self.records):
             if row.id != i:
-                REPORT_CRITICAL("TODO: Indexing in table TT_TIME_SLOTS broken")
+                REPORT_CRITICAL(
+                    "Bug: Indexing in table TT_TIME_SLOTS is broken."
+                    " The 'rowid' is expected to run contiguously,"
+                    " starting at 0 (which is a 'null' entry)."
+                )
             if i:
                 dx = row.Day.id
                 d = row.Day.TAG
                 px = row.Period.id
                 p = row.Period.TAG
-                timeslots.append(TIMESLOT(dx-1, px-1, f"{d}.{p}"))
+                ts.append(TIMESLOT(dx-1, px-1, f"{d}.{p}"))
             else:
-                timeslots.append(TIMESLOT(-1, -1, ""))
-        return timeslots
+                ts.append(TIMESLOT(-1, -1, ""))
+        return ts
+
+    def clear_caches(self):
+        # Note that the caches must be cleared if the table is changed.
+        self.__timeslots = []
 
 DB_TABLES[TimeSlots.table] = TimeSlots
 
@@ -149,7 +166,7 @@ DB_TABLES[TimeSlots.table] = TimeSlots
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
 
 if __name__ == "__main__":
-    from core.db_access import get_database
+    from core.basic_data import get_database
     db = get_database()
 
     ts = TimeSlots(db)

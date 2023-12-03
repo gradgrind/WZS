@@ -268,8 +268,9 @@ ui.dialogs.dialog_make_course_tables: {
 #ui.dialogs.dialog_number_constraint: {
 #}
 
-#ui.dialogs.dialog_parallel_lessons: {
-#}
+ui.dialogs.dialog_parallel_lessons: {
+    NEW_TAG:        "Neu"
+}
 
 ui.dialogs.dialog_pupil_groups: {
     EMPTY_GROUPS_ERROR: "Bei Verarbeitung der Untergruppen:\n\n - {e}"
@@ -349,8 +350,7 @@ ui.modules.course_editor: {
     REPORT_TITLE_LABEL: "Zeugnis-Überschrift"
     REPORT_TEACHERS_LABEL: "Zeugnis-Unterschrift"
     COURSE_INFO_LABEL:  "Kursnotizen"
-    LESSON_LENGTH:  "Länge"
-    LESSON_PERIODS: "Stunden:"
+    LESSON_LENGTH:  "Länge (Unterrichtsstunden):"
 #    UNKNOWN_VALUE_IN_FIELD: "{cid}': '{cell_value}"
     REALLY_DELETE:  "Soll dieser „Kurs“ wirklich gelöscht werden?"
     TEACHER_TOTAL:  "Stundenplanbelegung: {n} Stunden ;  Deputatsstunden: {total}"

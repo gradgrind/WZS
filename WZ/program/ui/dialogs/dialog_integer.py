@@ -35,7 +35,7 @@ if __name__ == "__main__":
     from core.base import setup
     setup(os.path.join(basedir, 'TESTDATA'))
 
-#from core.base import TRANSLATIONS, REPORT_ERROR
+#from core.base import TRANSLATIONS
 #T = TRANSLATIONS("ui.dialogs.dialog_integer")
 
 ### +++++
@@ -80,6 +80,7 @@ def integerDialog(
 
     @Slot(int)
     def on_number_valueChanged(value: int):
+        if suppress_events: return
         pb_accept.setEnabled(value != start_value)
 
     ##### functions #####
@@ -89,6 +90,7 @@ def integerDialog(
     # Don't pass a parent because that would add a child with each call of
     # the dialog.
     ui = load_ui("dialog_integer.ui", None, locals())
+    suppress_events = True
     ui.number.setMinimum(min)
     ui.number.setMaximum(max)
     pb_reset = ui.buttonBox.button(
@@ -98,12 +100,9 @@ def integerDialog(
     pb_accept = ui.buttonBox.button(
         QDialogButtonBox.StandardButton.Ok
     )
-
-    # Data initialization
-    #suppress_events = True
+    ## Data initialization
     if title:
         ui.label.setText(title)
-
     if default is None:
         v0 = min if start_value is None else start_value
     else:
@@ -111,7 +110,7 @@ def integerDialog(
     ui.number.setValue(v0)
     pb_reset.setVisible(default is not None and start_value != default)
     pb_accept.setDisabled(True)
-    #suppress_events = False
+    suppress_events = False
     if parent:
         ui.move(parent.mapToGlobal(parent.pos()))
     # Activate the dialog

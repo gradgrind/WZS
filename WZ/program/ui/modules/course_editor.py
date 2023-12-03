@@ -1,7 +1,7 @@
 """
 ui/modules/course_editor.py
 
-Last updated:  2023-12-01
+Last updated:  2023-12-02
 
 Edit course and blocks+lessons data.
 
@@ -44,11 +44,8 @@ from ui.ui_base import (
     ### QtWidgets:
     QWidget,
     QLineEdit,
-    QTableWidget,
-    QTableWidgetItem,
     QHeaderView,
     QAbstractButton,
-    QInputDialog,
     ### QtGui:
 #    QIcon,
     ### QtCore:
@@ -82,7 +79,7 @@ from core.course_base import (
 
 #from ui.dialogs.dialog_course_fields import CourseEditorForm
 #from ui.dialogs.dialog_courses_field_mod import FieldChangeForm
-#from ui.dialogs.dialog_choose_timeslot import chooseTimeslotDialog
+from ui.dialogs.dialog_choose_timeslot import chooseTimeslotDialog
 from ui.dialogs.dialog_room_choice import (
     roomChoiceDialog,
     print_room_choice,
@@ -90,8 +87,9 @@ from ui.dialogs.dialog_room_choice import (
 from ui.dialogs.dialog_workload import workloadDialog
 #from ui.dialogs.dialog_new_course_lesson import NewCourseLessonDialog
 from ui.dialogs.dialog_block_name import blockNameDialog
-#from ui.dialogs.dialog_parallel_lessons import ParallelsDialog
+from ui.dialogs.dialog_parallel_lessons import parallelsDialog
 from ui.dialogs.dialog_text_line import textLineDialog
+from ui.dialogs.dialog_integer import integerDialog
 #from ui.dialogs.dialog_make_course_tables import ExportTable
 
 ### -----
@@ -325,63 +323,88 @@ class CourseEditorPage(QObject):
 
     @Slot(int, int)
     def on_lesson_table_cellActivated(self, row, col):
-        print("§on_lesson_table_cellActivated:", row, col)
+        #print("§on_lesson_table_cellActivated:", row, col)
         if col == 0: return
         ldata = self.lesson_list[row]
         if col == 1:
             # Edit lesson length
             l0 = ldata.LENGTH
             #print("§lesson length:", l0)
-            new_length, ok = QInputDialog.getInt(
-                self.ui.lesson_table,
-                T["LESSON_LENGTH"],
-                T["LESSON_PERIODS"],
-                value = l0,
-                minValue = 1,
-                # Use periods-per-day as maximum value
-                maxValue = len(self.db.table("TT_PERIODS").records) - 1
-                #step = 1,
-                #flags = Qt::WindowFlags()
+            new_length = integerDialog(
+                l0,
+                title = T["LESSON_LENGTH"],
+                default = 1,
+                min = 1,
+                max = len(self.db.table("TT_PERIODS").records) - 1,
+                parent = self.ui.lesson_table,
             )
             #print("§lesson length -->", ok, new_length)
-            if new_length != l0:
+            if new_length is not None and new_length != l0:
                 # Change stored value
-                ldata._write("LENGTH", new_length)
-                #print("§lesson length =", new_length)
-                #print("§llist[row]:", lrow)
-                db_query(
-                    "update LESSON_UNITS set LENGTH=? where Lesson_unit_id=?",
-                    (new_length, lrow["Lesson_unit_id"])
-                )
-                db_commit()
-                lrow["LENGTH"] = new_length
-                self.ui.lesson_table.item(row, col).setText(str(new_length))
-                self.n_lessons += new_length - l0
-                ldata[0] = self.n_lessons
-                # Recalculate payment-field and totals
-                self.set_payment()
-                self.total_calc()
-
+                if ldata._write("LENGTH", new_length):
+                    item = self.ui.lesson_table.item(row, col)
+                    item.setText(str(new_length))
+                    self.n_lessons += new_length - l0
+                    # Recalculate payment-field and totals
+                    self.set_payment()
+                    self.total_calc()
         elif col == 2:
             # Edit start time of lesson
+            ts0 = ldata.Time.id
             ts = chooseTimeslotDialog(parent=self.ui.lesson_table)
-            if ts is not None:
+            if ts is not None and ts != ts0:
                 # Change stored value
-                lrow = llist[row]
-                #print("§llist[row]:", ts, lrow)
-                if ts != lrow["TIME"]:
-                    db_query(
-                        "update LESSON_UNITS set TIME=? where Lesson_unit_id=?",
-                        (ts, lrow["Lesson_unit_id"])
-                    )
-                    db_commit()
-                    lrow["TIME"] = ts
-                    text = TimeSlots.read().timeslots[ts].NAME
-                    self.ui.lesson_table.item(row, col).setText(text)
-
+                if ldata._write("Time", ts):
+                    item = self.ui.lesson_table.item(row, col)
+                    t = self.slot_data.timeslot(ldata.Time).NAME
+                    item.setText(t)
+#TODO ...
         elif col == 3:
             # Edit parallel lessons
-            assert False, "TODO: Edit parallel lessons"
+            lp = ldata.Parallel
+            lpid0 = lp.id
+            pt = parallelsDialog(lpid0, self.ui.lesson_table)
+            if pt:
+                lpid, tag, w = pt
+                print("§parallelsDialog -->", pt)
+                item = self.ui.lesson_table.item(row, col)
+                if lpid0:
+                    # Modify tag parameters
+#TODO: This is getting triggered ... (on reset, because it is currently
+# returning 0!)
+# Removing on tag == ""
+                    if tag:
+                        assert lpid == lpid0
+                        if lp.TAG != tag:
+                            assert lp._write("TAG", tag)
+                            item.setText(tag)
+                        if lp.WEIGHT != w:
+                            assert lp._write("WEIGHT", w)
+#TODO: Should I display the weight, too?
+
+                    else:
+# This is not 100% correct ...
+                        # Set reference to null.
+                        assert ldata._write("Parallel", 0)
+                        item.setText("")
+                        #  If this is the last reference, remove the tag
+                        if lpid > -2:
+                            lp._table.delete_records([lpid0])
+
+#TODO: Disallow setting tags which are already present in the lesson-block.
+# That might be better handled in the dialog, where the courses are read.
+# I would need to pass in the lesson block, though.
+                elif lpid:
+                    # Attach to existing group
+                    assert ldata._write("Parallel", lpid)
+                    item.setText(tag)
+                else:
+                    # New group required
+                    lpid = lp._table.add_records(
+                        [{"TAG": tag, "WEIGHT": w}]
+                    )[0]
+                    assert ldata._write("Parallel", lpid)
+                    item.setText(tag)
 
     @Slot(QAbstractButton)
     def on_buttonGroup_buttonClicked(self, pb):

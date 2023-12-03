@@ -1,7 +1,7 @@
 """
 core/db_access.py
 
-Last updated:  2023-11-26
+Last updated:  2023-12-03
 
 Helper functions for accessing the database.
 
@@ -321,13 +321,15 @@ class db_Table:
         setattr(self[rowid], ftype.field, v)
         return True
 
-    def add_records(self, records: list[dict[str: str|int]]):
+    def add_records(self, records: list[dict[str: str|int]]) -> list[int]:
         """Insert new records into the table.
         As "None" is not acceptable here, all fields must be provided
         except for the row-id.
         For the special case where a specific row-id should be used,
         the parameter <id> should be set.
+        Return a list containing the rowids of the inserted records.
         """
+        ids = []
         for rec in records:
             flist, vlist = [], []
             ## Check validity of values
@@ -351,8 +353,9 @@ class db_Table:
                 flist.append(ftype.field0)
                 vlist.append(value)
             else:
-                self.db.insert(self.table, flist, vlist)
+                ids.append(self.db.insert(self.table, flist, vlist))
         self.reset()
+        return ids
 
     def delete_records(self, ids: list[int]):
         for id in ids:
@@ -378,7 +381,7 @@ class db_TableRow:
         )
         return f"{self._table.table}_Row({', '.join(items)})"
 
-    def _write(self, field: str, value: Any):
+    def _write(self, field: str, value: Any) -> bool:
         #print("§_write:", self._table.table, self.id, field, value)
         return self._table.update_cell(self.id, field, value)
 

@@ -1,7 +1,7 @@
 """
 core/course_base.py
 
-Last updated:  2023-12-01
+Last updated:  2023-12-02
 
 Support functions dealing with courses, lessons, etc.
 
@@ -248,6 +248,46 @@ class ParallelTags(db_Table):
             )
             return True
         return False
+
+    @staticmethod
+    def split_tag(parallel_tag: db_TableRow) -> tuple[str, str]:
+        """Split a TAG field into category and tag.
+        Return a tuple of these substrings.
+        """
+        if parallel_tag.id == 0:
+            return ("", "")
+        tag0 = parallel_tag.TAG
+        try:
+            t1, t2 = tag0.split('~', 1)
+        except ValueError:
+            t1 = ""
+            t2 = tag0
+        return (t1, t2)
+
+    def tag_maps(self):
+        """Return two tag mappings.
+        The first maps the (unique) parallel tags to their corresponding
+        records.
+        For the second map the parallel tags are split on '~'. The first part
+        is called the "category" and may be empty. It is mapped to the second
+        part, which is called the "tag". In the case of an empty "category",
+        the "tag" is the whole of the TAG field.
+        """
+        tm = self.__tag_map
+        if not tm:
+            for rec in self.records:
+                tm[rec.TAG] = rec
+                tag1, tag2 = self.split_tag(rec)
+                try:
+                    self.__category_map[tag1].append(tag2)
+                except KeyError:
+                    self.__category_map[tag1] = [tag2]
+        return tm, self.__category_map
+
+    def clear_caches(self):
+        # Note that the caches must be cleared if the table is changed.
+        self.__tag_map = {}
+        self.__category_map = {}
 
 DB_TABLES[ParallelTags.table] = ParallelTags
 
