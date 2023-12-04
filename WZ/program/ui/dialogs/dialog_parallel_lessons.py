@@ -1,7 +1,7 @@
 """
 ui/dialogs/dialog_parallel_lessons.py
 
-Last updated:  2023-12-03
+Last updated:  2023-12-04
 
 Supporting "dialog" for the course editor – mark lessons which should
 start at the same time.
@@ -60,11 +60,10 @@ from ui.ui_base import (
 
 ### -----
 
-#TODO: Might want to be able to clear out unused parallel tags here. There
-# could be a pushbutton for it? This button could even be deactivated when
-# there are no unused tags. The best solution might, however, be to remove
-# an entry when it is removed from its last lesson. There might
-# (additionally?) be a button somewhere on a housekeeping page.
+#TODO: Might want to be able to clear out unused parallel tags here, or
+# somewhere on a housekeeping page. When the last reference to an entry
+# is removed, the entry is removed automatically (in "course_editor"), so
+# it is not clear that such a feature would really be needed.
 
 def parallelsDialog(
     start_value: int = 0,   # rowid for PARALLEL_TAGS table
@@ -97,8 +96,6 @@ def parallelsDialog(
     @Slot()
     def reset():
         nonlocal value
-#TODO: use <start_value>?
-#        value = (0, "", "-")
         value = (-len(courses0), "", "-")
         ui.accept()
 

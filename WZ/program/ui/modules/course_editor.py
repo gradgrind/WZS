@@ -1,7 +1,7 @@
 """
 ui/modules/course_editor.py
 
-Last updated:  2023-12-02
+Last updated:  2023-12-04
 
 Edit course and blocks+lessons data.
 
@@ -58,7 +58,7 @@ from ui.ui_base import (
 from ui.course_table import CourseTable, CourseTableRow
 from ui.table_support import Table
 
-from core.base import REPORT_CRITICAL
+from core.base import REPORT_CRITICAL, REPORT_ERROR
 from core.db_access import db_TableRow
 from core.basic_data import get_database, REPORT_SPLITTER, print_fix
 #from core.classes import Classes
@@ -91,6 +91,13 @@ from ui.dialogs.dialog_parallel_lessons import parallelsDialog
 from ui.dialogs.dialog_text_line import textLineDialog
 from ui.dialogs.dialog_integer import integerDialog
 #from ui.dialogs.dialog_make_course_tables import ExportTable
+
+def display_parallel(lesson_rec: db_TableRow) -> str:
+    """Construct a display text for a parallel tag.
+    """
+    tag = lesson_rec.Parallel.TAG
+    w = f" ({lesson_rec.Parallel.WEIGHT})" if tag else ""
+    return f"{tag}{w}"
 
 ### -----
 
@@ -292,8 +299,8 @@ class CourseEditorPage(QObject):
         self.lesson_list = lessons
         self.lesson_table = Table(self.ui.lesson_table)
         self.lesson_table.set_row_count(len(lessons))
+        self.block_parallels = set()
         self.n_lessons = 0
-
         for row, l in enumerate(lessons):
             if l.id == 0:
                 REPORT_CRITICAL("§Bug: lesson 0 used")
@@ -304,7 +311,16 @@ class CourseEditorPage(QObject):
             self.lesson_table.write(
                 row, 2, self.slot_data.timeslot(l.Time).NAME
             )
-            self.lesson_table.write(row, 3, l.Parallel.TAG)
+            lpid = l.Parallel.id
+            if lpid:
+                if lpid in self.block_parallels:
+                    REPORT_ERROR(
+                        T["DOUBLE_PARALLEL"].format(tag = l.Parallel.TAG)
+                    )
+                    l._write("Parallel", 0) # remove the parallel tag
+                else:
+                    self.block_parallels.add(lpid)
+            self.lesson_table.write(row, 3, display_parallel(l))
 
     ### slots ###
 
@@ -358,7 +374,6 @@ class CourseEditorPage(QObject):
                     item = self.ui.lesson_table.item(row, col)
                     t = self.slot_data.timeslot(ldata.Time).NAME
                     item.setText(t)
-#TODO ...
         elif col == 3:
             # Edit parallel lessons
             lp = ldata.Parallel
@@ -366,45 +381,40 @@ class CourseEditorPage(QObject):
             pt = parallelsDialog(lpid0, self.ui.lesson_table)
             if pt:
                 lpid, tag, w = pt
-                print("§parallelsDialog -->", pt)
+                print(f"§parallelsDialog {lpid0} -->", pt)
                 item = self.ui.lesson_table.item(row, col)
                 if lpid0:
                     # Modify tag parameters
-#TODO: This is getting triggered ... (on reset, because it is currently
-# returning 0!)
-# Removing on tag == ""
                     if tag:
                         assert lpid == lpid0
                         if lp.TAG != tag:
                             assert lp._write("TAG", tag)
-                            item.setText(tag)
                         if lp.WEIGHT != w:
                             assert lp._write("WEIGHT", w)
-#TODO: Should I display the weight, too?
-
                     else:
-# This is not 100% correct ...
                         # Set reference to null.
                         assert ldata._write("Parallel", 0)
-                        item.setText("")
+                        self.block_parallels.discard(lpid0)
                         #  If this is the last reference, remove the tag
                         if lpid > -2:
                             lp._table.delete_records([lpid0])
-
-#TODO: Disallow setting tags which are already present in the lesson-block.
-# That might be better handled in the dialog, where the courses are read.
-# I would need to pass in the lesson block, though.
                 elif lpid:
-                    # Attach to existing group
-                    assert ldata._write("Parallel", lpid)
-                    item.setText(tag)
+                    if lpid in self.block_parallels:
+                        REPORT_ERROR(
+                            T["DOUBLE_PARALLEL"].format(tag = tag)
+                        )
+                    else:
+                        # Attach to existing group
+                        assert ldata._write("Parallel", lpid)
+                        self.block_parallels.add(lpid)
                 else:
                     # New group required
                     lpid = lp._table.add_records(
                         [{"TAG": tag, "WEIGHT": w}]
                     )[0]
                     assert ldata._write("Parallel", lpid)
-                    item.setText(tag)
+                    self.block_parallels.add(lpid)
+                item.setText(display_parallel(ldata))
 
     @Slot(QAbstractButton)
     def on_buttonGroup_buttonClicked(self, pb):

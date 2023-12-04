@@ -354,6 +354,7 @@ ui.modules.course_editor: {
 #    UNKNOWN_VALUE_IN_FIELD: "{cid}': '{cell_value}"
     REALLY_DELETE:  "Soll dieser „Kurs“ wirklich gelöscht werden?"
     TEACHER_TOTAL:  "Stundenplanbelegung: {n} Stunden ;  Deputatsstunden: {total}"
+    DOUBLE_PARALLEL: "Parallel-Kennung '{tag}' schon bei einer anderen Stunde des Blocks vorhanden"
 }
 
 ui.modules.grades_manager: {
