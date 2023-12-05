@@ -1,7 +1,7 @@
 """
 ui/modules/course_editor.py
 
-Last updated:  2023-12-04
+Last updated:  2023-12-05
 
 Edit course and blocks+lessons data.
 
@@ -321,6 +321,8 @@ class CourseEditorPage(QObject):
                 else:
                     self.block_parallels.add(lpid)
             self.lesson_table.write(row, 3, display_parallel(l))
+        # Disable "remove lesson" button if no lessons available
+        self.ui.lesson_sub.setEnabled(self.n_lessons != 0)
 
     ### slots ###
 
@@ -415,6 +417,43 @@ class CourseEditorPage(QObject):
                     assert ldata._write("Parallel", lpid)
                     self.block_parallels.add(lpid)
                 item.setText(display_parallel(ldata))
+
+    @Slot()
+    def on_lesson_add_clicked(self):
+        """Add a lesson to the current lesson block.
+        """
+        # At present this allows the creation of a lesson even if there
+        # are no teachers or pupils. That may not be terribly useful,
+        # but it could be used to block a room at particular times
+        # (however, there might well be better ways to do this).
+        lesson_units = self.db.table("LESSON_UNITS")
+        if self.lesson_list:
+            l = self.lesson_list[-1].LENGTH
+        else:
+            l = 1
+        lb = self.course_data.course.Lesson_block
+        lesson_units.add_records([{
+            "Lesson_block": lb.id,
+            "LENGTH": l,
+            "Time": 0,
+            "Parallel": 0,
+        }])
+        self.display_lessons(lb)
+        self.set_payment()
+        self.total_calc()
+
+    @Slot()
+    def on_lesson_sub_clicked(self):
+        """Remove a lesson from the current lesson block.
+        If there are no lessons to remove, this button should be disabled
+        (see method <disply_lessons>).
+        """
+        lesson_units = self.db.table("LESSON_UNITS")
+        rec = self.lesson_list[-1]
+        lesson_units.delete_records([rec.id])
+        self.display_lessons(rec.Lesson_block)
+        self.set_payment()
+        self.total_calc()
 
     @Slot(QAbstractButton)
     def on_buttonGroup_buttonClicked(self, pb):
@@ -703,8 +742,28 @@ class CourseEditorPage(QObject):
         )
 
     @Slot(int,int)
-    def on_course_table_cellDoubleClicked(self, r, c):
-        self.edit_course(r)
+    def on_course_table_cellActivated(self, row, col):
+        print("§on_course_table_cellActivated:", row, col)
+        print("   ...", self.course_data)
+        if col == 0: return
+        course_data = self.course_table.records[row]
+        # <course_data> should be the same as <self.course_data>, but
+        # that might depend on ui implementation details ...
+#TODO ...
+        if col == 1:
+            # Edit subject
+            pass
+
+        elif col == 1:
+            # Edit groups
+            pass
+
+        elif col == 2:
+            # Edit teachers
+            pass
+
+
+#        self.edit_course(r)
 
     @Slot()
     def on_pb_edit_course_clicked(self):
@@ -925,23 +984,6 @@ class CourseEditorPage(QObject):
                 self.ui.total.setText(text)
                 self.ui.total.setEnabled(True)
         elif self.filter_field == "TEACHER":
-
-#TODO--
-            print("\n§total_calc: TODO")
-            print("\n§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§\n")
-            for c in self.course_table.records:
-                print("  ---", c)
-#        return
-#TODO: for teachers?
-#workload = course_data.course.Lesson_block.WORKLOAD
-#if workload < 0.0:
-#    workload *= - nlessons
-#tlist = [
-#    f"{t.Teacher.TID}: {print_fix(workload * t.PAY_FACTOR)}"
-#    for t in course_data.teacher_list
-#]
-#return "; ".join(tlist)
-
             if self.filter_value == 0:
                 self.ui.total.clear()
                 self.ui.total.setEnabled(False)
@@ -1091,42 +1133,6 @@ class CourseEditorPage(QObject):
 #                l = 0
 #        # Redisplay
 #        self.load_course_table(lesson_id=l)
-
-    @Slot()
-    def on_lesson_add_clicked(self):
-        """Add a lesson to the current element. If this is a block, that
-        of course applies to the other participating courses as well.
-        If no element (or a pay-only element) is selected, this button
-        should be disabled.
-        """
-        lthis = self.current_lesson[1]
-        newid = db_new_row(
-            "LESSONS",
-            lesson_group=lthis["Lesson_group"],
-            LENGTH=lthis["LENGTH"]
-        )
-        self.load_course_table(lesson_id=newid)
-
-    @Slot()
-    def on_lesson_sub_clicked(self):
-        """Remove a lesson from the current element. If this is a block,
-        the removal of course applies to the other participating courses
-        as well. If no element, a pay-only element or an element with
-        only one lesson is selected, this button should be disabled.
-        """
-        lthis = self.current_lesson[1]
-        newids = db_values(
-            "LESSONS",
-            "Lid",
-            lesson_group=lthis["Lesson_group"]
-        )
-        newids.remove(lid := lthis["Lid"])
-        assert newids, (
-            f"Tried to delete LESSON with Lid={lid}"
-            " although it is the only one for this element"
-        )
-        db_delete_rows("LESSONS", Lid=lid)
-        self.load_course_table(lesson_id=newids[-1])
 
 #    @Slot()
 #    def on_remove_element_clicked(self):
