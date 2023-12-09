@@ -54,6 +54,8 @@ from ui.ui_base import (
 #    QPoint,
     QEvent,
     Slot,
+    ### other
+    SHOW_CONFIRM,
 )
 from ui.course_table import CourseTable, CourseTableRow
 from ui.table_support import Table
@@ -75,6 +77,7 @@ from core.course_base import (
     grade_report_field,
     subject_print_name,
     teachers_print_names,
+    block_courses,
 )
 
 #from ui.dialogs.dialog_course_fields import CourseEditorForm
@@ -158,7 +161,6 @@ class CourseEditorPage(QObject):
         # Set up lists of classes, teachers and subjects for the course
         # filter. These are lists of tuples:
         #    (db-primary-key, short form, full name)
-#TODO: Also need mapping TID -> Signature?
         db = get_database()
         self.db = db
         self.filter_list = {
@@ -496,7 +498,7 @@ class CourseEditorPage(QObject):
         rlist = self.db.table("TT_ROOMS").get_room_list(course_id)
         rxtra = self.course_data.course.Room_group
         new_rooms = roomChoiceDialog(
-                start_value = ([r.id for r in rlist], rxtra.id),
+                start_value = ([r.Room.id for r in rlist], rxtra.id),
                 classroom = self.course_data.course_line.get_classroom(),
                 rooms = self.all_room_lists,
                 parent = self.ui.wish_room,
@@ -708,7 +710,7 @@ class CourseEditorPage(QObject):
         rxtra = self.course_data.course.Room_group
         #print("§get rooms:", rlist, "\n +++ ", rxtra)
         text = print_room_choice(
-            room_choice = ([r.id for r in rlist], rxtra.id),
+            room_choice = ([r.Room.id for r in rlist], rxtra.id),
             room_lists = self.all_room_lists,
          )
         self.ui.wish_room.setText(text)
@@ -751,10 +753,12 @@ class CourseEditorPage(QObject):
             if self.course_table.edit_cell(row, col):
                 self.load_course_table()
 
+#???
     @Slot()
     def on_pb_edit_course_clicked(self):
         self.edit_course(self.ui_table.current_row())
 
+#???
     @Slot()
     def on_pb_change_all_clicked(self):
         """Either all teacher fields or all class fields for the current
@@ -785,12 +789,14 @@ class CourseEditorPage(QObject):
                 self.ui_table.current_row()
             )
 
+#???
     def edit_course(self, row):
         """Activate the course field editor."""
         changes = self.edit_course_fields(self.course_data)
         if changes:
             self.update_course(row, changes)
 
+#???
     def update_course(self, row, changes):
         if db_update_fields(
             "COURSES",
@@ -807,19 +813,99 @@ class CourseEditorPage(QObject):
         The fields of the current course, if there is one, will be taken
         as "template".
         """
-#TODO
-        print("§new_course:", self.course_data)
+        block = blockNameDialog()
+        #print("§block:", repr(block))
+        #print("§new_course:", self.course_data)
+        course = self.course_data.course._todict()
+        #print("§course:", course)
+        glist = [
+            {"Class": g.Class.id, "GROUP_TAG": g.GROUP_TAG}
+            for g in self.course_data.group_list
+        ]
+        #print("§groups:", glist)
+        tlist = [
+            {"Teacher": t.Teacher.id, "PAY_FACTOR": print_fix(t.PAY_FACTOR)}
+            for t in self.course_data.teacher_list
+        ]
+        #print("§teachers:", tlist)
+        if block.id is None:
+            # New block => new record in LESSON_BLOCKS
+            lbtable = self.db.table("LESSON_BLOCKS")
+            lbid = lbtable.add_records([{
+                "BLOCK": str(block),
+                "WORKLOAD": "-1",
+                "NOTES": ""
+            }])[0]
+        else:
+            # Add to existing block
+            lbid = block.id
+        cbtable = self.db.table("COURSE_BASE")
+        cbid = cbtable.add_records([{
+            "Subject": course["Subject"],
+            "Lesson_block": lbid,
+            "Room_group": course["Room_group"],
+            "REPORT": "",
+            "GRADES": "",
+            "INFO": "",
+        }])[0]
+        # Copy over teacher(s) and group(s), new entries are be needed in
+        # the associated tables.
+        to_add = []
+        for g in glist:
+            g["Course"] = cbid
+            to_add.append(g)
+        self.db.table("COURSE_GROUPS").add_records(to_add)
+        to_add.clear()
+        for t in tlist:
+            t["Course"] = cbid
+            to_add.append(t)
+#TODO: entries in TT_ROOMS?
+        self.db.table("COURSE_TEACHERS").add_records(to_add)
+        self.load_course_table()
 
-#TODO
     @Slot()
     def on_pb_delete_course_clicked(self):
-        """Delete the current course."""
+        """Delete the current course.
+        This can have knock-on effects in tables LESSON_BLOCKS, LESSON_UNITS,
+        COURSE_GROUPS, COURSE_LESSONS and TT_ROOMS
+        """
         row = self.ui_table.current_row()
         assert row >= 0, "No course, delete button should be disabled"
         if not SHOW_CONFIRM(T["REALLY_DELETE"]):
             return
-        # Delete each connected entry in COURSE_LESSONS, keeping track
-        # of the lesson-groups and lesson-datas.
+        # If there are no other courses using the LESSON_BLOCKS record,
+        # that must be deleted, which would mean the LESSON_UNITS records
+        # referring to it must also be deleted.
+        # Also, all records in COURSE_GROUPS, COURSE_LESSONS and TT_ROOMS
+        # referring to the course must be deleted before the COURSE_BASE
+        # record itself can be deleted.
+        course = self.course_data.course
+        cbid = course.id
+        lbid = course.Lesson_block.id
+        glist = [g.id for g in self.course_data.group_list]
+        #print("§groups:", glist)
+        tlist = [t.id for t in self.course_data.teacher_list]
+        #print("§teachers:", tlist)
+        tt_rooms = self.db.table("TT_ROOMS")
+        rlist = [r.id for r in tt_rooms.get_room_list(cbid)]
+        #print("§rooms:", rlist)
+        block = course.Lesson_block.BLOCK
+        # Remove the groups, teachers and rooms
+        self.db.table("COURSE_GROUPS").delete_records(glist)
+        self.db.table("COURSE_TEACHERS").delete_records(tlist)
+        tt_rooms.delete_records(rlist)
+        # Remove the course record
+        self.db.table("COURSE_BASE").delete_records([cbid])
+        ## This must be last, after the course-base record is gone
+        # Other associated courses?
+        if lbid and ((not block) or (not block_courses(lbid))):
+            ## Delete lesson block and lessons
+            # Get lessons, remove their records from LESSON_UNITS
+            llist = [l.id for l in self.lesson_list]
+            self.db.table("LESSON_UNITS").delete_records(llist)
+            # Remove the LESSON_BLOCKS record
+            self.db.table("LESSON_BLOCKS").delete_records([lbid])
+        self.load_course_table()
 
 #?
 #    @Slot()

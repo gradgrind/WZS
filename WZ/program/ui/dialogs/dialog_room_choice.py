@@ -322,7 +322,7 @@ def print_room_choice(
 ) -> str:
     """Return a displayable (text) version of a room-choice list.
     """
-    #print("§print_room_choice:", room_choice)
+    print("§print_room_choice:", room_choice)
     room_list, room_groups = room_lists
     rdict = {rid: rtag for rid, rtag, rname in room_list}
     rgdict = {rgid: rgtag for rgid, rgtag, rgname, rlist in room_groups}

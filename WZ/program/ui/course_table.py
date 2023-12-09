@@ -1,7 +1,7 @@
 """
 ui/course_table.py
 
-Last updated:  2023-12-08
+Last updated:  2023-12-09
 
 Support functions dealing with the course table.
 
@@ -68,10 +68,6 @@ class CourseTable:
 # Any change to the value (i.e. changes to the sources of this value) should
 # trigger an update of the display.
 
-# Maybe have a finalize call to the display table to do things like
-# resizing the columns (resizeColumnsToContents()), which probably should
-# only be done once when many cells are changed.
-
 class CourseTableRow:
     """This is basically a wrapper around the data for a single "course",
     which is provided as a <COURSE_LINE> instance. This class adds extra
@@ -91,7 +87,6 @@ class CourseTableRow:
         field = self.fields[col]
         if field == "Subject":
             db = get_database()
-#            subjects = Subjects(db)
             subjects = db.table("SUBJECTS")
             s = chooseSubjectDialog(
                 start_value = self.course.Subject.id,
@@ -146,11 +141,12 @@ class CourseTableRow:
                     self.group_list[j].id
                     for j in range(i, lnow)
                 ])
+            # Actually not necessary if rows are added or removed, because
+            # the table will need to be reloaded:
             cgtable.clear_caches()
         elif field == "Teachers":
             now = [t.Teacher.id for t in self.teacher_list]
             db = get_database()
-#            teachers = Teachers(db)
             teachers = db.table("TEACHERS")
             tlist = courseTeachersDialog(
                 start_value = now,
@@ -173,7 +169,7 @@ class CourseTableRow:
                     })
                 else:
                     if t != t0:
-                        rowid = self.group_list[i].id
+                        rowid = self.teacher_list[i].id
                         ttable.update_cell(rowid, "Teacher", t)
                 i += 1
             if to_add:
@@ -184,6 +180,8 @@ class CourseTableRow:
                     self.teacher_list[j].id
                     for j in range(i, lnow)
                 ])
+            # Actually not necessary if rows are added or removed, because
+            # the table will need to be reloaded:
             ttable.clear_caches()
         else:
             REPORT_CRITICAL(
@@ -194,42 +192,3 @@ class CourseTableRow:
 
     def __str__(self):
         return str(self.course_line)
-
-
-# subject: This is the "Subject(_id)" field of the Courses record. It
-# displays that object's "NAME" field. Editing would be via a subject
-# selection dialog. A change would just update the Subject_id field,
-# with a corresponding proxy change in the memory model.
-
-# groups: This is a list accessed via the course-id keying the groups
-# ("COURSE_GROUPS" table) mapping. In view of the potential text length
-# the groups should be displayed as "CLASS.GROUP_TAG", not with the long
-# class name. These could be sorted alphabetically (?). Editing would be
-# on the "COURSE_GROUPS" table. Addition or deletion of entries would
-# require a reloading of the caches (and whatever follows from that ...).
-# If only existing entries are changed, this should be possible without
-# a reload.
-
-# teachers: This should be basically the same as the group handling, but
-# with the "COURSE_TEACHERS" table.
-
-# block: This displays the "BLOCK" sub-field of the "Lesson_block(_id)"
-# field. IF this is editable, it would require the movement of the course
-# from one block to another, or into or out of a block. In that case all
-# the lessons data would need to be redisplayed.
-# Editing would just be a convenience function, the alternative being to
-# create a new course and delete the old one. Limited editing might also
-# be considered, such as only conversion of a simple lesson-group to a
-# new block (which requires only a name), perhaps conversion of a block
-# with no other members to a simple lesson-group. However, note that this
-# "light" version can also be handled by the lesson-block editor in the
-# lesson panel. Note the coupling between the two block display elements.
-# Possibly this block display is only for info – to distinguish between
-# courses in the same subject, it might not really be necessary.
-
-# Sorting of the records could be by subject and group, or perhaps varying
-# according to the filter?
-
-# The display table should present an interface to add and remove rows,
-# each cell displays text, and activates a callback when editing is to begin.
-

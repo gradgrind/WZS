@@ -337,8 +337,10 @@ class db_Table:
             ))
             return False
         ## Save to database.
+        #print("§self.db.update:", self.table, rowid, ftype.field0, value)
         self.db.update(self.table, rowid, ftype.field0, value)
         ## Set the memory cell
+        #print("§setattr:", ftype.field, v, "\n  ++", self.id2index)
         setattr(self[rowid], ftype.field, v)
         return True
 
@@ -431,6 +433,16 @@ class db_TableRow:
             if k[0] != "_"
         )
         return f"{self._table.table}_Row({', '.join(items)})"
+
+    def _todict(self):
+        d = {}
+        for k, v in self.__dict__.items():
+            if k[0] != "_":
+                try:
+                    d[k] = v.id
+                except AttributeError:
+                    d[k] = v
+        return d
 
     def _write(self, field: str, value: Any) -> bool:
         #print("§_write:", self._table.table, self.id, field, value)
