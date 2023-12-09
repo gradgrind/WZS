@@ -1,7 +1,7 @@
 """
 ui/dialogs/dialog_course_groups.py
 
-Last updated:  2023-11-29
+Last updated:  2023-12-09
 
 Supporting "dialog" for the course editor – edit the groups in a course.
 
@@ -99,6 +99,10 @@ def courseGroupsDialog(
             item = ui.class_table.item(row, 0)
             if item.checkState() == Qt.CheckState.Checked:
                 cb.setEnabled(True)
+                # The whole class should be at index 1, select this by default
+                suppress_events = True
+                cb.setCurrentIndex(1)
+                suppress_events = False
             else:
                 cb.setEnabled(False)
                 suppress_events = True

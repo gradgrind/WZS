@@ -1,5 +1,5 @@
 """
-core/classes.py - last updated 2023-11-26
+core/classes.py - last updated 2023-12-09
 
 Manage class data.
 
@@ -269,7 +269,7 @@ class Classes(db_Table):
             #print("\n§aglist:", aglist)
             ##print("\n§aghash2agtext:", aghash2agtext)
             ##print("\n§agtext2aghash:", agtext2aghash)
-            print("\n§g2agset:", g2agset)
+            #print("\n§g2agset:", g2agset)
             ##print("\n§g2agbitmap:", g2agbitmap)
             #print("\n§agbitmap2g:", agbitmap2g)
             divdata = {

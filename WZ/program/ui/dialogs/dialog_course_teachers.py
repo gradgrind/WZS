@@ -1,7 +1,7 @@
 """
 ui/dialogs/dialog_course_teachers.py
 
-Last updated:  2023-11-29
+Last updated:  2023-12-09
 
 Supporting "dialog" for the course editor – edit the teachers of a course.
 
@@ -118,6 +118,7 @@ def courseTeachersDialog(
         row = teacher2row[ti]
         item = ui.teacher_table.item(row, 0)
         item.setCheckState(Qt.CheckState.Checked)
+        ui.teacher_table.setCurrentItem(item)   # should scroll to line
 
     result = None
     chosen0 = []

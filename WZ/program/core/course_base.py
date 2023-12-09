@@ -1,7 +1,7 @@
 """
 core/course_base.py
 
-Last updated:  2023-12-02
+Last updated:  2023-12-09
 
 Support functions dealing with courses, lessons, etc.
 
@@ -778,7 +778,7 @@ def workload_class(class_id: int, activity_list: list[COURSE_LINE]
     db = get_database()
     classes = db.table("CLASSES")
     divdata = classes.group_data(class_id)
-    print("\n§divdata:", classes[class_id].CLASS, divdata)
+    #print("\n§divdata:", classes[class_id].CLASS, divdata)
     g2info = divdata["group_info"]
     ### Collect lessons per atomic group
     ## Each lesson-unit in a lesson-block must be counted only once FOR

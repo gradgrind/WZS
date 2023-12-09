@@ -1,7 +1,7 @@
 """
 core/db_access.py
 
-Last updated:  2023-12-03
+Last updated:  2023-12-09
 
 Helper functions for accessing the database.
 
@@ -127,6 +127,28 @@ class Database:
         cur = self.query(
             f"update {table} set {field} = ? where rowid = ?",
             (value, rowid)
+        )
+        cur.close()
+        self.commit()
+
+    def update_fields(self,
+        table: str,
+        rowid: int,
+        fields: list[tuple[str, int|str]],
+    ):
+        """Update multiple fields of a single record of a table.
+        Access is via the rowid (only). This is accessed using the
+        alias "rowid", so the outward-facing name of this column
+        is not important.
+        """
+        flist, vlist = [], []
+        for f, v in fields:
+            flist.append(f"{f} = ?")
+            vlist.append(v)
+        vlist.append(rowid)
+        cur = self.query(
+            f"update {table} set {', '.join(flist)} where rowid = ?",
+            vlist
         )
         cur.close()
         self.commit()
@@ -297,7 +319,6 @@ class db_Table:
         """
         return self.records[self.id2index[rowid]]
 
-#TODO ... handle <depends>?
     def update_cell(self, rowid: int, field: str, value: str|int) -> bool:
         """Update a table cell. The value should already be preprocessed
         (if that is necessary), so that it can be directly written to the
@@ -321,7 +342,37 @@ class db_Table:
         setattr(self[rowid], ftype.field, v)
         return True
 
-    def add_records(self, records: list[dict[str: str|int]]) -> list[int]:
+    def update_cells(self, rowid: int, **fields: dict[str, str|int]) -> bool:
+        """Update fields of a table record. The values should already be
+        preprocessed (if that is necessary), so that they can be directly
+        written to the database.
+        Also the memory-based data structure will be updated.
+        Return <True> if successful.
+        """
+        ## Check validity of values
+        cells_db = []
+        cells_mem = []
+        for field, value in fields.items():
+            # Get the field type
+            ftype = self.field2type[field]
+            # Check validity of value
+            v, e = ftype.validate(self.db, value)
+            if e:
+                REPORT_ERROR(T["UPDATE_VALIDATION_FAILED"].format(
+                    table = self.table, field = field, rowid = rowid, e = e
+                ))
+                return False
+            cells_db.append((ftype.field0, value))
+            cells_mem.append((ftype.field, v))
+        ## Save to database.
+        self.db.update_fields(self.table, rowid, cells_db)
+        ## Set the memory cells
+        rec = self[rowid]
+        for f, v in cells_mem:
+            setattr(rec, f, v)
+        return True
+
+    def add_records(self, records: list[dict[str, str|int]]) -> list[int]:
         """Insert new records into the table.
         As "None" is not acceptable here, all fields must be provided
         except for the row-id.

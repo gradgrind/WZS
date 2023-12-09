@@ -1,7 +1,7 @@
 """
 ui/modules/course_editor.py
 
-Last updated:  2023-12-05
+Last updated:  2023-12-09
 
 Edit course and blocks+lessons data.
 
@@ -235,14 +235,16 @@ class CourseEditorPage(QObject):
             combo_class.currentIndex()
         )
 
-    def load_course_table(self, select_index=-1, table_row=-1, lesson_id=-1):
+    def load_course_table(self, select_index=-1, table_row=-1):
         """This is called to load or refresh the course list.
+        <select_index> is the index of the filter selection list to be used.
+        If it is not supplied (value -1), the existing filter value,
+        <self.filter_value> will be used – this is useful for table
+        refreshes.
+        <table_row> allows a particular row to be selected initially.
+        If it is not supplied (value -1), the existing row number will be
+        used, if possible – this is useful for table refreshes.
         """
-#TODO: Describe parameters.
-#TODO: Is refreshing still required?
-#TODO: Is <self.lesson_restore_id> still required? Possibly not, as the
-# lesson line is not used anywhere any more (I think).
-#        self.lesson_restore_id = lesson_id
 
 # A "workload/payment only" type is only distinguished by having no
 # lesson-unit entries associated with it. So perhaps there is actually
@@ -261,12 +263,12 @@ class CourseEditorPage(QObject):
         if select_index >= 0:
             self.filter_value = self.select_list[select_index][0]
             #print("\n§filter_value:", self.filter_value, self.select_list)
-#TODO: This may have been connected with refreshing, in which case it might
-# be superfluous now.
         if table_row < 0:
             table_row = self.ui_table.current_row()
 
         # <filter_activities> returns a list of <COURSE_LINE> objects
+#TODO: This is failing if a class is changed, at least on a single-class
+# course.
         alist = filter_activities(self.filter_field, self.filter_value)
         #print("\n§course_table.load:", self.filter_field, self.filter_value)
         #print("§courses:", alist)
@@ -383,7 +385,7 @@ class CourseEditorPage(QObject):
             pt = parallelsDialog(lpid0, self.ui.lesson_table)
             if pt:
                 lpid, tag, w = pt
-                print(f"§parallelsDialog {lpid0} -->", pt)
+                #print(f"§parallelsDialog {lpid0} -->", pt)
                 item = self.ui.lesson_table.item(row, col)
                 if lpid0:
                     # Modify tag parameters
@@ -592,7 +594,7 @@ class CourseEditorPage(QObject):
     def edit_block_name(self):
         lb = self.course_data.course.Lesson_block
         new_name = blockNameDialog(lb, parent = self.ui.block_name)
-        print("§edit_block_name ->", new_name)
+        #print("§edit_block_name ->", new_name)
         if new_name:
             val = str(new_name)
             if lb._write("BLOCK", val):
@@ -610,7 +612,7 @@ class CourseEditorPage(QObject):
             self.n_lessons,
             self.ui.payment
         )
-        print("§edit_payment (TODO):", delta)
+        #print("§edit_payment (TODO):", delta)
         if delta:
             tlist = self.course_data.teacher_list
             for i, val in delta:
@@ -666,7 +668,7 @@ class CourseEditorPage(QObject):
 
         row = self.ui.course_table.currentRow()
 #TODO--
-        print(f"\n§on_course_table_itemSelectionChanged: TODO {row}")
+        #print(f"\n§on_course_table_itemSelectionChanged: TODO {row}")
 #        return
 
 #        lesson_id = self.lesson_restore_id
@@ -697,7 +699,7 @@ class CourseEditorPage(QObject):
             return
 
         ### Set course fields in edit panel
-        print("§course_data:", self.course_data)
+        #print("§course_data:", self.course_data)
         ## Room
         # The room is an ordered list of individual rooms
         # and an optional room-group.
@@ -743,27 +745,11 @@ class CourseEditorPage(QObject):
 
     @Slot(int,int)
     def on_course_table_cellActivated(self, row, col):
-        print("§on_course_table_cellActivated:", row, col)
-        print("   ...", self.course_data)
-        if col == 0: return
-        course_data = self.course_table.records[row]
-        # <course_data> should be the same as <self.course_data>, but
-        # that might depend on ui implementation details ...
-#TODO ...
-        if col == 1:
-            # Edit subject
-            pass
-
-        elif col == 1:
-            # Edit groups
-            pass
-
-        elif col == 2:
-            # Edit teachers
-            pass
-
-
-#        self.edit_course(r)
+        #print("§on_course_table_cellActivated:", row, col)
+        #print("   ...", self.course_data)
+        if col > 0:
+            if self.course_table.edit_cell(row, col):
+                self.load_course_table()
 
     @Slot()
     def on_pb_edit_course_clicked(self):
