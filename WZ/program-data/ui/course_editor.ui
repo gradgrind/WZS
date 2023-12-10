@@ -294,15 +294,11 @@
        </item>
        <item>
         <widget class="QPushButton" name="pb_change_all">
-         <property name="text">
-          <string>alle ändern</string>
+         <property name="toolTip">
+          <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Alle Vorkommnisse einer Lehrkraft bzw. Klasse in dieser Tabelle durch eine andere ersetzen.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
          </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QPushButton" name="pb_edit_course">
          <property name="text">
-          <string>Kurs bearbeiten</string>
+          <string>Lehrer oder Klasse ersetzen</string>
          </property>
         </widget>
        </item>
@@ -714,7 +710,6 @@ Hiere können diese aber bei Bedarf angepasst werden.</string>
   </layout>
  </widget>
  <tabstops>
-  <tabstop>pb_edit_course</tabstop>
   <tabstop>lesson_table</tabstop>
   <tabstop>report_title</tabstop>
   <tabstop>wish_room</tabstop>

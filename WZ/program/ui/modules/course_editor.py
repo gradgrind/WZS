@@ -57,7 +57,7 @@ from ui.ui_base import (
 from ui.course_table import CourseTable, CourseTableRow
 from ui.table_support import Table
 
-from core.base import REPORT_CRITICAL, REPORT_ERROR
+from core.base import REPORT_CRITICAL, REPORT_ERROR, REPORT_INFO
 from core.db_access import db_TableRow
 from core.basic_data import get_database, REPORT_SPLITTER, print_fix
 from core.rooms import get_db_rooms
@@ -74,7 +74,7 @@ from core.course_base import (
 )
 
 #from ui.dialogs.dialog_course_fields import CourseEditorForm
-#from ui.dialogs.dialog_courses_field_mod import FieldChangeForm
+from ui.dialogs.dialog_change_teacher_class import newTeacherClassDialog
 from ui.dialogs.dialog_choose_timeslot import chooseTimeslotDialog
 from ui.dialogs.dialog_room_choice import (
     roomChoiceDialog,
@@ -139,7 +139,7 @@ class CourseEditorPage(QObject):
                 h = self.field_editors[obj.objectName()]
             except KeyError:
                 REPORT_CRITICAL(
-                    f"TODO: No field handler for {obj.objectName()}"
+                    f"Bug: No field handler for {obj.objectName()}"
                 )
 # Position? - obj.mapToGlobal(QPoint(0,0))
             h()
@@ -164,10 +164,6 @@ class CourseEditorPage(QObject):
         self.all_room_lists = get_db_rooms(
             db.table("ROOMS"), db.table("TT_ROOM_GROUP_MAP")
         )
-
-#?
-        self.course_field_changer = None
-
         if self.filter_field == "CLASS": pb = self.ui.pb_CLASS
         elif self.filter_field == "TEACHER": pb = self.ui.pb_TEACHER
         else: pb = self.ui.pb_SUBJECT
@@ -600,7 +596,6 @@ class CourseEditorPage(QObject):
             self.n_lessons,
             self.ui.payment
         )
-        #print("§edit_payment (TODO):", delta)
         if delta:
             tlist = self.course_data.teacher_list
             for i, val in delta:
@@ -731,36 +726,57 @@ class CourseEditorPage(QObject):
             if self.course_table.edit_cell(row, col):
                 self.load_course_table()
 
-#TODO???
     @Slot()
     def on_pb_change_all_clicked(self):
-        """Either all teacher fields or all class fields for the current
-        teacher+class are to be changed to a new value.
+        """All records in the table with a particular teacher or
+        class-group will have this field substituted.
         """
         if not self.course_data:
+            REPORT_INFO(T["NO_COURSE"])
             return
-        if not self.course_field_changer:
-            # Initialize dialog
-            self.course_field_changer = FieldChangeForm(
-                self.filter_list, self
-            )
-        changes = self.course_field_changer.activate(
-            self.course_data, self.filter_field
+        tlist = self.db.table("TEACHERS").teacher_list()
+        classes = self.db.table("CLASSES")
+        class_groups = [
+            (rec.id, rec.CLASS, rec.DIVISIONS) for rec in classes.records
+            if rec.id
+        ]
+        t0 = [t.Teacher.id for t in self.course_data.teacher_list]
+        cg0 = [(g.Class.id, g.GROUP_TAG) for g in self.course_data.group_list]
+        changes = newTeacherClassDialog(
+            start_teachers = t0,
+            start_classes = cg0,
+            teachers = tlist,
+            class_groups = class_groups,
+            set_teacher = self.filter_field != "TEACHER",
+            parent = self.ui.course_table,
         )
         if changes:
-            cid, tid, field, newval = changes
-            chlist = []
-            for cdatalist in self.course_list:
-                cdata = cdatalist[0]
-                if cdata["CLASS"] == cid and cdata["TEACHER"] == tid:
-                    chlist.append(cdata["Course"])
-            for course in chlist:
-                #print("CHANGE", field, newval, course)
-                db_update_field("COURSES", field, newval, course=course)
-            self.load_course_table(
-                self.combo_class.currentIndex(),
-                self.ui_table.current_row()
-            )
+            print("§on_pb_change_all_clicked:", changes)
+            tset, old, new = changes
+            # Search all courses in the table for this item ...
+            if tset:
+                for cdata in self.course_table.records:
+                    print("   --", cdata)   # COURSE_LINEs
+                    for t in cdata.teacher_list:
+                        if t.Teacher.id == old:
+                            t._write("Teacher", new)
+                t._table.clear_caches()
+            else:
+                id0, g0 = old
+                id1, g1 = new
+                for cdata in self.course_table.records:
+                    print("   --", cdata)   # COURSE_LINEs
+                    for g in cdata.group_list:
+                        if g.Class.id == id0 and g.GROUP_TAG == g0:
+                            fmap = {}
+                            if id1 != id0:
+                                fmap["Class"] = id1
+                            if g1 != g0:
+                                fmap["GROUP_TAG"] = g1
+                            if fmap:
+                                g._table.update_cells(g.id, **fmap)
+                g._table.clear_caches()
+            self.load_course_table()
 
     @Slot()
     def on_pb_new_course_clicked(self):

@@ -16,6 +16,7 @@
         "program/ui/README_icons",
         "program/ui/course_table.py",
         "program/ui/dialogs/dialog_block_name.py",
+        "program/ui/dialogs/dialog_change_teacher_class.py",
         "program/ui/dialogs/dialog_choose_subject.py",
         "program/ui/dialogs/dialog_choose_timeslot.py",
         "program/ui/dialogs/dialog_course_groups.py",

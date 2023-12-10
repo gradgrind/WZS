@@ -244,15 +244,8 @@ ui.dialogs.dialog_class_groups: {
     NAME_IN_USE:        "Die Gruppenbezeichnung wird schon verwendet"
 }
 
-ui.dialogs.dialog_course_fields: {
-    EDIT_COURSE_FIELDS: "Kursfelder bearbeiten"
-    NEW_COURSE:     "Neuer Kurs"
-    COURSE_NOT_UNIQUE:  "Dieser Kurs (Klasse+Gruppe+Fach+Lehrkraft) existiert schon"
-    NO_CHANGES_TITLE: "Keine Änderungen"
-    NO_CHANGES:     "Die Daten sind unverändert ... trotzdem schließen?"
-    LOSE_CHANGES_TITLE: "Ungespeicherte Änderungen"
-    LOSE_CHANGES:   "Die Änderungen werden verworfen ... trotzdem schließen?"
-    UNKNOWN_GROUP:  "In Klasse {klass}: Gruppe „{g}“ ist nicht definiert"
+ui.dialogs.dialog_change_teacher_class: {
+    NO_TEACHER_OR_GROUP: "Keine Lehrkraft oder Schülergruppe zu ersetzen"
 }
 
 #ui.dialogs.dialog_day_period: {
@@ -355,6 +348,7 @@ ui.modules.course_editor: {
     REALLY_DELETE:  "Soll dieser „Kurs“ wirklich gelöscht werden?"
     TEACHER_TOTAL:  "Stundenplanbelegung: {n} Stunden ;  Deputatsstunden: {total}"
     DOUBLE_PARALLEL: "Parallel-Kennung '{tag}' schon bei einer anderen Stunde des Blocks vorhanden"
+    NO_COURSE:      "Kein Kurs!"
 }
 
 ui.modules.grades_manager: {
