@@ -1,7 +1,7 @@
 """
 ui/modules/course_editor.py
 
-Last updated:  2023-12-09
+Last updated:  2023-12-10
 
 Edit course and blocks+lessons data.
 
@@ -43,15 +43,12 @@ from ui.ui_base import (
     load_ui,
     ### QtWidgets:
     QWidget,
-    QLineEdit,
     QHeaderView,
     QAbstractButton,
     ### QtGui:
-#    QIcon,
     ### QtCore:
     QObject,
     Qt,
-#    QPoint,
     QEvent,
     Slot,
     ### other
@@ -63,10 +60,6 @@ from ui.table_support import Table
 from core.base import REPORT_CRITICAL, REPORT_ERROR
 from core.db_access import db_TableRow
 from core.basic_data import get_database, REPORT_SPLITTER, print_fix
-#from core.classes import Classes
-#from core.teachers import Teachers
-#from core.subjects import Subjects
-#from core.time_slots import TimeSlots
 from core.rooms import get_db_rooms
 from core.course_base import (
     filter_activities,
@@ -151,9 +144,8 @@ class CourseEditorPage(QObject):
 # Position? - obj.mapToGlobal(QPoint(0,0))
             h()
             return True
-#TODO: Shouldn't "return False" be good enough here?
         return False
-        return super().eventFilter(obj, event)
+#        return super().eventFilter(obj, event)
 
     def enter(self):
         ## The database tables that are loaded here are expected not to
@@ -247,20 +239,8 @@ class CourseEditorPage(QObject):
         If it is not supplied (value -1), the existing row number will be
         used, if possible – this is useful for table refreshes.
         """
-
-# A "workload/payment only" type is only distinguished by having no
-# lesson-unit entries associated with it. So perhaps there is actually
-# only the question of a block name, which would enable multiple "courses"
-# to share the lesson-block entry.
-# The WORKLOAD field is, however, a bit complicated and perhaps a little
-# ambiguous. It can simply contain the "value" of the block as a number
-# of work-hour ("Deputatsstunden") equivalents. This might be helpful for
-# entries with no actual lessons.
-# Where there are lessons, it might be more helpful to have a weighting
-# factor for the number of lessons. But where there are blocks taught
-# consecutively ("Epochen"), it might be more helpful to specify a
-# weighting for an individual block, the number of blocks being specified
-# in the "course-teachers" entries.
+        # A LESSON_BLOCKS record may be shared by multiple COURSE_BASE
+        # records, but only if it has a non-empty "BLOCK" field.
 
         if select_index >= 0:
             self.filter_value = self.select_list[select_index][0]
@@ -269,8 +249,6 @@ class CourseEditorPage(QObject):
             table_row = self.ui_table.current_row()
 
         # <filter_activities> returns a list of <COURSE_LINE> objects
-#TODO: This is failing if a class is changed, at least on a single-class
-# course.
         alist = filter_activities(self.filter_field, self.filter_value)
         #print("\n§course_table.load:", self.filter_field, self.filter_value)
         #print("§courses:", alist)
@@ -280,7 +258,6 @@ class CourseEditorPage(QObject):
         #print("§records:", self.course_table.records)
         self.course_data = None
         self.ui.pb_delete_course.setEnabled(False)
-#        self.ui.pb_edit_course.setEnabled(False)
         self.ui.frame_r.setEnabled(False)
         rn = len(self.course_table.records)
         if rn > 0:
@@ -291,7 +268,6 @@ class CourseEditorPage(QObject):
             self.ui.course_table.setCurrentCell(-1, 0)
         self.suppress_handlers = _sh
         self.on_course_table_itemSelectionChanged()
-#        self.lesson_restore_id = -1
         self.total_calc()
 
     def display_lessons(self, lesson_block: db_TableRow):
@@ -338,10 +314,6 @@ class CourseEditorPage(QObject):
         """
         if self.suppress_handlers or i < 0: return
         self.load_course_table(i, 0)
-
-#    @Slot(int, int)
-#    def on_lesson_table_cellClicked(self, row, col):
-#        print("§on_lesson_table_cellClicked:", row, col)
 
     @Slot(int, int)
     def on_lesson_table_cellActivated(self, row, col):
@@ -481,14 +453,6 @@ class CourseEditorPage(QObject):
         if self.course_data:
             self.set_text_report_fields(REPORT_SPLITTER if on else "")
 
-#    @Slot()
-#    def on_lesson_table_itemSelectionChanged(self):
-#        print("§on_lesson_table_itemSelectionChanged:",
-#            self.ui.lesson_table.currentRow(),
-#            self.ui.lesson_table.currentColumn(),
-#        )
-#        return
-
     ### field editors ###
 
     def edit_wish_room(self):
@@ -609,6 +573,28 @@ class CourseEditorPage(QObject):
         These are both text fields which are interpreted as fixed-point
         numbers.
         """
+        # The "WORKLOAD" field is a text representation of a decimal number.
+        # It is used in conjunction with the "PAY_FACTOR" field of the
+        # associated teachers to determine a workload / payment factor for
+        # the teachers.
+        # If it is negative it specifies a weighting for the lessons, the
+        # value is multiplied by the number of lesson periods in the block.
+        # A positive "WORKLOAD" is taken as is, the number of lessons
+        # playing no role. At least for "courses" (here a misnomer) with no
+        # lessons, a positive value would be necessary to provide some sort
+        # of workload rating.
+        # There might be other cases where the number of lessons is not the
+        # primary factor in determining the workload. For example, where
+        # blocks of a subject are taught consecutively ("Waldorf-Epochen"),
+        # it might be best to specify a weighting for an individual subject
+        # block ("Epoche") as "WORKLOAD", the number of blocks being
+        # specified in the "PAY_FACTOR" entries of the teachers.
+        # Where the "PAY_FACTOR" is not used for a special purpose, like
+        # number-of-blocks, it represents a further, personal factor. It
+        # would probably mostly simply be "1", but it would allow, say, the
+        # people involved in "team-teaching" to be weighted differently.
+        # ambiguous.
+
         delta = workloadDialog(
             self.course_data,
             self.n_lessons,
@@ -669,16 +655,8 @@ class CourseEditorPage(QObject):
         self.suppress_handlers = True
 
         row = self.ui.course_table.currentRow()
-#TODO--
-        #print(f"\n§on_course_table_itemSelectionChanged: TODO {row}")
-#        return
-
-#        lesson_id = self.lesson_restore_id
         if row >= 0:
             self.ui.pb_delete_course.setEnabled(True)
-#? Perhaps I only want add and delete for course rows?
-#            self.ui.pb_edit_course.setEnabled(True)
-
             self.course_data = self.course_table.records[row]
             self.last_course = self.course_data     # for restoring views
             self.display_lessons(self.course_data.course.Lesson_block)
@@ -753,12 +731,7 @@ class CourseEditorPage(QObject):
             if self.course_table.edit_cell(row, col):
                 self.load_course_table()
 
-#???
-    @Slot()
-    def on_pb_edit_course_clicked(self):
-        self.edit_course(self.ui_table.current_row())
-
-#???
+#TODO???
     @Slot()
     def on_pb_change_all_clicked(self):
         """Either all teacher fields or all class fields for the current
@@ -788,24 +761,6 @@ class CourseEditorPage(QObject):
                 self.combo_class.currentIndex(),
                 self.ui_table.current_row()
             )
-
-#???
-    def edit_course(self, row):
-        """Activate the course field editor."""
-        changes = self.edit_course_fields(self.course_data)
-        if changes:
-            self.update_course(row, changes)
-
-#???
-    def update_course(self, row, changes):
-        if db_update_fields(
-            "COURSES",
-            [(f, v) for f, v in changes.items()],
-            course=self.course_id,
-        ):
-            self.load_course_table(self.combo_class.currentIndex(), row)
-        else:
-            raise Bug(f"Course update ({self.course_id}) failed: {changes}")
 
     @Slot()
     def on_pb_new_course_clicked(self):
@@ -907,138 +862,6 @@ class CourseEditorPage(QObject):
             self.db.table("LESSON_BLOCKS").delete_records([lbid])
         self.load_course_table()
 
-#?
-#    @Slot()
-#    def _on_lesson_table_itemSelectionChanged(self):
-#        print("§on_lesson_table_itemSelectionChanged:",
-#            self.ui.lesson_table.currentRow(),
-#            self.ui.lesson_table.currentColumn(),
-#        )
-
-    def field_editor(self, obj: QLineEdit):
-        object_name = obj.objectName()
-        lthis = self.current_lesson[1] # the Record object
-        lid = lthis["Lid"]
-        ### PAYMENT (LESSON_DATA)
-        if object_name == "payment":
-            result = WorkloadDialog.popup(
-                start_value=lthis, parent=self
-            )
-            if result is not None:
-                # Update the db. A redisplay is only necessary because
-                # all loaded "activities" with the same pay data must
-                # be updated.
-                db_update_fields(
-                    "LESSON_DATA",
-                    (   ("Pay_factor_id", result[1]),
-                        ("PAY_NLESSONS", result[0])
-                    ),
-                    Lesson_data=lthis["Lesson_data"]
-                )
-                self.load_course_table(lesson_id=lid)
-        ### ROOM (LESSON_DATA)
-        elif object_name == "wish_room":
-            classroom = get_classes().get_classroom(
-                self.course_data["CLASS"], null_ok=True
-            )
-            result = RoomDialog.popup(
-                start_value=lthis["ROOM"],
-                classroom=classroom,
-                parent=self
-            )
-            if result is not None:
-                db_update_field(
-                    "LESSON_DATA",
-                    "ROOM",
-                    result,
-                    Lesson_data=lthis["Lesson_data"]
-                )
-                self.load_course_table(lesson_id=lid)
-        ### BLOCK (LESSON_GROUPS)
-        elif object_name == "block_name":
-            row = self.lesson_table.currentRow()
-            assert row >= 0
-            result = BlockNameDialog.popup(
-                # <course_data> is necessary for courses with no "lessons"
-                # Otherwise the data could be taken from <course_lessons>.
-                course_lessons=self.course_lessons,
-                lesson_row=row,
-                parent=self
-            )
-            if result is not None:
-                bsid, btag = result
-                db_update_fields(
-                    "LESSON_GROUPS",
-                    [("BLOCK_SID", bsid), ("BLOCK_TAG", btag)],
-                    lesson_group=lthis["Lesson_group"]
-                )
-                # Redisplay
-                self.load_course_table(lesson_id=lid)
-        ### NOTES (LESSON_GROUPS)
-        elif object_name == "notes":
-            result = TextLineDialog.popup(lthis["NOTES"], parent=self)
-            if result is not None:
-                db_update_field(
-                    "LESSON_GROUPS",
-                    "NOTES",
-                    result,
-                    lesson_group=lthis["Lesson_group"]
-                )
-                self.load_course_table(lesson_id=lid)
-        ### LENGTH (LESSONS) --- own handler: on_lesson_length_ ...
-        ### TIME (LESSONS)
-        elif object_name == "wish_time":
-            result = DayPeriodDialog.popup(
-                start_value=lthis["TIME"],
-                parent=self
-            )
-            if result is not None:
-                db_update_field(
-                    "LESSONS",
-                    "TIME",
-                    result,
-                    lid=lid
-                )
-                self.load_course_table(lesson_id=lid)
-        ### PARALLEL (LESSONS)
-        else:
-            assert object_name == "parallel", (
-                f"Click event on object {object_name}"
-            )
-            result = ParallelsDialog.popup(
-                self.current_parallel_tag, parent=self
-            )
-            if result is not None:
-                if self.current_parallel_tag.TAG:
-                    # There is already a parallel record
-                    if result.TAG:
-                        # Change the tag and/or weighting
-                        db_update_fields(
-                            "PARALLEL_LESSONS",
-                            [
-                                ("TAG", result.TAG),
-                                ("WEIGHTING", result.WEIGHTING),
-                            ],
-                            lesson_id = lid,
-                        )
-                    else:
-                        # Remove the record
-                        db_delete_rows(
-                            "PARALLEL_LESSONS",
-                            lesson_id = lid,
-                        )
-                else:
-                    assert result.TAG
-                    # Make a new parallel record
-                    db_new_row(
-                        "PARALLEL_LESSONS",
-                        lesson_id = lid,
-                        TAG=result.TAG,
-                        WEIGHTING=result.WEIGHTING,
-                    )
-                self.current_parallel_tag = result
-                self.load_course_table(lesson_id=lid)
-
     def total_calc(self):
         """For teachers and classes determine the total workload.
         For classes, the (sub-)groups will be taken into consideration, so
@@ -1071,170 +894,7 @@ class CourseEditorPage(QObject):
             self.ui.total.clear()
             self.ui.total.setEnabled(False)
 
-#    @Slot(str)
-#    def on_lesson_length_textActivated(self, i):
-#        ival = int(i)
-#        lthis = self.current_lesson[1]
-#        if lthis["LENGTH"] != ival:
-#            lid = lthis["Lid"]
-#            db_update_field(
-#                "LESSONS",
-#                "LENGTH", ival,
-#                lid=lid
-#            )
-#            # Redisplay
-#            self.load_course_table(lesson_id=lid)
-
-#    @Slot()
-#    def on_new_element_clicked(self):
-#        """Add an item type: block, simple lesson or no-lesson/pay-only.
-#        The item can be completely new or share a LESSON_GROUP, and
-#        possibly a LESSON_DATA, entry.
-#        All the fiddly details are taken care of in <NewCourseLessonDialog>,
-#        which should only return valid results.
-#        If a completely new simple or block lesson is added, a single
-#        lesson is also added to the LESSONS table.
-#        """
-#        # <self.course_data> is – effectively – a random record for the
-#        # current course, the first one in the list returned by
-#        # <filter_activities(...)>.
-#        # It is not necessarily that of the currently selected "lesson".
-##TODO--
-#        print("?????", self.course_data)
-#
-#        bn = NewCourseLessonDialog.popup(self.course_data)
-#        if not bn:
-#            return
-##TODO--
-#        print("? ->", bn)
-#
-#        l= -1
-#        lg = bn["Lesson_group"]
-#        ld = bn.get("Lesson_data", -1)
-#        if lg < 0:
-#            bsid = bn["BLOCK_SID"]
-#            btag = bn["BLOCK_TAG"]
-#            if bsid:
-#                # new block
-#                lg = db_new_row(
-#                    "LESSON_GROUPS",
-#                    BLOCK_SID=bsid,
-#                    BLOCK_TAG=btag,
-#                    NOTES=""
-#                )
-#                ld = db_new_row(
-#                    "LESSON_DATA",
-#                    Pay_factor_id=get_default_pay_factor_id(),
-#                    PAY_NLESSONS="1",
-#                    ROOM=""
-#                )
-#                cl_id = db_new_row(
-#                    "COURSE_LESSONS",
-#                    Course=self.course_id,
-#                    Lesson_group=lg,
-#                    Lesson_data=ld
-#                )
-#                l = db_new_row(
-#                    "LESSONS",
-#                    Lesson_group=lg,
-#                    LENGTH=1,
-#                    TIME="",
-#                    PLACEMENT="",
-#                    ROOMS=""
-#                )
-#            elif btag == "$":
-#                # new payment-only
-#                lg = 0
-#                l = 0
-#                ld = db_new_row(
-#                    "LESSON_DATA",
-#                    Pay_factor_id=get_default_pay_factor_id(),
-#                    PAY_NLESSONS="1",
-#                    ROOM=""
-#                )
-#                cl_id = db_new_row(
-#                    "COURSE_LESSONS",
-#                    Course=self.course_id,
-#                    Lesson_group=lg,
-#                    Lesson_data=ld
-#                )
-#            else:
-#                assert not btag
-#                # new simple lesson
-#                lg = db_new_row(
-#                    "LESSON_GROUPS",
-#                    BLOCK_SID="",
-#                    BLOCK_TAG="",
-#                    NOTES=""
-#                )
-#                ld = db_new_row(
-#                    "LESSON_DATA",
-#                    Pay_factor_id=get_default_pay_factor_id(),
-#                    PAY_NLESSONS="-1",
-#                    ROOM=""
-#                )
-#                cl_id = db_new_row(
-#                    "COURSE_LESSONS",
-#                    Course=self.course_id,
-#                    Lesson_group=lg,
-#                    Lesson_data=ld
-#                )
-#                l = db_new_row(
-#                    "LESSONS",
-#                    Lesson_group=lg,
-#                    LENGTH=1,
-#                    TIME="",
-#                    PLACEMENT="",
-#                    ROOMS=""
-#                )
-#        else:
-#            if ld < 0:
-#                ld = db_new_row(
-#                    "LESSON_DATA",
-#                    Pay_factor_id=bn["Pay_factor_id"],
-#                    PAY_NLESSONS=bn["PAY_NLESSONS"],
-#                    ROOM=""
-#                )
-#            cl_id = db_new_row(
-#                "COURSE_LESSONS",
-#                Course=self.course_id,
-#                Lesson_group=lg,
-#                Lesson_data=ld
-#            )
-#            if lg == 0:
-#                l = 0
-#        # Redisplay
-#        self.load_course_table(lesson_id=l)
-
-#    @Slot()
-#    def on_remove_element_clicked(self):
-#        """Remove the current element (pay-only or lesson-group) from
-#        the current course – that is the COURSE_LESSONS entry.
-#        If there are no other COURSE_LESSONS entries with the same
-#        lesson-group, the associated lessons will also be deleted.
-#        """
-#        cldata = self.current_lesson[1]
-#        lg = cldata["Lesson_group"]
-#        ld = cldata["Lesson_data"]
-#        # Delete COURSE_LESSONS entry
-#        db_delete_rows("COURSE_LESSONS", Cl_id=cldata["Cl_id"])
-#        # Delete associated lessons if they are no longer referenced
-#        if not db_values(
-#            "COURSE_LESSONS",
-#            "Cl_id",
-#            lesson_group=lg
-#        ):
-#            db_delete_rows("LESSONS", Lesson_group=lg)
-#        # Delete LESSON_DATA entry if it is no longer referenced
-#        if not db_values(
-#            "COURSE_LESSONS",
-#            "Cl_id",
-#            Lesson_data=ld
-#        ):
-#            db_delete_rows("LESSON_DATA", Lesson_data=ld)
-#        # Reload course data
-#        self.load_course_table()
-
+#TODO
     @Slot()
     def on_make_tables_clicked(self):
         ExportTable(parent=self).activate()

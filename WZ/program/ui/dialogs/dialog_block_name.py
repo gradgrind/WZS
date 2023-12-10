@@ -1,7 +1,7 @@
 """
 ui/dialogs/dialog_block_name.py
 
-Last updated:  2023-11-29
+Last updated:  2023-12-10
 
 Supporting "dialog" for the course editor – choose or edit the name tag
 for a lesson block.
@@ -68,6 +68,8 @@ from ui.ui_base import (
 
 ### -----
 
+#TODO: What about a "reset" button, visible only when a named block can
+# be "de-named", i.e. when there is only a single attached course?
 
 def blockNameDialog(
     start_value: Optional[db_TableRow] = None,  # a BLOCK_LESSONS row
