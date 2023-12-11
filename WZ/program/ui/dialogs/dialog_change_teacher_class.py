@@ -6,8 +6,6 @@ Last updated:  2023-12-10
 Supporting "dialog", for the course editor – change all occurrences of
 a class or teacher in a courses display page.
 
-To test this, activate it in the course editor (ui/modules/course_editor).
-
 
 =+LICENCE=============================
 Copyright 2023 Michael Towers
@@ -115,7 +113,6 @@ def newTeacherClassDialog(
 
     def changed():
         nonlocal chosen
-        #print("§changed")
         i = ui.new_value.currentIndex()
         if ui.rb_teacher.isChecked():
             i0 = ui.combo_teacher.currentIndex()

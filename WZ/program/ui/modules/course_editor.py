@@ -73,7 +73,6 @@ from core.course_base import (
     block_courses,
 )
 
-#from ui.dialogs.dialog_course_fields import CourseEditorForm
 from ui.dialogs.dialog_change_teacher_class import newTeacherClassDialog
 from ui.dialogs.dialog_choose_timeslot import chooseTimeslotDialog
 from ui.dialogs.dialog_room_choice import (
@@ -81,12 +80,11 @@ from ui.dialogs.dialog_room_choice import (
     print_room_choice,
 )
 from ui.dialogs.dialog_workload import workloadDialog
-#from ui.dialogs.dialog_new_course_lesson import NewCourseLessonDialog
 from ui.dialogs.dialog_block_name import blockNameDialog
 from ui.dialogs.dialog_parallel_lessons import parallelsDialog
 from ui.dialogs.dialog_text_line import textLineDialog
 from ui.dialogs.dialog_integer import integerDialog
-#from ui.dialogs.dialog_make_course_tables import ExportTable
+from ui.dialogs.dialog_make_course_tables import exportTable
 
 def display_parallel(lesson_rec: db_TableRow) -> str:
     """Construct a display text for a parallel tag.
@@ -913,7 +911,7 @@ class CourseEditorPage(QObject):
 #TODO
     @Slot()
     def on_make_tables_clicked(self):
-        ExportTable(parent=self).activate()
+        exportTable(parent=self).activate()
 
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
