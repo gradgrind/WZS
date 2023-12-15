@@ -6,20 +6,14 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>704</width>
-    <height>629</height>
+    <width>641</width>
+    <height>421</height>
    </rect>
-  </property>
-  <property name="sizePolicy">
-   <sizepolicy hsizetype="Fixed" vsizetype="Minimum">
-    <horstretch>0</horstretch>
-    <verstretch>0</verstretch>
-   </sizepolicy>
   </property>
   <property name="windowTitle">
    <string>Deputatsanteil festlegen</string>
   </property>
-  <layout class="QVBoxLayout" name="verticalLayout">
+  <layout class="QVBoxLayout" name="verticalLayout" stretch="0,0,0,0,1,0,0,0,0">
    <item>
     <widget class="QRadioButton" name="rb_lessons">
      <property name="text">
@@ -35,21 +29,13 @@
      <property name="text">
       <string>Deputat direkt angeben</string>
      </property>
-     <property name="checked">
-      <bool>false</bool>
-     </property>
     </widget>
    </item>
    <item>
     <widget class="QLabel" name="label">
-     <property name="sizePolicy">
-      <sizepolicy hsizetype="MinimumExpanding" vsizetype="Fixed">
-       <horstretch>0</horstretch>
-       <verstretch>0</verstretch>
-      </sizepolicy>
-     </property>
      <property name="text">
-      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Für Unterricht in Blöcken, die zeitlich begrenzt sind („Epochen“), sollte das Deputat &lt;span style=&quot; font-weight:700;&quot;&gt;direkt&lt;/span&gt; angegeben werden; das &lt;span style=&quot; font-weight:700;&quot;&gt;Grunddeputat&lt;/span&gt; ist in diesem Fall für &lt;span style=&quot; font-style:italic;&quot;&gt;eine&lt;/span&gt; Epoche. Die Anzahl der Epochen kann dann als &lt;span style=&quot; font-weight:700;&quot;&gt;Blockanzahl&lt;/span&gt; angegeben werden.&lt;/p&gt;&lt;p&gt;Anderenfalls sollte die &lt;span style=&quot; font-weight:700;&quot;&gt;Blockanzahl&lt;/span&gt; 1 sein.&lt;/p&gt;&lt;p&gt;Das &lt;span style=&quot; font-weight:700;&quot;&gt;Grunddeputat&lt;/span&gt; bzw. der &lt;span style=&quot; font-weight:700;&quot;&gt;Stundenfaktor&lt;/span&gt; ist eine Eigenschaft der gruppierten Unterrichtsstunden, die Blockanzahl eine Eigenschaft des „Kurses“.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+      <string>Für Unterricht in Epochen sollte das Deputat direkt angegeben werden – das „Grunddeputat“ ist dann für eine „Epoche“.
+Die Anzahl der Epochen wird über den persönlichen Faktor festgelegt.</string>
      </property>
      <property name="wordWrap">
       <bool>true</bool>
@@ -62,69 +48,6 @@
       <enum>Qt::Horizontal</enum>
      </property>
     </widget>
-   </item>
-   <item>
-    <layout class="QHBoxLayout" name="horizontalLayout">
-     <item>
-      <widget class="QLabel" name="workload_label">
-       <property name="text">
-        <string>Grunddeputat</string>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QDoubleSpinBox" name="workload">
-       <property name="decimals">
-        <number>3</number>
-       </property>
-       <property name="maximum">
-        <double>2000000.000000000000000</double>
-       </property>
-       <property name="stepType">
-        <enum>QAbstractSpinBox::DefaultStepType</enum>
-       </property>
-       <property name="value">
-        <double>1.000000000000000</double>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <spacer name="horizontalSpacer">
-       <property name="orientation">
-        <enum>Qt::Horizontal</enum>
-       </property>
-       <property name="sizeHint" stdset="0">
-        <size>
-         <width>40</width>
-         <height>20</height>
-        </size>
-       </property>
-      </spacer>
-     </item>
-     <item>
-      <widget class="QLabel" name="label_3">
-       <property name="text">
-        <string>Blockanzahl</string>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QDoubleSpinBox" name="block_count">
-       <property name="decimals">
-        <number>3</number>
-       </property>
-       <property name="maximum">
-        <double>2000000.000000000000000</double>
-       </property>
-       <property name="stepType">
-        <enum>QAbstractSpinBox::DefaultStepType</enum>
-       </property>
-       <property name="value">
-        <double>1.000000000000000</double>
-       </property>
-      </widget>
-     </item>
-    </layout>
    </item>
    <item>
     <widget class="QTableWidget" name="teacher_table">
@@ -141,13 +64,7 @@
       </size>
      </property>
      <attribute name="horizontalHeaderVisible">
-      <bool>true</bool>
-     </attribute>
-     <attribute name="horizontalHeaderMinimumSectionSize">
-      <number>100</number>
-     </attribute>
-     <attribute name="horizontalHeaderDefaultSectionSize">
-      <number>200</number>
+      <bool>false</bool>
      </attribute>
      <attribute name="horizontalHeaderStretchLastSection">
       <bool>false</bool>
@@ -162,12 +79,12 @@
      </row>
      <column>
       <property name="text">
-       <string>Lehrperson</string>
+       <string>person</string>
       </property>
      </column>
      <column>
       <property name="text">
-       <string>persönlicher Faktor</string>
+       <string>factor</string>
       </property>
      </column>
      <item row="0" column="0">
@@ -181,6 +98,46 @@
       </property>
      </item>
     </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout">
+     <item>
+      <widget class="QLabel" name="workload_label">
+       <property name="text">
+        <string>Stundenfaktor</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="horizontalSpacer">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeType">
+        <enum>QSizePolicy::Fixed</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QDoubleSpinBox" name="workload">
+       <property name="decimals">
+        <number>3</number>
+       </property>
+       <property name="maximum">
+        <double>2000000.000000000000000</double>
+       </property>
+       <property name="stepType">
+        <enum>QAbstractSpinBox::DefaultStepType</enum>
+       </property>
+      </widget>
+     </item>
+    </layout>
    </item>
    <item>
     <layout class="QHBoxLayout" name="horizontalLayout_2">

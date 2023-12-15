@@ -1,7 +1,7 @@
 """
 core/list_activities.py
 
-Last updated:  2023-12-11
+Last updated:  2023-12-14
 
 Present information on activities for teachers and classes/groups.
 The information is formatted in pdf documents using the reportlab
@@ -44,10 +44,22 @@ T = TRANSLATIONS("core.list_activities")
 from typing import NamedTuple, Optional
 from io import BytesIO
 
-from core.base import class_group_join
-from core.basic_data import CONFIG, get_database
+from core.base import format_class_group
+from core.basic_data import CONFIG, get_database, print_fix
 from core.classes import GROUP_ALL
-from core.course_base import filter_activities
+from core.course_base import (
+    filter_activities,
+    workload_class,
+)
+#from ui.ui_base import (
+#    ##QtGui:
+#    QTextDocument,
+#    #QPrinter,
+#    QPdfWriter,
+#    QPageSize,
+#    ##QtCore:
+#    #QMarginsF,
+#)
 
 #import lib.pylightxl as xl
 #from tables.pdf_table import TablePages
@@ -621,14 +633,18 @@ def make_class_table_pdf():
 # It might not be the most efficient, but could reduce code duplication.
 
     db = get_database()
+    lesson_units = db.table("LESSON_UNITS")
     clist = db.table("CLASSES").class_list(skip_null=False)
     for c, class_tag, class_name in clist:
-        course_lines = filter_activities("CLASS", c)
+        class_lines = [
+            f"<h3>{class_name} ({class_tag})</h3>"
+        ]
+        courses = filter_activities("CLASS", c)
 # I should first sort these according to blocks, grouping the courses
 # belonging to a block ...
         block_map = {}
         noblock = []
-        for cline in course_lines:
+        for cline in courses:
             block = cline.course.Lesson_block.BLOCK
             if block:
                 try:
@@ -638,15 +654,180 @@ def make_class_table_pdf():
             else:
                 noblock.append(cline)
 #TODO
-        print("\nCLASS", class_tag)
-        for b, clines in block_map.items():
-            print("  --", b)
-            for cl in clines:
-                print("     +", clines)
-        for cl in noblock:
-            print("  **", cl)
+        if block_map or noblock:
+            print("\nCLASS", class_tag)
+            for b in sorted(block_map):
+                clines = block_map[b]
+                # Need the lesson lengths
+                lbid = clines[0].course.Lesson_block.id
+                llist = [
+                    l.LENGTH for l in lesson_units.get_block_units(lbid)
+                ]
+                try:
+                    bname, bcomment = b.split("#", 1)
+                except ValueError:
+                    bname, bcomment = b, ""
+                print(f"  [[{bname}]] | {llist} | {sum(llist)}")
+#TODO?: I haven't got courses from other classes here (except where other
+# classes are included in a course involving this class).
+# To get these I would need to search ALL courses associated with the
+# block.
+# Do I really want to show all classes using the block? Probably not here!
+# To get all courses for a block:
+#    block_courses(block_id: int) -> list[COURSE_LINE]
+# get classes and groups for a single course:
+#                    g.Class.CLASS, g.GROUP_TAG
+#                    for g in course.group_list
+
+#TODO: flag for printing comments
+                if True and bcomment:
+                    print("    #", bcomment)
+                for cl in clines:
+                    glist = []
+                    g0 = None
+                    for g in cl.group_list:
+                        if g.Class.id == c:
+                            g0 = g.GROUP_TAG
+                        else:
+                            glist.append(
+                                format_class_group(
+                                    g.Class.CLASS, g.GROUP_TAG
+                                )
+                            )
+                    if glist:
+                        g0 = f"{g0} + {', '.join(sorted(glist))}"
+                    print("    –",
+                        cl.show("Subject"), "|",
+                        g0, "|",
+                        cl.show("Teachers"), "|",
+                        f"({print_fix(cl.course.BLOCK_COUNT)})", "|",
+#TODO: The number of block units might be a useful measure here, e.g. (2).
+# It would be relevant only for block courses. The teacher pay-factor
+# would not need to appear in the class list.
+# The pay calculations would need to take this number into consideration
+# as an additional factor (but here not directly relevant).
+                        # no total number of lessons (see block line)
+                    )
+            for cl in noblock:
+#TODO
+                print("  **", cl)
+
+            g_n_list = workload_class(
+                c, courses
+            )
+            print("§workload:", " ;  ".join((f"{g}: {n}") for g, n in g_n_list))
 
     return
+
+# Try producing an html table in a QTextDocument (including long pages
+# and <thead>). -> pdf (with QPdfWriter), -> odt (with QTextDocumentWriter)?
+
+
+
+
+    html = """
+        <div align=right>City, 11/11/2015</div>
+        <div align=left>Sender Name<br>street 34/56A<br>121-43 city</div>
+        <h1 align=center>DOCUMENT TITLE</h1>
+        <p align=justify style="margin-top:300px">
+            document content document content document content
+            document content document content document content
+            document content document content document content
+            document content document content document content
+            document content document content document content
+            document content document content document content
+            document content document content
+        </p>
+        <div style="margin-top:300px"></div>
+        <p style="margin-bottom:100px">AWAVA To You – margin-bottom seems to have no effect</p>
+        <table style="border-collapse:collapse">
+          <tr>
+            <td width=5%></td>
+            <td width=10% align=center style="border-bottom:1px solid gray; padding:2">A: 28</td>
+            <td width=10% align=center style="border-bottom:1px solid gray; padding:2">B: 26</td>
+            <td width=70% style="border-bottom:1px solid #80E080; padding:2"></td>
+            <td width=5%></td>
+          </tr>
+        </table>
+        <table style="border-collapse:collapse">
+          <thead>
+            <tr>
+              <th align=left width=40% style="border-bottom:1px solid red; padding:2">Fach</th>
+              <th align=left width=12% style="border-bottom:1px solid red; padding:2">Gruppe</th>
+              <th align=left width=15% style="border-bottom:1px solid red; padding:2">Lehrer</th>
+              <th align=left width=18% style="border-bottom:1px solid red; padding:2">Stunden</th>
+              <th align=left width=15% style="border-bottom:1px solid red; padding:2">insgesamt</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="padding-top:10px; padding-bottom:10px">A</td>
+              <td>B</td>
+              <td>C</td>
+              <td>D</td>
+              <td>E</td>
+            </tr>
+            <tr>
+              <td style="padding-top:10px; padding-bottom:10px">A</td>
+              <td>B</td>
+              <td>C</td>
+              <td>D</td>
+              <td>E</td>
+            </tr>
+            <tr>
+              <td style="padding-top:10px; padding-bottom:10px">A</td>
+              <td>B</td>
+              <td>C</td>
+              <td>D</td>
+              <td>E</td>
+            </tr>
+            <tr>
+              <td style="padding-top:10px; padding-bottom:10px">A</td>
+              <td>B</td>
+              <td>C</td>
+              <td>D</td>
+              <td>E</td>
+            </tr>
+            <tr>
+              <td style="padding-top:10px; padding-bottom:10px">A</td>
+              <td>B</td>
+              <td>C</td>
+              <td>D</td>
+              <td>E</td>
+            </tr>
+            <tr>
+              <td></td>
+              <td></td>
+              <td></td>
+              <td></td>
+              <td></td>
+            </tr>
+          </tbody>
+        </table>
+        <div align=right>sincerly</div>
+    """
+    doc = QTextDocument()
+    doc.setHtml(html)
+
+#    printer = QPrinter(QPrinter.PrinterMode.HighResolution)
+#    printer.setOutputFormat(QPrinter.OutputFormat.PdfFormat);
+#    printer.setPageSize(QPageSize.PageSizeId.A4);
+#    printer.setOutputFileName("/tmp/test.pdf");
+#    printer.setPageMargins(QMarginsF(15, 15, 15, 15));
+
+    pdfwriter = QPdfWriter("/home/user/test1.pdf")
+    pdfwriter.setPageSize(QPageSize.PageSizeId.A4)
+    doc.print_(pdfwriter)
+
+    return
+
+##QtGui:
+#QTextDocument,
+#QPrinter
+#QPdfWriter
+#QPageSize
+##QtCore:
+#QMarginsF
 
 
     classes = get_classes()

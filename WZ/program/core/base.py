@@ -1,7 +1,7 @@
 """
 core/base.py
 
-Last updated:  2023-11-23
+Last updated:  2023-12-15
 
 Basic configuration and structural stuff.
 
@@ -132,6 +132,9 @@ def RESOURCEPATH(path):
 
 
 def format_class_group(c: str, g: str) -> str:
+    """Make a full class-group descriptor from the class and the possibly
+    null ("") group.
+    """
     return f"{c}.{g or '–'}"
 
 
@@ -342,15 +345,6 @@ def class_group_split(class_group: str) -> Tuple[str,str]:
     except ValueError:
         g = ""
     return class_group, g
-
-
-def class_group_join(klass:str, group: Optional[str] = None) -> str:
-    """Make a full group descriptor (class or class.group) from the
-    given class and optional group.
-    """
-    if group:
-        return f"{klass}.{group}"
-    return klass
 
 
 # TODO:

@@ -1,7 +1,7 @@
 """
 core/course_base.py
 
-Last updated:  2023-12-09
+Last updated:  2023-12-15
 
 Support functions dealing with courses, lessons, etc.
 
@@ -348,6 +348,7 @@ class Courses(db_Table):
                     "Lesson_block",
                     target = LessonBlocks.table
                 ),
+                DB_FIELD_FIX("BLOCK_COUNT", min = 0.0),
                 DB_FIELD_REFERENCE(
                     "Room_group",
                     target = RoomGroups.table
@@ -712,6 +713,7 @@ def teachers_print_names(course_data: COURSE_LINE) -> str:
 
 def print_workload(
     workload: float,
+    blocks: float,
     nlessons: int,
     teacher_list: list[tuple[str, float]]
 ) -> str:
@@ -720,6 +722,7 @@ def print_workload(
     """
     if workload < 0.0:
         workload = abs(workload * nlessons)
+    workload *= blocks
     tlist = [
         f"{tid}: {print_fix(workload * pf)}"
         for tid, pf in teacher_list
@@ -731,6 +734,7 @@ def get_pay(teacher: int, course_data: COURSE_LINE, nlessons: int) -> float:
     workload = course_data.course.Lesson_block.WORKLOAD
     if workload < 0.0:
         workload = abs(workload * nlessons)
+    workload *= course_data.course.BLOCK_COUNT
     for t in course_data.teacher_list:
         if t.Teacher.id == teacher:
             return workload * t.PAY_FACTOR

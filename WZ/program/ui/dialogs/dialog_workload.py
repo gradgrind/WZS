@@ -1,7 +1,7 @@
 """
 ui/dialogs/dialog_workload.py
 
-Last updated:  2023-12-01
+Last updated:  2023-12-15
 
 Supporting "dialog" for the course editor – set workload/pay.
 
@@ -41,6 +41,7 @@ T = TRANSLATIONS("ui.dialogs.dialog_workload")
 
 from typing import Optional
 
+from core.base import REPORT_ERROR
 from core.course_base import COURSE_LINE, print_workload
 from core.basic_data import CONFIG, print_fix
 from core.teachers import Teachers
@@ -106,6 +107,8 @@ def workloadDialog(
     @Slot(bool)
     def on_rb_lessons_toggled(on):
         if on:
+            ui.block_count.setEnabled(False)
+            ui.block_count.setValue(1.0)
             ui.workload_label.setText(T["VIA_LESSONS"])
             if suppress_handlers: return
             value_changed()
@@ -113,6 +116,7 @@ def workloadDialog(
     @Slot(bool)
     def on_rb_direct_toggled(on):
         if on:
+            ui.block_count.setEnabled(True)
             ui.workload_label.setText(T["DIRECT"])
             if suppress_handlers: return
             value_changed()
@@ -122,45 +126,51 @@ def workloadDialog(
         if suppress_handlers: return
         value_changed()
 
+    @Slot(float)
+    def on_block_count_valueChanged(value):
+        if suppress_handlers: return
+        value_changed()
+
     ##### functions #####
 
     def shrink():
         ui.resize(0, 0)
 
     def reset():
-        """Set WORKLOAD to 0.0 and all PAY_FACTORs to 1.0."
+        """Set WORKLOAD to 0.0, BLOCK_COUNT to 1.0 and all
+        PAY_FACTORs to 1.0.
         """
-        delta.clear()
-        if workload0 != 0.0:
-            delta.append((-1, 0.0))
-        for i, pf in enumerate(pay_factor_list0):
-            if pf != 1.0:
-                delta.append((i, 1.0))
+        nonlocal delta
+        delta = null_delta
         ui.accept()
 
     def value_changed():
+        """Collect modified parameters in the list <delta>, which contains
+        (key, value) pairs:
+            key -2: BLOCK_COUNT has changed,
+            key -1: WORKLOAD has changed,
+            key >=0: PAY_FACTOR has changed for the indexed teacher (in
+                the course).
+        """
         workload = ui.workload.value()
         if ui.rb_lessons.isChecked() and workload > 0.0:
             workload = - workload
+        bcount = ui.block_count.value()
         ui.payment.setText(print_workload(
-            workload, nlessons, teacher_list
+            workload, bcount, nlessons, teacher_list
         ))
         # Compare with original values
         delta.clear()
         # ... and with "null" values
-        null_delta.clear()
-        if workload != 0.0:
-            null_delta.append((-1, 0.0))
         if workload != workload0:
             delta.append((-1, workload))
+        if bcount != block_count0:
+            delta.append((-2, bcount))
         for i, t in enumerate(teacher_list):
             pf = t[1]
-            if pf != 1.0:
-                null_delta.append((i, 1.0))
             if pf != pay_factor_list0[i]:
                 delta.append((i, pf))
         pb_accept.setEnabled(bool(delta))
-        #pb_reset.setEnabled(bool(null_delta))
 
     ##### dialog main ######
 
@@ -187,11 +197,19 @@ def workloadDialog(
     if start_value:
         workload0 = start_value.course.Lesson_block.WORKLOAD
         if workload0 < 0.0:
+            if start_value.course.BLOCK_COUNT != 1.0:
+                REPORT_ERROR(T["BLOCK_COUNT_NOT_1"])
+                start_value.course._write("BLOCK_COUNT", "1")
+            block_count0 = 1.0
             ui.workload.setValue(- workload0)
             ui.rb_lessons.setChecked(True)
+            on_rb_lessons_toggled(True)
         else:
+            block_count0 = start_value.course.BLOCK_COUNT
+            ui.block_count.setValue(block_count0)
             ui.workload.setValue(workload0)
             ui.rb_direct.setChecked(True)
+            on_rb_direct_toggled(True)
         table.set_row_count(len(start_value.teacher_list))
         for row, ct in enumerate(start_value.teacher_list):
             name = Teachers.get_name(ct.Teacher)
@@ -204,28 +222,41 @@ def workloadDialog(
             pay_factor_list0.append(pf)
     else:
         # for testing only
-        workload0 = -1.0
+        workload0 = -1.0 if nlessons else 0.0
         if workload0 < 0.0:
             ui.workload.setValue(- workload0)
+            block_count0 = 1.0
             ui.rb_lessons.setChecked(True)
+            on_rb_lessons_toggled(True)
         else:
+            ui.block_count.setValue(1.0)
+            block_count0 = 1.0
             ui.workload.setValue(workload0)
             ui.rb_direct.setChecked(True)
+            on_rb_direct_toggled(True)
         table.set_row_count(1)
         ui.teacher_table.item(0, 0).setFlags(Qt.ItemFlag.NoItemFlags)
         ui.teacher_table.item(0, 0).setText("Fred Bloggs")
         item1 = ui.teacher_table.item(0, 1)
-        item1.setData(Qt.ItemDataRole.EditRole, 1.345678)
+        item1.setData(Qt.ItemDataRole.EditRole, 1.0)
         pf = item1.data(Qt.ItemDataRole.EditRole)
         teacher_list.append(("FB", pf))
         pay_factor_list0.append(pf)
-    # Set initial "changed" status
+    ## Set initial "changed" status
     delta = []
-    null_delta = []
+    # Determine whether the reset button should be shown. If so, <null_delta>
+    # will be the return value when it is pressed.
+    null_delta = []  
+    if workload0 != 0.0:
+        null_delta.append((-1, 0.0))
+    if block_count0 != 1.0:
+        null_delta.append((-2, 1.0))
+    for i, pf in enumerate(pay_factor_list0):
+        if pf != 1.0:
+            null_delta.append((i, 1.0))
+    pb_reset.setVisible(bool(null_delta))
     result = None
     value_changed()
-    pb_reset.setEnabled(bool(null_delta))
-
     suppress_handlers = False
     if parent:
         ui.move(parent.mapToGlobal(parent.pos()))

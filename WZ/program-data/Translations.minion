@@ -286,6 +286,7 @@ ui.dialogs.dialog_room_choice: {
 ui.dialogs.dialog_workload: {
     VIA_LESSONS:    "Stundenfaktor:"
     DIRECT:         "Grunddeputat:"
+    BLOCK_COUNT_NOT_1: "Die Blockanzahl war bei stundenabhängiger Deputatsberechnung nicht 1 – wird zurückgesetzt."
 }
 
 ui.grid_base: {

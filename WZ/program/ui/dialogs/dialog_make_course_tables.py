@@ -1,7 +1,7 @@
 """
 ui/dialogs/dialog_make_course_tables.py
 
-Last updated:  2023-12-11
+Last updated:  2023-12-15
 
 Supporting "dialog", for the course editor – allow the export of teacher
 and class data, etc., in table form.
@@ -52,13 +52,13 @@ from ui.ui_base import (
     load_ui,
 )
 from core.list_activities import (
-    read_from_db,
-    make_teacher_table_pay,
-    make_teacher_table_room,
+#    read_from_db,
+#    make_teacher_table_pay,
+#    make_teacher_table_room,
     make_class_table_pdf,
-    make_teacher_table_xlsx,
-    make_class_table_xlsx,
-    write_xlsx,
+#    make_teacher_table_xlsx,
+#    make_class_table_xlsx,
+#    write_xlsx,
 )
 
 ### -----
@@ -105,7 +105,7 @@ def exportTable(
             if not filepath.endswith(".xlsx"):
                 filepath += ".xlsx"
             write_xlsx(cdb, filepath)
-                self.output(f"---> {filepath}")
+            self.output(f"---> {filepath}")
 
     ##### functions #####
 
@@ -127,6 +127,7 @@ def exportTable(
         ui.move(parent.mapToGlobal(parent.pos()))
     # Activate the dialog
     ui.output_box.clear()
+    result = None
     ui.exec()
 
 

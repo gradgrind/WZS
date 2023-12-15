@@ -561,18 +561,22 @@ class CourseEditorPage(QObject):
                 self.set_block_name(val)
 
     def edit_payment(self):
-        """There are two relevant elements:
+        """There are three relevant elements:
             - field WORKLOAD in the LESSON_BLOCKS table,
+            - field BLOCK_COUNT in the COURSE_BASE table,
             - field PAY_FACTOR in the COURSE_TEACHERS table.
-        These are both text fields which are interpreted as fixed-point
+        These are all text fields which are interpreted as fixed-point
         numbers.
         """
         # The "WORKLOAD" field is a text representation of a decimal number.
-        # It is used in conjunction with the "PAY_FACTOR" field of the
-        # associated teachers to determine a workload / payment factor for
-        # the teachers.
-        # If it is negative it specifies a weighting for the lessons, the
-        # value is multiplied by the number of lesson periods in the block.
+        # It is used in conjunction with the "BLOCK_COUNT" field to
+        # determine a payment-relevant "workload" for a course.
+        # The individual teachers of the course have an additional
+        # "PAY_FACTOR" field, which allows different payments for the
+        # various teachers involved, but normally this factor would be 1.
+        # If the "WORKLOAD" field is negative it specifies a weighting for
+        # the number of lessons: the value is multiplied by the number of
+        # lesson periods in the block.
         # A positive "WORKLOAD" is taken as is, the number of lessons
         # playing no role. At least for "courses" (here a misnomer) with no
         # lessons, a positive value would be necessary to provide some sort
@@ -580,14 +584,9 @@ class CourseEditorPage(QObject):
         # There might be other cases where the number of lessons is not the
         # primary factor in determining the workload. For example, where
         # blocks of a subject are taught consecutively ("Waldorf-Epochen"),
-        # it might be best to specify a weighting for an individual subject
-        # block ("Epoche") as "WORKLOAD", the number of blocks being
-        # specified in the "PAY_FACTOR" entries of the teachers.
-        # Where the "PAY_FACTOR" is not used for a special purpose, like
-        # number-of-blocks, it represents a further, personal factor. It
-        # would probably mostly simply be "1", but it would allow, say, the
-        # people involved in "team-teaching" to be weighted differently.
-        # ambiguous.
+        # the "WORKLOAD" field can contain a weighting for an individual
+        # subject block ("Epoche"), the number of blocks being specified in
+        # the "BLOCK_COUNT" field.
 
         delta = workloadDialog(
             self.course_data,
@@ -597,9 +596,13 @@ class CourseEditorPage(QObject):
         if delta:
             tlist = self.course_data.teacher_list
             for i, val in delta:
-                if i < 0:
+                if i == -1:
                     lb = self.course_data.course.Lesson_block
                     lb._write("WORKLOAD", print_fix(val))
+                elif i == -2:
+                    self.course_data.course._write(
+                        "BLOCK_COUNT", print_fix(val)
+                    )
                 else:
                     t = tlist[i]
                     t._write("PAY_FACTOR", print_fix(val))
@@ -697,17 +700,21 @@ class CourseEditorPage(QObject):
         self.set_payment()
 
     def set_payment(self):
-        """The payment field has two elements, the WORKLOAD value and the
-        PAY_FACTOR value for each involved teacher.
+        """The payment field has three elements, the WORKLOAD value (in the
+        LESSON_BLOCKS record), the BLOCK_COUNT value (in the COURSE_BASE
+        record) and the PAY_FACTOR value for each involved teacher (in the
+        COURSE_TEACHERS records).
         WORKLOAD can be negative, then it is a weight for the number of
         lessons. The final pay-factor is the workload multiplied by the
-        teacher's PAY_FACTOR. If all teachers have the same value, a
-        general value can be shown, otherwise each teacher must be shown
-        with their own personal value.
+        BLOCK_COUNT multiplied by the teacher's PAY_FACTOR. If all teachers
+        have the same value, a general value can be shown, otherwise each
+        teacher must be shown with their own personal value.
         """
+        c = self.course_data.course
         self.ui.payment.setText(
             print_workload(
-                self.course_data.course.Lesson_block.WORKLOAD,
+                c.Lesson_block.WORKLOAD,
+                c.BLOCK_COUNT,
                 self.n_lessons,
                 [
                     (ct.Teacher.TID, ct.PAY_FACTOR)
