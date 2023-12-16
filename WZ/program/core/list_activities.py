@@ -1,7 +1,7 @@
 """
 core/list_activities.py
 
-Last updated:  2023-12-14
+Last updated:  2023-12-16
 
 Present information on activities for teachers and classes/groups.
 The information is formatted in pdf documents using the reportlab
@@ -708,9 +708,40 @@ def make_class_table_pdf():
 # as an additional factor (but here not directly relevant).
                         # no total number of lessons (see block line)
                     )
+#TODO: flag for printing comments
+                    if True and cl.course.INFO:
+                        print(f"       (# {cl.course.INFO} #)")
+
             for cl in noblock:
-#TODO
-                print("  **", cl)
+                glist = []
+                g0 = None
+                for g in cl.group_list:
+                    if g.Class.id == c:
+                        g0 = g.GROUP_TAG
+                    else:
+                        glist.append(
+                            format_class_group(
+                                g.Class.CLASS, g.GROUP_TAG
+                            )
+                        )
+                if glist:
+                    g0 = f"{g0} + {', '.join(sorted(glist))}"
+                # Need the lesson lengths
+                lbid = cl.course.Lesson_block.id
+                llist = [
+                    l.LENGTH for l in lesson_units.get_block_units(lbid)
+                ]
+
+                print(
+                    cl.show("Subject"), "|",
+                    g0, "|",
+                    cl.show("Teachers"), "|",
+                    llist, "|",
+                    sum(llist)
+                )
+#TODO: flag for printing comments
+                if True and cl.course.INFO:
+                    print(f"  (# {cl.course.INFO} #)")
 
             g_n_list = workload_class(
                 c, courses

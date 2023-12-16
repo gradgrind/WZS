@@ -1,7 +1,7 @@
 """
 core/course_base.py
 
-Last updated:  2023-12-15
+Last updated:  2023-12-16
 
 Support functions dealing with courses, lessons, etc.
 
@@ -226,7 +226,6 @@ class LessonBlocks(db_Table):
                 DB_PK(),
                 DB_FIELD_TEXT("BLOCK"),
                 DB_FIELD_FIX("WORKLOAD"),
-                DB_FIELD_TEXT("NOTES"),
             )
             return True
         return False
