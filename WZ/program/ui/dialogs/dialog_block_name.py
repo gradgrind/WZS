@@ -1,7 +1,7 @@
 """
 ui/dialogs/dialog_block_name.py
 
-Last updated:  2023-12-10
+Last updated:  2023-12-16
 
 Supporting "dialog" for the course editor – choose or edit the name tag
 for a lesson block.
@@ -85,6 +85,12 @@ def blockNameDialog(
     def on_accepted():
         nonlocal result
         result = new_block
+
+    @Slot()
+    def reset():
+        nonlocal new_block
+        new_block = BLOCK()
+        ui.accept()
 
     @Slot(str)
     def on_block_select_currentTextChanged(block_key):
@@ -194,12 +200,8 @@ def blockNameDialog(
                     else:
                         status = T["BLOCK_EXISTS"].format(key = key)
         elif bt or bs or c:
-            # If the "subject" field is empty, the others must be empty too.
-            if empty_ok:
-                status = T["FIELD_BUT_NO_SUBJECT"]
-            else:
-                status = T["NO_SUBJECT"]
-        elif empty_ok:
+            status = T["NO_SUBJECT"]
+        elif start_value is None:
             show_course_info(0)
             new_block = BLOCK()
         else:
@@ -208,7 +210,19 @@ def blockNameDialog(
                 status = T["EMPTY_NOT_POSSIBLE"]
             else:
                 status = T["ALREADY_EMPTY"]
-        ui.status.setText(status)
+        if status:
+            ui.status.setStyleSheet(
+                "background-color: rgb(249, 240, 180); "
+                "color: rgb(204, 0, 0);"
+            )
+            ui.status.setText(status)
+        else:
+            colour = "(0, 0, 180)" if new_block.id else "(0, 180, 0)"
+            ui.status.setStyleSheet(
+                "background-color: rgb(249, 240, 180); "
+                f"color: rgb{colour};"
+            )
+            ui.status.setText(str(new_block))
         pb_accept.setDisabled(bool(status))
 
     ##### dialog main ######
@@ -219,6 +233,10 @@ def blockNameDialog(
     pb_accept = ui.buttonBox.button(
         QDialogButtonBox.StandardButton.Ok
     )
+    pb_reset = ui.buttonBox.button(
+        QDialogButtonBox.StandardButton.Reset
+    )
+    pb_reset.clicked.connect(reset)
     shrink() # minimize dialog window
 
     ## Data initialization
@@ -233,8 +251,8 @@ def blockNameDialog(
         # block-name) or it can have a new block-name.
         # In this case there is also the possibility of joining an existing
         # block.
-        empty_ok = True
         key0 = 0
+        pb_reset.hide()
     else:
         # An existing lesson-block has been supplied.
         # The name of the block may be changed.
@@ -253,7 +271,8 @@ def blockNameDialog(
                 f" (id = {start_value.id}) has no associated course"
             )
         key0 = block0.key()
-        empty_ok = len(courses) == 1 and key0
+        pb_reset.setVisible(len(courses) == 1 and bool(key0))
+
         # Set the initial block choice
         ui.block_select.setCurrentText(key0)
         ui.block_select.setEnabled(False)

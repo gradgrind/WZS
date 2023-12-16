@@ -221,7 +221,6 @@ template_engine.template_sub: {
 
 ui.dialogs.dialog_block_name: {
     NO_SUBJECT:     "Das Fach-Feld ist leer"
-    FIELD_BUT_NO_SUBJECT: "Mit leerem Fach-Feld müssen die anderen auch leer sein"
     EMPTY_NOT_POSSIBLE: "Aufheben des Block-Status nicht moglich (> 1 Kurs)"
     ALREADY_EMPTY:  "Blockfach erwartet"
     BAD_SHORT:      "Ungültiges Kürzel"
