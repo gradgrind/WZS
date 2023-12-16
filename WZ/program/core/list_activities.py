@@ -44,7 +44,11 @@ T = TRANSLATIONS("core.list_activities")
 from typing import NamedTuple, Optional
 from io import BytesIO
 
-from core.base import format_class_group
+from fpdf import FPDF
+#from fpdf.enums import TableBordersLayout
+#from fpdf.fonts import FontFace
+
+from core.base import format_class_group, DATAPATH
 from core.basic_data import CONFIG, get_database, print_fix
 from core.classes import GROUP_ALL
 from core.course_base import (
@@ -605,17 +609,17 @@ def make_teacher_table_pay(activities):
     return pdf.build_pdf()
 
 
-def make_class_table_pdf():
+def make_class_table_pdf(with_comments = True):
     headers = []
     colwidths = []
     for h, w in (
         # Column widths in mm (for A4 portrait)
 #TODO: sizes -> CONFIG?
-        ("H_subject",           80),
+        ("H_subject",           75),
         ("H_group",             20),
-        ("H_teacher",           20),
-        ("H_npay",              20),
-        ("H_units",             30),
+        ("H_teacher",           25),
+        ("H_npay",              30),
+        ("H_lessons",           20),
     ):
         headers.append(T[h])
         colwidths.append(w)
@@ -628,20 +632,36 @@ def make_class_table_pdf():
 #        align=((0, "p"), (4, "r")),
 #    )
 
-
-#TODO: Maybe use the filter_activities function from course_base?
-# It might not be the most efficient, but could reduce code duplication.
-
     db = get_database()
     lesson_units = db.table("LESSON_UNITS")
-    clist = db.table("CLASSES").class_list(skip_null=False)
+    clist = db.table("CLASSES").class_list(skip_null = False)
+    pdf = FPDF()
+    pdf.set_left_margin(20)
+    pdf.set_right_margin(20)
+#TODO: Use CONFIG for the font
+    pdf.add_font(
+        "droid-sans",
+        style = "",
+        fname = DATAPATH("CONFIG/DroidSans.ttf")
+    )
+    pdf.add_font(
+        "droid-sans",
+        style = "B",
+        fname = DATAPATH("CONFIG/DroidSansB.ttf")
+    )
+#    pdf.set_font("droid-sans", size=12)
+#    pdf.set_font("Helvetica", size=12)
+    pdf.set_font("Times", size=12)
+#    normal_style = FontFace(emphasis="")
+
+    ### Produce a table for each class
     for c, class_tag, class_name in clist:
         class_lines = [
             f"<h3>{class_name} ({class_tag})</h3>"
         ]
         courses = filter_activities("CLASS", c)
-# I should first sort these according to blocks, grouping the courses
-# belonging to a block ...
+        ## Sort according to blocks, grouping the courses belonging
+        ## to a block ...
         block_map = {}
         noblock = []
         for cline in courses:
@@ -656,18 +676,76 @@ def make_class_table_pdf():
 #TODO
         if block_map or noblock:
             print("\nCLASS", class_tag)
-            for b in sorted(block_map):
-                clines = block_map[b]
-                # Need the lesson lengths
-                lbid = clines[0].course.Lesson_block.id
-                llist = [
-                    l.LENGTH for l in lesson_units.get_block_units(lbid)
-                ]
-                try:
-                    bname, bcomment = b.split("#", 1)
-                except ValueError:
-                    bname, bcomment = b, ""
-                print(f"  [[{bname}]] | {llist} | {sum(llist)}")
+            pdf.add_page()
+#            pdf.set_font(size=12)
+#            pdf.write(text = "Start of a new page ...\n")
+            pdf.set_font(style="b", size=16)
+            pdf.start_section(f"{class_name} ({class_tag})")
+            pdf.write(text = f"{class_name} ({class_tag})\n\n")
+
+            pdf.set_font(size=12)
+#            pdf.write(text = "Noü the päge cöntent ...\n")
+            ## Add the total lesson numbers
+            g_n_list = workload_class(
+                c, courses
+            )
+            print("§workload:", " ;  ".join(
+                f"{g}: {n}" for g, n in g_n_list)
+            )
+#            pdf.set_draw_color(200, 0, 0)
+            pdf.set_draw_color(150) # grey-scale
+            with pdf.table(
+                width = 150,
+                text_align = "CENTER",
+                borders_layout = "HORIZONTAL_LINES",
+                first_row_as_headings = False,
+#                headings_style = normal_style,
+            ) as table:
+                row = table.row()
+                row.cell(T["total_lessons"], align = "LEFT")
+                for g, n in g_n_list:
+                    row.cell(f"{g}: {n}")
+                if len(g_n_list) == 1:
+                    row.cell("")
+                row = table.row()
+                row.cell("")
+                for g, n in g_n_list:
+                    row.cell("")
+                if len(g_n_list) == 1:
+                    row.cell("")
+
+            pdf.set_draw_color(0) # black
+            with pdf.table(
+                borders_layout = "SINGLE_TOP_LINE",
+                col_widths = colwidths,
+                padding = 1,
+            ) as table:
+                row = table.row()
+                for h in headers:
+                    row.cell(h)
+#TODO--
+#                row = table.row()
+#                row.cell("[[Block Title]]", colspan = 3)
+#                row.cell("2, 2")
+#                row.cell("4")
+
+                for b in sorted(block_map):
+                    clines = block_map[b]
+                    # Need the lesson lengths
+                    lbid = clines[0].course.Lesson_block.id
+                    llist = [
+                        l.LENGTH for l in lesson_units.get_block_units(lbid)
+                    ]
+                    try:
+                        bname, bcomment = b.split("#", 1)
+                    except ValueError:
+                        bname, bcomment = b, ""
+                    print(f"  [[{bname}]] | {llist} | {sum(llist)}")
+
+                    row = table.row()
+                    row.cell(f"[[{bname}]]", colspan = 3)
+                    row.cell(", ".join(str(l) for l in llist))
+                    row.cell(str(sum(llist)))
 #TODO?: I haven't got courses from other classes here (except where other
 # classes are included in a course involving this class).
 # To get these I would need to search ALL courses associated with the
@@ -679,10 +757,59 @@ def make_class_table_pdf():
 #                    g.Class.CLASS, g.GROUP_TAG
 #                    for g in course.group_list
 
-#TODO: flag for printing comments
-                if True and bcomment:
-                    print("    #", bcomment)
-                for cl in clines:
+                    if with_comments and bcomment:
+                        print("    #", bcomment)
+                        row = table.row()
+                        row.cell(
+                            f"# {bcomment}",
+                            colspan = 5,
+                            padding = (-2, 7, 1, 7)
+                        )
+
+                    for cl in clines:
+                        glist = []
+                        g0 = None
+                        for g in cl.group_list:
+                            if g.Class.id == c:
+                                g0 = g.GROUP_TAG
+                            else:
+                                glist.append(
+                                    format_class_group(
+                                        g.Class.CLASS, g.GROUP_TAG
+                                    )
+                                )
+                        if glist:
+                            #g0 = f"{g0} + {', '.join(sorted(glist))}"
+                            g0 = f"{g0} ..."
+                        print("    –",
+                            cl.show("Subject"), "|",
+                            g0, "|",
+                            cl.show("Teachers"), "|",
+                            f"({print_fix(cl.course.BLOCK_COUNT)})", "|",
+                            # no total number of lessons (see block line)
+                        )
+
+                        row = table.row()
+                        row.cell(f' - {cl.show("Subject")}')
+                        row.cell(g0)
+                        row.cell(cl.show("Teachers"))
+                        row.cell(f"({print_fix(cl.course.BLOCK_COUNT)})")
+                        row.cell("")
+#TODO: The number of block units might be a useful measure here, e.g. (2).
+# It would be relevant only for block courses. The teacher pay-factor
+# would not need to appear in the class list.
+# The pay calculations would need to take this number into consideration
+# as an additional factor (but here not directly relevant).
+                        if with_comments and cl.course.INFO:
+                            print(f"       (# {cl.course.INFO} #)")
+                            row = table.row()
+                            row.cell(
+                                f"(# {cl.course.INFO} #)",
+                                colspan = 5,
+                                padding = (-2, 7, 1, 7)
+                            )
+
+                for cl in noblock:
                     glist = []
                     g0 = None
                     for g in cl.group_list:
@@ -696,59 +823,35 @@ def make_class_table_pdf():
                             )
                     if glist:
                         g0 = f"{g0} + {', '.join(sorted(glist))}"
-                    print("    –",
+                    # Need the lesson lengths
+                    lbid = cl.course.Lesson_block.id
+                    llist = [
+                        l.LENGTH for l in lesson_units.get_block_units(lbid)
+                    ]
+
+                    print(
                         cl.show("Subject"), "|",
                         g0, "|",
                         cl.show("Teachers"), "|",
-                        f"({print_fix(cl.course.BLOCK_COUNT)})", "|",
-#TODO: The number of block units might be a useful measure here, e.g. (2).
-# It would be relevant only for block courses. The teacher pay-factor
-# would not need to appear in the class list.
-# The pay calculations would need to take this number into consideration
-# as an additional factor (but here not directly relevant).
-                        # no total number of lessons (see block line)
+                        llist, "|",
+                        sum(llist)
                     )
-#TODO: flag for printing comments
-                    if True and cl.course.INFO:
-                        print(f"       (# {cl.course.INFO} #)")
-
-            for cl in noblock:
-                glist = []
-                g0 = None
-                for g in cl.group_list:
-                    if g.Class.id == c:
-                        g0 = g.GROUP_TAG
-                    else:
-                        glist.append(
-                            format_class_group(
-                                g.Class.CLASS, g.GROUP_TAG
-                            )
+                    row = table.row()
+                    row.cell(cl.show("Subject"))
+                    row.cell(g0)
+                    row.cell(cl.show("Teachers"))
+                    row.cell(", ".join(str(l) for l in llist))
+                    row.cell(str(sum(llist)))
+                    if with_comments and cl.course.INFO:
+                        print(f"  (# {cl.course.INFO} #)")
+                        row = table.row()
+                        row.cell(
+                            f"(# {cl.course.INFO} #)",
+                            colspan = 5,
+                            padding = (-2, 7, 1, 7)
                         )
-                if glist:
-                    g0 = f"{g0} + {', '.join(sorted(glist))}"
-                # Need the lesson lengths
-                lbid = cl.course.Lesson_block.id
-                llist = [
-                    l.LENGTH for l in lesson_units.get_block_units(lbid)
-                ]
 
-                print(
-                    cl.show("Subject"), "|",
-                    g0, "|",
-                    cl.show("Teachers"), "|",
-                    llist, "|",
-                    sum(llist)
-                )
-#TODO: flag for printing comments
-                if True and cl.course.INFO:
-                    print(f"  (# {cl.course.INFO} #)")
-
-            g_n_list = workload_class(
-                c, courses
-            )
-            print("§workload:", " ;  ".join((f"{g}: {n}") for g, n in g_n_list))
-
-    return
+    return pdf
 
 # Try producing an html table in a QTextDocument (including long pages
 # and <thead>). -> pdf (with QPdfWriter), -> odt (with QTextDocumentWriter)?
@@ -1012,19 +1115,22 @@ def make_class_table_pdf():
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
 
 if __name__ == "__main__":
-#    from ui.ui_base import saveDialog
+    from ui.ui_base import SAVE_FILE
 
-    make_class_table_pdf()
-    quit(0)
+    pdf = make_class_table_pdf()
 
-    pdfbytes = make_class_table_pdf(activities)
-    filepath = saveDialog("pdf-Datei (*.pdf)", "Klassen-Stunden")
+#    pdfbytes = make_class_table_pdf(activities)
+    filepath = SAVE_FILE("pdf-Datei (*.pdf)", "Klassen-Stunden")
+#    filepath = saveDialog("pdf-Datei (*.pdf)", "Klassen-Stunden")
     if filepath and os.path.isabs(filepath):
         if not filepath.endswith(".pdf"):
             filepath += ".pdf"
-        with open(filepath, "wb") as fh:
-            fh.write(pdfbytes)
+#        with open(filepath, "wb") as fh:
+#            fh.write(pdfbytes)
+        pdf.output(filepath)
         print("  --->", filepath)
+
+    quit(0)
 
     pdfbytes = make_teacher_table_room(activities)
     filepath = saveDialog("pdf-Datei (*.pdf)", "Lehrer-Stunden")
