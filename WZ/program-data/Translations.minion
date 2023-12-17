@@ -67,8 +67,8 @@ core.list_activities: {
     class_lessons:      "Klassen-Stunden"
     total_lessons:      "Gesamtstunden:"
     total:              "insgesamt"
-    timetable_lessons:  "Stundenplanbelegung"
-    pay_lessons:        "Deputat, insgesamt"
+    timetable_lessons:  "Stundenplanbelegung: {n}"
+    pay_lessons:        "Deputat, insgesamt: {n}"
 }
 
 core.pupils: {

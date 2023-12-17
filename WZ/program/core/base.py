@@ -1,7 +1,7 @@
 """
 core/base.py
 
-Last updated:  2023-12-15
+Last updated:  2023-12-17
 
 Basic configuration and structural stuff.
 
@@ -30,7 +30,7 @@ NO_DATE = "*"  # an unspecified date
 ########################################################################
 
 import sys, os, re, datetime
-from typing import Optional, Tuple
+from typing import Tuple
 
 if __name__ == "__main__":
     # Enable package import if running module directly
@@ -58,10 +58,16 @@ _Minion = Minion()
 MINION = _Minion.parse_file
 
 __TRANSLATIONS = MINION(APPDATAPATH("Translations.minion"))
+def Tr(module_key):
+    tk = __TRANSLATIONS[module_key]
+    def __translator(key, **kargs):
+        return tk[key].format(**kargs)
+    return __translator
+#TODO: deprecated (use <Tr>)
 def TRANSLATIONS(module):
     return __TRANSLATIONS[module]
 
-T = TRANSLATIONS("core.base")
+T = Tr("core.base")
 
 #TODO: replace by dedicated calls to ERROR, WARNING, etc.
 __REPORT = None
@@ -135,7 +141,7 @@ def format_class_group(c: str, g: str) -> str:
     """Make a full class-group descriptor from the class and the possibly
     null ("") group.
     """
-    return f"{c}.{g or '–'}"
+    return f"{c}.{g}" if g else f"({c})"
 
 
 def year_data_path(year, path=""):
@@ -158,7 +164,7 @@ class Dates:
             return d.strftime(date_format)
         except:
             if trap:
-                raise DataError(T["BAD_DATE"].format(date=date))
+                raise DataError(T("BAD_DATE", date = date))
         return None
 
     @classmethod
@@ -210,12 +216,12 @@ class Dates:
         Return true/false.
         """
         d1 = cls.day1(schoolyear)
-        oneday = datetime.timedelta(days=1)
+        #oneday = datetime.timedelta(days=1)
         d2 = cls.lastday(schoolyear)
         try:
             datetime.date.fromisoformat(d)
         except ValueError:
-            raise DataError(T["BAD_DATE"].format(date=d))
+            raise DataError(T("BAD_DATE", date = d))
         if d < d1:
             return False
         return d <= d2
@@ -274,9 +280,9 @@ class Dates:
         try:
             y1 = int(schoolyear)
         except ValueError:
-            raise DataError(T["INVALID_SCHOOLYEAR"].format(year=schoolyear))
+            raise DataError(T("INVALID_SCHOOLYEAR", year = schoolyear))
         if y1 < int(y0) or y1 > int(y0) + 2:
-            raise DataError(T["DODGY_SCHOOLYEAR"].format(year=schoolyear))
+            raise DataError(T("DODGY_SCHOOLYEAR", year = schoolyear))
         for k, v in calendar.items():
             if isinstance(v, list):
                 # range of days, check validity
@@ -291,7 +297,7 @@ class Dates:
                     continue
                 if k[0] == "~" or cls.check_schoolyear(schoolyear, v):
                     continue
-            raise DataError(T["BAD_DATE_CAL"].format(line="%s: %s" % (k, v)))
+            raise DataError(T("BAD_DATE_CAL", line = "%s: %s" % (k, v)))
         return calendar
 
     @staticmethod
@@ -300,7 +306,7 @@ class Dates:
         try:
             return calendar["LAST_DAY"].split("-", 1)[0]
         except KeyError:
-            raise DataError(T["MISSING_LAST_DAY"])
+            raise DataError(T("MISSING_LAST_DAY"))
 
     @classmethod
     def migrate_calendar(cls, new_year=None, calendar_path=None, save=True):
@@ -391,4 +397,11 @@ if __name__ == "__main__":
     except DataError as e:
         print(" ... trapped:", e)
     new_year = Dates.next_year()
-    print(f"\n\nCalendar for {new_year}:\n" + Dates.migrate_calendar(save=False))
+    print(
+        f"\n\nCalendar for {new_year}:\n"
+        + Dates.migrate_calendar(save=False)
+    )
+
+    t = Tr("core.base")
+    print("§translate1:", t("MISSING_LAST_DAY"))
+    print("§translate2:", t("BAD_DATE", date = "2023.12.17"))
