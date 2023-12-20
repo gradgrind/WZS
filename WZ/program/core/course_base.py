@@ -1,7 +1,7 @@
 """
 core/course_base.py
 
-Last updated:  2023-12-16
+Last updated:  2023-12-19
 
 Support functions dealing with courses, lessons, etc.
 
@@ -467,6 +467,7 @@ class CourseGroups(db_Table):
                         block = f"({block})" if block else ""
                     ))
                 cglist.append(rec)
+                cglist.sort(key = lambda x: (x.Class.CLASS, x.GROUP_TAG))
         self.__class_course_map = ccmap
         self.__course_map = cmap
 

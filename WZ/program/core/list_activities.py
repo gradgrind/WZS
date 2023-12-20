@@ -1,7 +1,7 @@
 """
 core/list_activities.py
 
-Last updated:  2023-12-17
+Last updated:  2023-12-19
 
 Present information on activities for teachers and classes/groups.
 The information is formatted in pdf documents using the reportlab
@@ -505,7 +505,6 @@ def make_teacher_table_pay(with_comments = True):
     headers = []
     colwidths = []
     for h, w in (
-        ("H_team_tag",          15),
         ("H_group",             20),
         ("H_subject",           60),
         ("H_units",             30),
@@ -514,13 +513,6 @@ def make_teacher_table_pay(with_comments = True):
     ):
         headers.append(T(h))
         colwidths.append(w)
-
-#    def add_simple_items():
-#        for item in noblocklist:
-#            # The "lesson-data" id is shown only when it is referenced later
-#            pdf.add_line(item)
-#        noblocklist.clear()
-
     db = get_database()
     lesson_units = db.table("LESSON_UNITS")
     tlist = db.table("TEACHERS").teacher_list(skip_null = True)
@@ -532,25 +524,31 @@ def make_teacher_table_pay(with_comments = True):
     for t, tid, tname in tlist:
         courses = filter_activities("TEACHER", t)
         #print("???", t, tid, tname, len(courses))
-        cg_block_map = {}
+        c_block_map = {}
         ## Sort according to class, and block
         for cline in courses:
             # Use the first class-group (when there is > 1) for sorting
-            try:
-                _cg = cline.group_list[0]
-                cg = format_class_group(_cg.Class.CLASS, _cg.GROUP_TAG)
-            except IndexError:
-                cg = "---"
+            cglist = cline.group_list
+            # The entries in <cglist> should already be sorted (class, group)
+            if cglist:
+                c = cline.group_list[0].Class.CLASS
+                #_cg = cline.group_list[0]
+                #cg = format_class_group(_cg.Class.CLASS, _cg.GROUP_TAG)
+                #c, g = _cg.Class.CLASS, _cg.GROUP_TAG
+            else:
+                c = ""
             block = cline.course.Lesson_block.BLOCK
-            cgb = (cg, block)
-            print("\n§cgb:", cgb)
+            print("\n§cgb:", c, block)
             try:
-                cg_block_map[cgb].append(cline)
+                bmap = c_block_map[c]
             except KeyError:
-                cg_block_map[cgb] = [cline]
-
-
-        if cg_block_map:
+                c_block_map[c] = {block: [cline]}
+            else:
+                try:
+                    bmap[block].append(cline)
+                except KeyError:
+                    bmap[block] = [cline]
+        if c_block_map:
             print(f"\nTEACHER: {tname} ({t})")
             pdf.add_page()
             pdf.set_font(style="b", size=16)
@@ -588,23 +586,78 @@ def make_teacher_table_pay(with_comments = True):
                 for h in headers:
                     row.cell(h)
                 ### In each class deal with the (named) blocks first
-                '''
-                for b in sorted(block_map):
-                    clines = block_map[b]
-                    # Need the lesson lengths
-                    lbid = clines[0].course.Lesson_block.id
-                    llist = [
-                        l.LENGTH for l in lesson_units.get_block_units(lbid)
-                    ]
+                c0 = None
+                for c in sorted(c_block_map):
+                    bmap = c_block_map[c]
                     try:
-                        bname, bcomment = b.split("#", 1)
-                    except ValueError:
-                        bname, bcomment = b, ""
-                    #print(f"  [[{bname}]] | {llist} | {sum(llist)}")
+                        noblocklist = bmap.pop("")
+                    except KeyError:
+                        noblocklist = []
+                    ## Show block courses
+                    for block in sorted(bmap):
+                        clines = bmap[block]
+                        # Need the lesson lengths
+                        lb = clines[0].course.Lesson_block
+                        lbid = lb.id
+                        llist = [
+                            l.LENGTH
+                            for l in lesson_units.get_block_units(lbid)
+                        ]
+                        nlessons = sum(llist)
+#TODO
+                        try:
+                            bname, bcomment = block.split("#", 1)
+                        except ValueError:
+                            bname, bcomment = block, ""
+
+                        print(f"  {c} '{block}' [[{bname}]] | {llist} | {nlessons}")
+                        for cline in clines:
+                            # workload/pay
+                            for tline in cline.teacher_list:
+                                if tline.Teacher.id == t:
+                                    workload = lb.WORKLOAD
+                                    if workload < 0.0:
+                                        workload = abs(workload * nlessons)
+                                    workload *= cline.course.BLOCK_COUNT
+                                    pay = workload * tline.PAY_FACTOR
+                                    print("§PAY:", tline.Teacher.TID, pay)
+                                    break
+
+                    ## Show non-block courses
+                    for cline in noblocklist:
+                        # Need the lesson lengths
+                        lb = cline.course.Lesson_block
+                        lbid = lb.id
+                        llist = [
+                            l.LENGTH
+                            for l in lesson_units.get_block_units(lbid)
+                        ]
+                        nlessons = sum(llist)
+#TODO
+                        print("$$$")
+
+                        # workload/pay
+                        for tline in cline.teacher_list:
+                            if tline.Teacher.id == t:
+                                workload = lb.WORKLOAD
+                                if workload < 0.0:
+                                    workload = abs(workload * nlessons)
+                                workload *= cline.course.BLOCK_COUNT
+                                pay = workload * tline.PAY_FACTOR
+                                print("§PAY:", tline.Teacher.TID, pay)
+                                break
+
+
+#TODO: Columns. "Einheiten" could be number of lessons or BLOCK_COUNT,
+# depending on BLOCK? The "Stunden" column might well be superfluous.
+# What about a "Raum" column?
+
+
+                '''
                     row = table.row()
                     row.cell(f"[[{bname}]]", colspan = 3)
                     row.cell(", ".join(str(l) for l in llist))
-                    row.cell(str(sum(llist)))
+                    row.cell(str(nlessons))
                     # Could fetch all classes using the block, using
                     #    block_courses(block_id: int) -> list[COURSE_LINE]
                     # but it is probably not an essential piece of
