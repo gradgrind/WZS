@@ -686,7 +686,7 @@ class CourseEditorPage(QObject):
         text = print_room_choice(
             room_choice = ([r.Room.id for r in rlist], rxtra.id),
             room_lists = self.all_room_lists,
-         )
+        )
         self.ui.wish_room.setText(text)
         ## Now show the other course fields
         self.set_grade_box()

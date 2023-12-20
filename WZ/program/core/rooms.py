@@ -1,5 +1,5 @@
 """
-core/rooms.py - last updated 2023-11-26
+core/rooms.py - last updated 2023-12-20
 
 Manage rooms data.
 
@@ -150,6 +150,21 @@ def get_db_rooms(db_rooms: db_Table, db_room_group_map: db_Table
             [r[1].id for r in data[1]]
         ))
     return (all_rooms, room_groups)
+
+
+def print_room_choice(
+    room_choice: tuple[list[int], int],
+    room_lists: tuple[list, list],
+) -> str:
+    """Return a displayable (text) version of a room-choice list.
+    """
+    #print("§print_room_choice:", room_choice)
+    room_list, room_groups = room_lists
+    rdict = {rid: rtag for rid, rtag, rname in room_list}
+    rgdict = {rgid: rgtag for rgid, rgtag, rgname, rlist in room_groups}
+    rl = ", ".join(rdict[r] for r in room_choice[0])
+    rg = room_choice[1]
+    return f"{rl} + {rgdict[rg]}" if rg else rl
 
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#

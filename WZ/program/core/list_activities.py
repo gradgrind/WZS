@@ -1,7 +1,7 @@
 """
 core/list_activities.py
 
-Last updated:  2023-12-19
+Last updated:  2023-12-20
 
 Present information on activities for teachers and classes/groups.
 The information is formatted in pdf documents using the reportlab
@@ -51,6 +51,7 @@ from fpdf import FPDF
 from core.base import format_class_group, DATAPATH
 from core.basic_data import CONFIG, get_database, print_fix
 from core.classes import GROUP_ALL
+from core.rooms import get_db_rooms, print_room_choice
 from core.course_base import (
     filter_activities,
     workload_class,
@@ -507,14 +508,19 @@ def make_teacher_table_pay(with_comments = True):
     for h, w in (
         ("H_group",             20),
         ("H_subject",           60),
+        ("H_room",              25),
         ("H_units",             30),
-        ("H_lessons",           25),
         ("H_pay",               20),
     ):
         headers.append(T(h))
         colwidths.append(w)
     db = get_database()
     lesson_units = db.table("LESSON_UNITS")
+    # Needed for printing room lists:
+    roomtable = db.table("TT_ROOMS")
+    all_room_lists = get_db_rooms(
+        db.table("ROOMS"), db.table("TT_ROOM_GROUP_MAP")
+    )
     tlist = db.table("TEACHERS").teacher_list(skip_null = True)
     pdf = FPDF()
     pdf.set_left_margin(20)
@@ -531,7 +537,7 @@ def make_teacher_table_pay(with_comments = True):
             cglist = cline.group_list
             # The entries in <cglist> should already be sorted (class, group)
             if cglist:
-                c = cline.group_list[0].Class.CLASS
+                c = cglist[0].Class.CLASS
                 #_cg = cline.group_list[0]
                 #cg = format_class_group(_cg.Class.CLASS, _cg.GROUP_TAG)
                 #c, g = _cg.Class.CLASS, _cg.GROUP_TAG
@@ -611,8 +617,18 @@ def make_teacher_table_pay(with_comments = True):
                             bname, bcomment = block, ""
 
                         print(f"  {c} '{block}' [[{bname}]] | {llist} | {nlessons}")
+                        if with_comments and bcomment:
+                            print("    #", bcomment)
+#                            row = table.row()
+#                            row.cell(
+#                                f"# {bcomment}",
+#                                colspan = 5,
+#                                padding = (-2, 7, 1, 7)
+#                            )
                         for cline in clines:
                             # workload/pay
+                            pay = ""
+                            colleagues = []
                             for tline in cline.teacher_list:
                                 if tline.Teacher.id == t:
                                     workload = lb.WORKLOAD
@@ -620,8 +636,47 @@ def make_teacher_table_pay(with_comments = True):
                                         workload = abs(workload * nlessons)
                                     workload *= cline.course.BLOCK_COUNT
                                     pay = workload * tline.PAY_FACTOR
-                                    print("§PAY:", tline.Teacher.TID, pay)
-                                    break
+                                    #print("§PAY:", tline.Teacher.TID, pay)
+                                else:
+                                    colleagues.append(tline.Teacher.TID)
+
+                            cg_list = [
+                                format_class_group(
+                                    cg.Class.CLASS, cg.GROUP_TAG
+                                )
+                                for cg in cline.group_list
+                            ]
+                            # The room is an ordered list of individual rooms
+                            # and an optional room-group.
+                            course_id = cline.course.id
+                            rlist = roomtable.get_room_list(course_id)
+                            rxtra = cline.course.Room_group
+                            #print("§get rooms:", rlist, "\n +++ ", rxtra)
+                            room = print_room_choice(
+                                room_choice = (
+                                    [r.Room.id for r in rlist],
+                                    rxtra.id
+                                ),
+                                room_lists = all_room_lists,
+                            )
+                            print(
+                                "  §--",
+                                ", ".join(cg_list), "|",
+                                cline.course.Subject.NAME, "|",
+                                room, "|",
+                                print_fix(cline.course.BLOCK_COUNT), "|",
+                                pay
+                            )
+#TODO: show other teachers?
+                            if colleagues:
+                                print("    **", ", ".join(colleagues))
+#INFO, extra class-groups?
+# There is not really a special class (at present I am just taking the
+# first one), so perhaps any course with multiple class-groups should
+# have a dummy group and an extra group line?
+
+                            if with_comments and cline.course.INFO:
+                                print(f"       (# {cline.course.INFO} #)")
 
                     ## Show non-block courses
                     for cline in noblocklist:
@@ -633,25 +688,61 @@ def make_teacher_table_pay(with_comments = True):
                             for l in lesson_units.get_block_units(lbid)
                         ]
                         nlessons = sum(llist)
-#TODO
-                        print("$$$")
 
                         # workload/pay
+                        pay = ""
+                        colleagues = []
                         for tline in cline.teacher_list:
                             if tline.Teacher.id == t:
                                 workload = lb.WORKLOAD
                                 if workload < 0.0:
                                     workload = abs(workload * nlessons)
                                 workload *= cline.course.BLOCK_COUNT
-                                pay = workload * tline.PAY_FACTOR
-                                print("§PAY:", tline.Teacher.TID, pay)
-                                break
+                                pay = print_fix(workload * tline.PAY_FACTOR)
+                                #print("§PAY:", tline.Teacher.TID, pay)
+                            else:
+                                colleagues.append(tline.Teacher.TID)
 
 
 #TODO: Columns. "Einheiten" could be number of lessons or BLOCK_COUNT,
 # depending on BLOCK? The "Stunden" column might well be superfluous.
 # What about a "Raum" column?
 
+                        cg_list = [
+                            format_class_group(cg.Class.CLASS, cg.GROUP_TAG)
+                            for cg in cline.group_list
+                        ]
+                        # The room is an ordered list of individual rooms
+                        # and an optional room-group.
+                        course_id = cline.course.id
+                        rlist = roomtable.get_room_list(course_id)
+                        rxtra = cline.course.Room_group
+                        #print("§get rooms:", rlist, "\n +++ ", rxtra)
+                        room = print_room_choice(
+                            room_choice = (
+                                [r.Room.id for r in rlist],
+                                rxtra.id
+                            ),
+                            room_lists = all_room_lists,
+                        )
+                        print(
+                            "  §++",
+                            ", ".join(cg_list), "|",
+                            cline.course.Subject.NAME, "|",
+                            room, "|",
+                            ", ".join(str(l) for l in llist), "|",
+                            pay
+                        )
+#TODO: show other teachers?
+                        if colleagues:
+                            print("    **", ", ".join(colleagues))
+#INFO, extra class-groups?
+# There is not really a special class (at present I am just taking the
+# first one), so perhaps any course with multiple class-groups should
+# have a dummy group and an extra group line?
+
+                        if with_comments and cline.course.INFO:
+                            print(f"       (# {cline.course.INFO} #)")
 
                 '''
                     row = table.row()

@@ -1,7 +1,7 @@
 """
 ui/dialogs/dialog_room_choice.py
 
-Last updated:  2023-11-29
+Last updated:  2023-12-20
 
 Supporting "dialog" for the course editor – select room(s).
 
@@ -42,6 +42,7 @@ T = TRANSLATIONS("ui.dialogs.dialog_room_choice")
 from typing import Optional
 
 from core.base import REPORT_ERROR
+from core.rooms import print_room_choice
 from ui.ui_base import (
     ### QtWidgets:
     QWidget,
@@ -314,21 +315,6 @@ def roomChoiceDialog(
     ui.roomlist.setFocus()
     ui.exec()
     return result
-
-
-def print_room_choice(
-    room_choice: tuple[list[int], int],
-    room_lists: tuple[list, list],
-) -> str:
-    """Return a displayable (text) version of a room-choice list.
-    """
-    print("§print_room_choice:", room_choice)
-    room_list, room_groups = room_lists
-    rdict = {rid: rtag for rid, rtag, rname in room_list}
-    rgdict = {rgid: rgtag for rgid, rgtag, rgname, rlist in room_groups}
-    rl = ", ".join(rdict[r] for r in room_choice[0])
-    rg = room_choice[1]
-    return f"{rl} + {rgdict[rg]}" if rg else rl
 
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
