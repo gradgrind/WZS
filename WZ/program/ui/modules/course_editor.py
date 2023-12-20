@@ -1,7 +1,7 @@
 """
 ui/modules/course_editor.py
 
-Last updated:  2023-12-10
+Last updated:  2023-12-20
 
 Edit course and blocks+lessons data.
 
@@ -756,12 +756,12 @@ class CourseEditorPage(QObject):
             parent = self.ui.course_table,
         )
         if changes:
-            print("§on_pb_change_all_clicked:", changes)
+            #print("§on_pb_change_all_clicked:", changes)
             tset, old, new = changes
             # Search all courses in the table for this item ...
             if tset:
                 for cdata in self.course_table.records:
-                    print("   --", cdata)   # COURSE_LINEs
+                    #print("   --", cdata)   # COURSE_LINEs
                     for t in cdata.teacher_list:
                         if t.Teacher.id == old:
                             t._write("Teacher", new)
@@ -770,7 +770,7 @@ class CourseEditorPage(QObject):
                 id0, g0 = old
                 id1, g1 = new
                 for cdata in self.course_table.records:
-                    print("   --", cdata)   # COURSE_LINEs
+                    #print("   --", cdata)   # COURSE_LINEs
                     for g in cdata.group_list:
                         if g.Class.id == id0 and g.GROUP_TAG == g0:
                             fmap = {}
@@ -819,6 +819,7 @@ class CourseEditorPage(QObject):
         cbid = cbtable.add_records([{
             "Subject": course["Subject"],
             "Lesson_block": lbid,
+            "BLOCK_COUNT": "1",
             "Room_group": course["Room_group"],
             "REPORT": "",
             "GRADES": "",
