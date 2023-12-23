@@ -1,7 +1,7 @@
 """
 ui/dialogs/dialog_make_course_tables.py
 
-Last updated:  2023-12-15
+Last updated:  2023-12-23
 
 Supporting "dialog", for the course editor – allow the export of teacher
 and class data, etc., in table form.
@@ -25,8 +25,9 @@ Copyright 2023 Michael Towers
 =-LICENCE========================================
 """
 
+import os
 if __name__ == "__main__":
-    import sys, os
+    import sys
 
     this = sys.path[0]
     appdir = os.path.dirname(os.path.dirname(this))
@@ -35,8 +36,8 @@ if __name__ == "__main__":
     from core.base import setup
     setup(os.path.join(basedir, 'TESTDATA'))
 
-from core.base import TRANSLATIONS
-T = TRANSLATIONS("ui.dialogs.dialog_make_course_tables")
+from core.base import Tr
+T = Tr("ui.dialogs.dialog_make_course_tables")
 
 ### +++++
 
@@ -50,12 +51,12 @@ from ui.ui_base import (
     Slot,
     ### other
     load_ui,
+    SAVE_FILE,
 )
 from core.list_activities import (
-#    read_from_db,
-#    make_teacher_table_pay,
-#    make_teacher_table_room,
+    make_teacher_table_pay,
     make_class_table_pdf,
+#    make_teacher_table_room,
 #    make_teacher_table_xlsx,
 #    make_class_table_xlsx,
 #    write_xlsx,
@@ -70,25 +71,39 @@ def exportTable(
 
     ##### slots #####
 
-    @Slot()
-    def on_accepted():
-        nonlocal result
-        result = delta
+#    @Slot()
+#    def on_accepted():
+#        nonlocal result
+#        result = delta
 
-#TODO
     @Slot()
     def on_pb_classes_clicked():
         """Export a pdf file with a table for each class detailing
         the lessons, etc.
         """
-        pdfbytes = make_class_table_pdf(self.activities)
-        filepath = SAVE_FILE("pdf-Datei (*.pdf)", T["class_lessons"])
+        pdf = make_class_table_pdf(ui.with_comments.isChecked())
+        filepath = SAVE_FILE(f'{T("pdf_file")} (*.pdf)', T("class_lessons"))
         if filepath and os.path.isabs(filepath):
             if not filepath.endswith(".pdf"):
                 filepath += ".pdf"
-            with open(filepath, "wb") as fh:
-                fh.write(pdfbytes)
-            self.output(f"---> {filepath}")
+            pdf.output(filepath)
+            output(f"---> {filepath}")
+
+    @Slot()
+    def on_pb_pay_clicked():
+        """Export a pdf file with a table for each teacher detailing
+        the workload and giving some pay-related information.
+        """
+        pdf = make_teacher_table_pay(ui.with_comments.isChecked())
+        filepath = SAVE_FILE(
+            f'{T("pdf_file")} (*.pdf)', T("teacher_workload_pay")
+        )
+        if filepath and os.path.isabs(filepath):
+            if not filepath.endswith(".pdf"):
+                filepath += ".pdf"
+            pdf.output(filepath)
+            output(f"---> {filepath}")
+
 
 #TODO
     @Slot()
@@ -149,19 +164,6 @@ class ExportTable:#(QDialog):
     def output(self, text):
         self.output_box.appendPlainText(text)
 
-    @Slot()
-    def on_pb_pay_clicked(self):
-        """Export a pdf file with a table for each teacher detailing
-        the workload and giving some pay-related information.
-        """
-        pdfbytes = make_teacher_table_pay(self.activities)
-        filepath = SAVE_FILE("pdf-Datei (*.pdf)", T["teacher_workload_pay"])
-        if filepath and os.path.isabs(filepath):
-            if not filepath.endswith(".pdf"):
-                filepath += ".pdf"
-            with open(filepath, "wb") as fh:
-                fh.write(pdfbytes)
-            self.output(f"---> {filepath}")
 
     @Slot()
     def on_pb_teachers_clicked(self):

@@ -69,6 +69,11 @@ core.list_activities: {
     total:              "insgesamt"
     timetable_lessons:  "Stundenplanbelegung: {n}"
     pay_lessons:        "Deputat, insgesamt: {n}"
+    WORKLOAD_LESSONS:   "[...]"
+    COURSE_INFO:        "#* {info} *#"
+    BLOCK_COMMENT:      "#** {comment} **#"
+    MULTIGROUP:         "+++: {groups}"
+    EXTRA_TEACHERS:     "mit: {teachers}"
 }
 
 core.pupils: {
@@ -251,6 +256,7 @@ ui.dialogs.dialog_change_teacher_class: {
 #}
 
 ui.dialogs.dialog_make_course_tables: {
+    pdf_file:           "pdf-Datei"
     teacher_workload_pay: "Deputate"
     teacher_activities: "Lehrer-Stunden"
     class_lessons:      "Klassen-Stunden"

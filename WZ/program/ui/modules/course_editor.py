@@ -1,7 +1,7 @@
 """
 ui/modules/course_editor.py
 
-Last updated:  2023-12-20
+Last updated:  2023-12-23
 
 Edit course and blocks+lessons data.
 
@@ -916,10 +916,9 @@ class CourseEditorPage(QObject):
             self.ui.total.clear()
             self.ui.total.setEnabled(False)
 
-#TODO
     @Slot()
     def on_make_tables_clicked(self):
-        exportTable(parent=self).activate()
+        exportTable(parent=self.ui)
 
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#

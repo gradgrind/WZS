@@ -1,7 +1,7 @@
 """
 core/list_activities.py
 
-Last updated:  2023-12-20
+Last updated:  2023-12-23
 
 Present information on activities for teachers and classes/groups.
 The information is formatted in pdf documents using the reportlab
@@ -42,13 +42,13 @@ T = Tr("core.list_activities")
 ### +++++
 
 from typing import NamedTuple, Optional
-from io import BytesIO
+#from io import BytesIO
 
 from fpdf import FPDF
 #from fpdf.enums import TableBordersLayout
 #from fpdf.fonts import FontFace
 
-from core.base import format_class_group, DATAPATH
+from core.base import format_class_group, DATAPATH, REPORT_CRITICAL
 from core.basic_data import CONFIG, get_database, print_fix
 from core.classes import GROUP_ALL
 from core.rooms import get_db_rooms, print_room_choice
@@ -72,9 +72,35 @@ from core.course_base import (
 
 #DECIMAL_SEP = CONFIG["DECIMAL_SEP"]
 
-def PAY_FORMAT(pay):
-    assert type(pay) == float
-    return f"{pay:.3f}".replace(".", DECIMAL_SEP)
+#def PAY_FORMAT(pay):
+#    assert type(pay) == float
+#    return f"{pay:.3f}".replace(".", DECIMAL_SEP)
+
+
+class COURSE_DATA(NamedTuple):
+    """Encapsulate the data gathered for a course line by the function
+    <teacher_table_data>.
+    """
+    class_groups: list[tuple[str, str, str]] # (CLASS, GROUP_TAG, class-name)
+    subject: tuple[str, str]            # sid, full-name
+    room: str                           # "user-friendly" string
+    block_count: float
+    pay: float
+    colleagues: list[str]               # TID-list
+    course_info: str
+
+class TEACHER_BLOCK(NamedTuple):
+    """Encapsulate the data gathered for a teacher by the function
+    <teacher_table_data>.
+    """
+    tid: str
+    tname: str
+    all_lessons: list[int]
+    all_pay: float
+    blocklist: list[tuple[str, str, list[int], list[COURSE_DATA]]]
+    # items: (block-name, block-comment, lesson-list, course-list)
+    noblocklist: list[tuple[list[int], list[COURSE_DATA]]]
+    # items: (lesson-list, course-list)
 
 ### -----
 
@@ -108,54 +134,7 @@ class ClassData(NamedTuple):
     paystr: str         #TODO: not reliable for pay if combined groups!
 
 
-def pay_data():#adata: Record, nlessons: int) -> tuple[str, str, float]:
-    """Process the workload/payment data into a display form.
-    If the workload uses the actual number of lessons (NLESSONS < 0),
-    use "[nlessons] x PAY_TAG" as <t_paystr>.
-    If the workload is specified as n * factor, use
-    "NLESSONS x PAY_TAG" as <t_paystr>.
-    Otherwise, <t_paystr> is "".
-    """
-    t_pay = get_pay_value(adata, nlessons)  # float, the "workload"
-    n = adata["PAY_NLESSONS"]
-    ptag = adata["PAY_TAG"]
-    if ptag:
-        if n == "-1":
-            t_paystr = f"[{nlessons}] x {ptag}"
-        else:
-            t_paystr = f"{n} x {ptag}"
-    else:
-        t_paystr = ""
-    return (str(n), t_paystr, t_pay)
-
-
-def teacher_list():#tlist: list[Record], lg_ll):
-    """Deal with the data for a single teacher. Return the data needed
-    for a lesson + pay list sorted according to class and subject.
-    """
-    courses = []
-    subjects = get_subjects()
-    for data in tlist:
-        lg = data["Lesson_group"]
-        lessons = lg_ll[lg]              # list of lesson lengths
-        tdata = TeacherData(
-            data["CLASS"],
-            data["BLOCK_SID"],
-            data["BLOCK_TAG"],
-            subjects.map(data["SUBJECT"]),
-            data["GRP"],
-            data["ROOM"],
-            ','.join(str(l) for l in lessons),
-            sum(lessons),
-            lg,
-            data["Lesson_data"],
-            *pay_data(data, (nlessons := sum(lessons)))
-        )
-        courses.append(tdata)
-    courses.sort()
-    return courses
-
-
+#?
 def print_class_group(klass, group):
     """Return a representation of the class and group for the
     teacher-lists.
@@ -170,40 +149,13 @@ def print_class_group(klass, group):
     return f"({klass})"
 
 
-def class_list():#clist: list[Record], lg_ll):
-    """Deal with the data for a single class. Return the data needed
-    for a lesson + teacher list sorted according to subject.
-    """
-    subjects = get_subjects()
-    courses = []
-    for data in clist:
-        lg = data["Lesson_group"]
-        lessons = lg_ll[lg]              # list of lesson lengths
-        nlessons = sum(lessons)
-        cdata = ClassData(
-            subjects.map(data["SUBJECT"]),
-            data["GRP"],
-            data["TEACHER"],
-            data["BLOCK_SID"],
-            data["BLOCK_TAG"],
-            lg,
-            data["Lesson_data"],
-            data["ROOM"],
-            ','.join(str(l) for l in lessons),
-            nlessons,
-            pay_data(data, nlessons)[1] # pay string
-        )
-        courses.append(cdata)
-    courses.sort()
-    return courses
-
-
 def write_xlsx(xl_db, filepath):
     """Write a pylightxl "database" to the given path.
     """
     xl.writexl(db=xl_db, fn=filepath)
 
 
+#TODO?
 def make_teacher_table_xlsx(activities):
     headers = [
         "H_class",
@@ -255,7 +207,7 @@ def make_teacher_table_xlsx(activities):
         sheet.update_index(row=row_id, col=lastcol - 1, val=T("total"))
     return db
 
-
+#TODO?
 def make_class_table_xlsx(activities):
     db = xl.Database()
     headers = [
@@ -375,6 +327,7 @@ def make_class_table_xlsx(activities):
     return db
 
 
+#?
 def make_teacher_table_room(activities):
     """Construct a pdf with a table for each teacher, each such table
     starting on a new page.
@@ -496,15 +449,147 @@ def make_teacher_table_room(activities):
     return pdf.build_pdf()
 
 
-#TODO
+def teacher_table_data():
+    """Collect the lesson and pay data for each teacher, dividing the
+    individual courses according to block.
+    """
+    db = get_database()
+    lesson_units = db.table("LESSON_UNITS")
+    # Needed for printing room lists:
+    roomtable = db.table("TT_ROOMS")
+    all_room_lists = get_db_rooms(
+        db.table("ROOMS"), db.table("TT_ROOM_GROUP_MAP")
+    )
+    ### Collect the data for each teacher separately
+    tlist = db.table("TEACHERS").teacher_list(skip_null = True)
+    t_blocks = []
+    for t, tid, tname in tlist:
+        courses = filter_activities("TEACHER", t)
+        ## Add the total lesson numbers
+        all_lessons, all_pay  = workload_teacher(t, courses)
+        #print("§teacher:", t, tid, tname, len(courses))
+        block_map = {}
+        noblocklist = []
+        ## Sort according to block
+        for cline in courses:
+            cglist = []
+            for gdata in cline.group_list:
+                c = gdata.Class.CLASS
+                g = gdata.GROUP_TAG
+                id = gdata.Class.id
+                cglist.append((c, g, id))
+            tlist = []
+            for tdata in cline.teacher_list:
+                tid = tdata.Teacher.TID
+                p = tdata.PAY_FACTOR
+                id = tdata.Teacher.id
+                tlist.append((tid, p, id))
+            lb = cline.course.Lesson_block
+            lbid = lb.id
+            block = cline.course.Lesson_block.BLOCK
+            ## Gather the lesson-block related info (lessons, workload, etc.)
+            if block:
+                # a named block
+                try:
+                    bname, bcomment = block.split("#", 1)
+                except ValueError:
+                    bname, bcomment = block, ""
+                try:
+                    blockdata = block_map[lbid]
+                    llist = blockdata[2]
+                except KeyError:
+                    # first course for this block
+                    llist = [
+                        l.LENGTH
+                        for l in lesson_units.get_block_units(lbid)
+                    ]
+                    blockdata = (bname, bcomment, llist, [])
+                    block_map[lbid] = blockdata
+            else:
+                # not a named block
+                llist = [
+                    l.LENGTH
+                    for l in lesson_units.get_block_units(lbid)
+                ]
+            ## Add the course data
+            # workload/pay
+            pay = 0.0
+            colleagues = []
+            _blocks = cline.course.BLOCK_COUNT
+            workload = lb.WORKLOAD
+            if workload < 0.0:
+                nlessons = sum(llist)
+                workload = abs(workload * nlessons)
+                block_count = T("WORKLOAD_LESSONS")
+            else:
+                block_count = f'[{print_fix(_blocks)}]'
+            lfactor = workload * _blocks
+            for tline in cline.teacher_list:
+                if tline.Teacher.id == t:
+                    pay = lfactor * tline.PAY_FACTOR
+                    #print("§PAY:", tline.Teacher.TID, pay)
+                else:
+                    colleagues.append(tline.Teacher.TID)
+            cg_list = [
+                (cg.Class.CLASS, cg.GROUP_TAG, cg.Class.NAME)
+                for cg in cline.group_list
+            ]
+            # The room is an ordered list of individual rooms
+            # and an optional room-group.
+            course_id = cline.course.id
+            rlist = roomtable.get_room_list(course_id)
+            croom = cline.get_classroom()
+            # Show classroom instead of "$"
+            rlist1 = []
+            for r in rlist:
+                if r.Room.id:
+                    rlist1.append(r.Room.id)
+                elif croom:
+                    rlist1.append(croom)
+                else:
+                    REPORT_CRITICAL("Bug: no classroom")
+            rxtra = cline.course.Room_group
+            #print("§get rooms:", rlist, "\n +++ ", rxtra)
+            room = print_room_choice(
+                room_choice = (rlist1, rxtra.id),
+                room_lists = all_room_lists,
+            )
+            sbj = cline.course.Subject
+            course_data = COURSE_DATA(
+                cg_list,
+                (sbj.SID, sbj.NAME),
+                room,
+                block_count,
+                pay,
+                colleagues,
+                cline.course.INFO
+            )
+            #print("$$$", course_data)
+            if block:
+                blockdata[3].append(course_data)
+            else:
+                noblocklist.append((llist, course_data))
+        ## If there are entries, add data to teachers list
+        if noblocklist or block_map:
+            t_blocks.append(TEACHER_BLOCK(
+                tid,
+                tname,
+                all_lessons,
+                all_pay,
+                sorted(block_map.values()),
+                noblocklist
+        ))
+    return t_blocks
+
+
 def make_teacher_table_pay(with_comments = True):
     """Construct a pdf with a table for each teacher, each such table
     starting on a new page.
-    The sorting within a teacher table is first class, then block,
-    then subject.
+    The courses are divided by block and sorted by subject and class-group.
     """
     headers = []
     colwidths = []
+# Get column sizes from CONFIG?
     for h, w in (
         ("H_group",             20),
         ("H_subject",           60),
@@ -514,338 +599,172 @@ def make_teacher_table_pay(with_comments = True):
     ):
         headers.append(T(h))
         colwidths.append(w)
-    db = get_database()
-    lesson_units = db.table("LESSON_UNITS")
-    # Needed for printing room lists:
-    roomtable = db.table("TT_ROOMS")
-    all_room_lists = get_db_rooms(
-        db.table("ROOMS"), db.table("TT_ROOM_GROUP_MAP")
-    )
-    tlist = db.table("TEACHERS").teacher_list(skip_null = True)
     pdf = FPDF()
     pdf.set_left_margin(20)
     pdf.set_right_margin(20)
+#CONFIG?
     pdf.set_font("Times", size=12)
     ### Produce a table for each teacher
-    for t, tid, tname in tlist:
-        courses = filter_activities("TEACHER", t)
-        #print("???", t, tid, tname, len(courses))
-        c_block_map = {}
-        ## Sort according to class, and block
-        for cline in courses:
-            # Use the first class-group (when there is > 1) for sorting
-            cglist = cline.group_list
-            # The entries in <cglist> should already be sorted (class, group)
-            if cglist:
-                c = cglist[0].Class.CLASS
-                #_cg = cline.group_list[0]
-                #cg = format_class_group(_cg.Class.CLASS, _cg.GROUP_TAG)
-                #c, g = _cg.Class.CLASS, _cg.GROUP_TAG
-            else:
-                c = ""
-            block = cline.course.Lesson_block.BLOCK
-            print("\n§cgb:", c, block)
-            try:
-                bmap = c_block_map[c]
-            except KeyError:
-                c_block_map[c] = {block: [cline]}
-            else:
-                try:
-                    bmap[block].append(cline)
-                except KeyError:
-                    bmap[block] = [cline]
-        if c_block_map:
-            print(f"\nTEACHER: {tname} ({t})")
-            pdf.add_page()
-            pdf.set_font(style="b", size=16)
-            pdf.start_section(f"{tname} ({tid})")
-            pdf.write(text = f"{tname} ({tid})\n\n")
-            pdf.set_font(size=12)
-            ## Add the total lesson numbers
-            nlessons, npay  = workload_teacher(t, courses)
-            print(f"§workload: {nlessons} lessons, pay_quota = {npay}")
-            #pdf.set_draw_color(200, 0, 0)
-            pdf.set_draw_color(150) # grey-scale
-            with pdf.table(
-                width = 150,
-                text_align = "CENTER",
-                borders_layout = "HORIZONTAL_LINES",
-                first_row_as_headings = False,
-            ) as table:
+    t_blocks = teacher_table_data()
+    for tdata in t_blocks:
+        #print(f"\nTEACHER: {tdata.tname} ({tdata.tid})")
+        pdf.add_page()
+        pdf.set_font(style="b", size=16)
+        pdf.start_section(f"{tdata.tname} ({tdata.tid})")
+        pdf.write(text = f"{tdata.tname} ({tdata.tid})\n\n")
+        pdf.set_font(size=12)
+        ## Add the total lesson numbers
+        #print(
+        #    f"§workload: {tdata.all_lessons} lessons,"
+        #    f" pay_quota = {tdata.all_pay}"
+        #)
+        #pdf.set_draw_color(200, 0, 0)
+        pdf.set_draw_color(150) # grey-scale
+        with pdf.table(
+            width = 150,
+            text_align = "CENTER",
+            borders_layout = "HORIZONTAL_LINES",
+            first_row_as_headings = False,
+        ) as table:
+            row = table.row()
+            row.cell(
+                T("timetable_lessons", n = tdata.all_lessons),
+                align = "LEFT"
+            )
+            row.cell(
+                T("pay_lessons", n = print_fix(tdata.all_pay)),
+                align = "LEFT"
+            )
+            row = table.row()
+            row.cell("")
+            row.cell("")
+        pdf.set_draw_color(0) # black
+        with pdf.table(
+            borders_layout = "SINGLE_TOP_LINE",
+            col_widths = colwidths,
+            padding = 1,
+        ) as table:
+            row = table.row()
+            for h in headers:
+                row.cell(h)
+
+            ### Deal with the (named) blocks first
+            for bname, bcomment, llist, clist in tdata.blocklist:
                 row = table.row()
-                row.cell(
-                    T("timetable_lessons", n = nlessons), align = "LEFT"
-                )
-                row.cell(
-                    T("pay_lessons", n = print_fix(npay)), align = "LEFT"
-                )
-                row = table.row()
+                row.cell(f"[[{bname}]]", colspan = 3)
+                row.cell("; ".join(str(l) for l in llist))
                 row.cell("")
-                row.cell("")
-            pdf.set_draw_color(0) # black
-            with pdf.table(
-                borders_layout = "SINGLE_TOP_LINE",
-                col_widths = colwidths,
-                padding = 1,
-            ) as table:
-                row = table.row()
-                for h in headers:
-                    row.cell(h)
-                ### In each class deal with the (named) blocks first
-                c0 = None
-                for c in sorted(c_block_map):
-                    bmap = c_block_map[c]
-                    try:
-                        noblocklist = bmap.pop("")
-                    except KeyError:
-                        noblocklist = []
-                    ## Show block courses
-                    for block in sorted(bmap):
-                        clines = bmap[block]
-                        # Need the lesson lengths
-                        lb = clines[0].course.Lesson_block
-                        lbid = lb.id
-                        llist = [
-                            l.LENGTH
-                            for l in lesson_units.get_block_units(lbid)
-                        ]
-                        nlessons = sum(llist)
-#TODO
-                        try:
-                            bname, bcomment = block.split("#", 1)
-                        except ValueError:
-                            bname, bcomment = block, ""
-
-                        print(f"  {c} '{block}' [[{bname}]] | {llist} | {nlessons}")
-                        if with_comments and bcomment:
-                            print("    #", bcomment)
-#                            row = table.row()
-#                            row.cell(
-#                                f"# {bcomment}",
-#                                colspan = 5,
-#                                padding = (-2, 7, 1, 7)
-#                            )
-                        for cline in clines:
-                            # workload/pay
-                            pay = ""
-                            colleagues = []
-                            for tline in cline.teacher_list:
-                                if tline.Teacher.id == t:
-                                    workload = lb.WORKLOAD
-                                    if workload < 0.0:
-                                        workload = abs(workload * nlessons)
-                                    workload *= cline.course.BLOCK_COUNT
-                                    pay = workload * tline.PAY_FACTOR
-                                    #print("§PAY:", tline.Teacher.TID, pay)
-                                else:
-                                    colleagues.append(tline.Teacher.TID)
-
-                            cg_list = [
-                                format_class_group(
-                                    cg.Class.CLASS, cg.GROUP_TAG
-                                )
-                                for cg in cline.group_list
-                            ]
-                            # The room is an ordered list of individual rooms
-                            # and an optional room-group.
-                            course_id = cline.course.id
-                            rlist = roomtable.get_room_list(course_id)
-                            rxtra = cline.course.Room_group
-                            #print("§get rooms:", rlist, "\n +++ ", rxtra)
-                            room = print_room_choice(
-                                room_choice = (
-                                    [r.Room.id for r in rlist],
-                                    rxtra.id
-                                ),
-                                room_lists = all_room_lists,
-                            )
-                            print(
-                                "  §--",
-                                ", ".join(cg_list), "|",
-                                cline.course.Subject.NAME, "|",
-                                room, "|",
-                                print_fix(cline.course.BLOCK_COUNT), "|",
-                                pay
-                            )
-#TODO: show other teachers?
-                            if colleagues:
-                                print("    **", ", ".join(colleagues))
-#INFO, extra class-groups?
-# There is not really a special class (at present I am just taking the
-# first one), so perhaps any course with multiple class-groups should
-# have a dummy group and an extra group line?
-
-                            if with_comments and cline.course.INFO:
-                                print(f"       (# {cline.course.INFO} #)")
-
-                    ## Show non-block courses
-                    for cline in noblocklist:
-                        # Need the lesson lengths
-                        lb = cline.course.Lesson_block
-                        lbid = lb.id
-                        llist = [
-                            l.LENGTH
-                            for l in lesson_units.get_block_units(lbid)
-                        ]
-                        nlessons = sum(llist)
-
-                        # workload/pay
-                        pay = ""
-                        colleagues = []
-                        for tline in cline.teacher_list:
-                            if tline.Teacher.id == t:
-                                workload = lb.WORKLOAD
-                                if workload < 0.0:
-                                    workload = abs(workload * nlessons)
-                                workload *= cline.course.BLOCK_COUNT
-                                pay = print_fix(workload * tline.PAY_FACTOR)
-                                #print("§PAY:", tline.Teacher.TID, pay)
-                            else:
-                                colleagues.append(tline.Teacher.TID)
-
-
-#TODO: Columns. "Einheiten" could be number of lessons or BLOCK_COUNT,
-# depending on BLOCK? The "Stunden" column might well be superfluous.
-# What about a "Raum" column?
-
-                        cg_list = [
-                            format_class_group(cg.Class.CLASS, cg.GROUP_TAG)
-                            for cg in cline.group_list
-                        ]
-                        # The room is an ordered list of individual rooms
-                        # and an optional room-group.
-                        course_id = cline.course.id
-                        rlist = roomtable.get_room_list(course_id)
-                        rxtra = cline.course.Room_group
-                        #print("§get rooms:", rlist, "\n +++ ", rxtra)
-                        room = print_room_choice(
-                            room_choice = (
-                                [r.Room.id for r in rlist],
-                                rxtra.id
-                            ),
-                            room_lists = all_room_lists,
-                        )
-                        print(
-                            "  §++",
-                            ", ".join(cg_list), "|",
-                            cline.course.Subject.NAME, "|",
-                            room, "|",
-                            ", ".join(str(l) for l in llist), "|",
-                            pay
-                        )
-#TODO: show other teachers?
-                        if colleagues:
-                            print("    **", ", ".join(colleagues))
-#INFO, extra class-groups?
-# There is not really a special class (at present I am just taking the
-# first one), so perhaps any course with multiple class-groups should
-# have a dummy group and an extra group line?
-
-                        if with_comments and cline.course.INFO:
-                            print(f"       (# {cline.course.INFO} #)")
-
-                '''
+                if with_comments and bcomment:
                     row = table.row()
-                    row.cell(f"[[{bname}]]", colspan = 3)
-                    row.cell(", ".join(str(l) for l in llist))
-                    row.cell(str(nlessons))
-                    # Could fetch all classes using the block, using
-                    #    block_courses(block_id: int) -> list[COURSE_LINE]
-                    # but it is probably not an essential piece of
-                    # information
-                    if with_comments and bcomment:
-                        #print("    #", bcomment)
-                        row = table.row()
-                        row.cell(
-                            f"# {bcomment}",
-                            colspan = 5,
-                            padding = (-2, 7, 1, 7)
-                        )
-                    ## Show the individual courses
-                    for cl in clines:
-                        glist = []
-                        g0 = None
-                        for g in cl.group_list:
-                            if g.Class.id == c:
-                                g0 = g.GROUP_TAG
-                            else:
-                                glist.append(
-                                    format_class_group(
-                                        g.Class.CLASS, g.GROUP_TAG
-                                    )
-                                )
-                        if glist:
-                            # Probably best to use abbreviated form in case
-                            # the expanded form takes up too much space.
-                            # The display of other class-groups is probably
-                            # not so important anyway.
-                            #g0 = f"{g0} + {', '.join(sorted(glist))}"
-                            g0 = f"{g0} ..."
-                        #print("    –",
-                        #    cl.show("Subject"), "|",
-                        #    g0, "|",
-                        #    cl.show("Teachers"), "|",
-                        #    f"({print_fix(cl.course.BLOCK_COUNT)})", "|",
-                        #    # no total number of lessons (see block line)
-                        #)
-                        row = table.row()
-                        row.cell(f' - {cl.show("Subject")}')
-                        row.cell(g0)
-                        row.cell(cl.show("Teachers"))
-                        row.cell(f"({print_fix(cl.course.BLOCK_COUNT)})")
-                        row.cell("")
-                        if with_comments and cl.course.INFO:
-                            print(f"       (# {cl.course.INFO} #)")
-                            row = table.row()
-                            row.cell(
-                                f"(# {cl.course.INFO} #)",
-                                colspan = 5,
-                                padding = (-2, 7, 1, 7)
-                            )
-                ### Now deal with non-block ("normal") lessons
-                for cl in noblock:
-                    glist = []
-                    g0 = None
-                    for g in cl.group_list:
-                        if g.Class.id == c:
-                            g0 = g.GROUP_TAG
-                        else:
-                            glist.append(
-                                format_class_group(
-                                    g.Class.CLASS, g.GROUP_TAG
-                                )
-                            )
-                    if glist:
-                        g0 = f"{g0} + {', '.join(sorted(glist))}"
-                    # Need the lesson lengths
-                    lbid = cl.course.Lesson_block.id
-                    llist = [
-                        l.LENGTH for l in lesson_units.get_block_units(lbid)
+                    row.cell(
+                        T("BLOCK_COMMENT", comment = bcomment),
+                        colspan = 5,
+                        padding = (-2, 7, 1, 7)
+                    )
+                ## Show the individual courses, sorting by subject
+                ## and class-group
+                for cl in sorted(
+                    clist,
+                    key = lambda x: (x.subject[1], x.class_groups)
+                ):
+                    glist = [
+                        format_class_group(g[0], g[1])
+                        for g in cl.class_groups
                     ]
-                    #print(
-                    #    cl.show("Subject"), "|",
-                    #    g0, "|",
-                    #    cl.show("Teachers"), "|",
-                    #    llist, "|",
-                    #    sum(llist)
-                    #)
+                    if glist:
+                        # Use an extra line if multiple groups
+                        if len(glist) > 1:
+                            cg = "+++"
+                            cgx = ", ".join(glist)
+                        else:
+                            cg = glist[0]
+                            cgx = ""
+                    else:
+                        cg = "---"
+                        cgx = ""
                     row = table.row()
-                    row.cell(cl.show("Subject"))
-                    row.cell(g0)
-                    row.cell(cl.show("Teachers"))
-                    row.cell(", ".join(str(l) for l in llist))
-                    row.cell(str(sum(llist)))
-                    if with_comments and cl.course.INFO:
-                        print(f"  (# {cl.course.INFO} #)")
+                    row.cell(f' - {cg}')
+                    row.cell(cl.subject[1])
+                    row.cell(cl.room)
+                    row.cell(cl.block_count)
+                    row.cell(print_fix(cl.pay))
+                    if cgx or cl.colleagues:
                         row = table.row()
                         row.cell(
-                            f"(# {cl.course.INFO} #)",
+                            T("MULTIGROUP", groups = cgx) if cgx else "",
+                            colspan = 3,
+                            padding = (-2, 7, 1, 7)
+                        )
+                        if cl.colleagues:
+                            _clx = ", ".join(cl.colleagues)
+                            clx = T("EXTRA_TEACHERS", teachers = _clx)
+                        else:
+                            clx = ""
+                        row.cell(
+                            clx,
+                            colspan = 2,
+                            padding = (-2, 7, 1, 7)
+                        )
+                    if with_comments and cl.course_info:
+                        row = table.row()
+                        row.cell(
+                            T("COURSE_INFO", info = cl.course_info),
                             colspan = 5,
                             padding = (-2, 7, 1, 7)
                         )
-                '''
-    return pdf
 
+            ### Now deal with non-block ("normal") lessons, sorting by
+            ### subject and class-group
+            for llist, cl in sorted(
+                tdata.noblocklist,
+                key = lambda x: (x[1].subject[1], x[1].class_groups)
+            ):
+                glist = [
+                    format_class_group(g[0], g[1])
+                    for g in cl.class_groups
+                ]
+                if glist:
+                    # Use an extra line if multiple groups
+                    if len(glist) > 1:
+                        cg = "+++"
+                        cgx = ", ".join(glist)
+                    else:
+                        cg = glist[0]
+                        cgx = ""
+                else:
+                    cg = "---"
+                    cgx = ""
+                row = table.row()
+                row.cell(cg)
+                row.cell(cl.subject[1])
+                row.cell(cl.room)
+                row.cell("; ".join(str(l) for l in llist))
+                row.cell(print_fix(cl.pay))
+                if cgx or cl.colleagues:
+                    row = table.row()
+                    row.cell(
+                        T("MULTIGROUP", groups = cgx) if cgx else "",
+                        colspan = 3,
+                        padding = (-2, 7, 1, 7)
+                    )
+                    if cl.colleagues:
+                        _clx = ", ".join(cl.colleagues)
+                        clx = T("EXTRA_TEACHERS", teachers = _clx)
+                    else:
+                        clx = ""
+                    row.cell(
+                        clx,
+                        colspan = 2,
+                        padding = (-2, 7, 1, 7)
+                    )
+                if with_comments and cl.course_info:
+                    row = table.row()
+                    row.cell(
+                        T("COURSE_INFO", info = cl.course_info),
+                        colspan = 5,
+                        padding = (-2, 7, 1, 7)
+                    )
+    return pdf
 
 
 def make_class_table_pdf(with_comments = True):
@@ -858,10 +777,10 @@ def make_class_table_pdf(with_comments = True):
         ("H_subject",           75),
         ("H_group",             20),
         ("H_teacher",           25),
-        ("H_npay",              30),
+        ("H_units",             30),
         ("H_lessons",           20),
     ):
-        headers.append(T[h])
+        headers.append(T(h))
         colwidths.append(w)
     db = get_database()
     lesson_units = db.table("LESSON_UNITS")
@@ -920,7 +839,7 @@ def make_class_table_pdf(with_comments = True):
                 first_row_as_headings = False,
             ) as table:
                 row = table.row()
-                row.cell(T["total_lessons"], align = "LEFT")
+                row.cell(T("total_lessons", align = "LEFT"))
                 for g, n in g_n_list:
                     row.cell(f"{g}: {n}")
                 if len(g_n_list) == 1:
@@ -944,7 +863,8 @@ def make_class_table_pdf(with_comments = True):
                 for b in sorted(block_map):
                     clines = block_map[b]
                     # Need the lesson lengths
-                    lbid = clines[0].course.Lesson_block.id
+                    lb = clines[0].course.Lesson_block
+                    lbid = lb.id
                     llist = [
                         l.LENGTH for l in lesson_units.get_block_units(lbid)
                     ]
@@ -955,17 +875,16 @@ def make_class_table_pdf(with_comments = True):
                     #print(f"  [[{bname}]] | {llist} | {sum(llist)}")
                     row = table.row()
                     row.cell(f"[[{bname}]]", colspan = 3)
-                    row.cell(", ".join(str(l) for l in llist))
+                    row.cell("; ".join(str(l) for l in llist))
                     row.cell(str(sum(llist)))
                     # Could fetch all classes using the block, using
                     #    block_courses(block_id: int) -> list[COURSE_LINE]
                     # but it is probably not an essential piece of
                     # information
                     if with_comments and bcomment:
-                        #print("    #", bcomment)
                         row = table.row()
                         row.cell(
-                            f"# {bcomment}",
+                            T("BLOCK_COMMENT", comment = bcomment),
                             colspan = 5,
                             padding = (-2, 7, 1, 7)
                         )
@@ -988,25 +907,22 @@ def make_class_table_pdf(with_comments = True):
                             # The display of other class-groups is probably
                             # not so important anyway.
                             #g0 = f"{g0} + {', '.join(sorted(glist))}"
-                            g0 = f"{g0} ..."
-                        #print("    –",
-                        #    cl.show("Subject"), "|",
-                        #    g0, "|",
-                        #    cl.show("Teachers"), "|",
-                        #    f"({print_fix(cl.course.BLOCK_COUNT)})", "|",
-                        #    # no total number of lessons (see block line)
-                        #)
+                            g0 = f"{g0}  ..."
                         row = table.row()
                         row.cell(f' - {cl.show("Subject")}')
                         row.cell(g0)
                         row.cell(cl.show("Teachers"))
-                        row.cell(f"({print_fix(cl.course.BLOCK_COUNT)})")
+                        if lb.WORKLOAD < 0.0:
+                            block_count = T("WORKLOAD_LESSONS")
+                        else:
+                            _blocks = cl.course.BLOCK_COUNT
+                            block_count = f'[{print_fix(_blocks)}]'
+                        row.cell(block_count)
                         row.cell("")
                         if with_comments and cl.course.INFO:
-                            print(f"       (# {cl.course.INFO} #)")
                             row = table.row()
                             row.cell(
-                                f"(# {cl.course.INFO} #)",
+                                T("COURSE_INFO", info = cl.course.INFO),
                                 colspan = 5,
                                 padding = (-2, 7, 1, 7)
                             )
@@ -1030,24 +946,16 @@ def make_class_table_pdf(with_comments = True):
                     llist = [
                         l.LENGTH for l in lesson_units.get_block_units(lbid)
                     ]
-                    #print(
-                    #    cl.show("Subject"), "|",
-                    #    g0, "|",
-                    #    cl.show("Teachers"), "|",
-                    #    llist, "|",
-                    #    sum(llist)
-                    #)
                     row = table.row()
                     row.cell(cl.show("Subject"))
                     row.cell(g0)
                     row.cell(cl.show("Teachers"))
-                    row.cell(", ".join(str(l) for l in llist))
+                    row.cell("; ".join(str(l) for l in llist))
                     row.cell(str(sum(llist)))
                     if with_comments and cl.course.INFO:
-                        print(f"  (# {cl.course.INFO} #)")
                         row = table.row()
                         row.cell(
-                            f"(# {cl.course.INFO} #)",
+                            T("COURSE_INFO", info = cl.course.INFO),
                             colspan = 5,
                             padding = (-2, 7, 1, 7)
                         )
@@ -1060,14 +968,12 @@ if __name__ == "__main__":
     from ui.ui_base import SAVE_FILE
 
     pdf = make_teacher_table_pay()
-    filepath = SAVE_FILE("pdf-Datei (*.pdf)", "Lehrer-Stunden-Deputate")
+    filepath = SAVE_FILE("pdf-Datei (*.pdf)", "Deputate")
     if filepath and os.path.isabs(filepath):
         if not filepath.endswith(".pdf"):
             filepath += ".pdf"
         pdf.output(filepath)
         print("  --->", filepath)
-
-    quit(1)
 
     pdf = make_class_table_pdf()
 
