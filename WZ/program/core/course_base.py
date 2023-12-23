@@ -1,7 +1,7 @@
 """
 core/course_base.py
 
-Last updated:  2023-12-19
+Last updated:  2023-12-23
 
 Support functions dealing with courses, lessons, etc.
 
@@ -611,6 +611,8 @@ def filter_activities(filter_field: str, value: int) -> list[COURSE_LINE]:
         REPORT_CRITICAL(
             f"Bug: In <filter_activities>, filter_field = '{filter_field}'"
         )
+    # Sort on subject
+    course_list.sort(key = lambda x: x.course.Subject.NAME)
     return course_list
 
 
