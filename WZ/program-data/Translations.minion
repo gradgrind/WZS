@@ -74,6 +74,8 @@ core.list_activities: {
     BLOCK_COMMENT:      "#** {comment} **#"
     MULTIGROUP:         "+++: {groups}"
     EXTRA_TEACHERS:     "mit: {teachers}"
+    NO_GROUPS:          "Für das Fach {subject} sollen Zeugnisse erstellt werden, es gibt aber keine Schülergruppen (Kurs: {id})"
+    NO_TEACHERS:        "Für das Fach {subject} sollen Zeugnisse erstellt werden, es gibt aber keine Lehrpersonen (Kurs: {id})"
 }
 
 core.pupils: {

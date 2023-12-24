@@ -1,7 +1,7 @@
 """
 ui/dialogs/dialog_course_teachers.py
 
-Last updated:  2023-12-09
+Last updated:  2023-12-24
 
 Supporting "dialog" for the course editor – edit the teachers of a course.
 
@@ -48,13 +48,61 @@ from ui.ui_base import (
     QTableWidgetItem,
     ### QtGui:
     ### QtCore:
+    QObject,
     Qt,
     Slot,
+    QEvent,
     ### other
     load_ui,
 )
 
+NO_REPORTS = "☐"
+WITH_REPORTS = "☑"
+
 ### -----
+
+
+class EventFilter(QObject):
+    """Implement an event filter for key presses on the table.
+    """
+    def __init__(self, table, reports):
+        super().__init__()
+        table.installEventFilter(self)
+        self.table = table
+        self.reports = reports
+
+    def eventFilter(self, obj: QWidget, event: QEvent) -> bool:
+        if event.type() == QEvent.Type.KeyPress:
+            key = event.key()
+            if key == Qt.Key.Key_Space:
+                row = self.table.currentRow()
+                item = self.table.item(row, 0)
+                if item.checkState() == Qt.CheckState.Checked:
+                    item.setCheckState(Qt.CheckState.Unchecked)
+                else:
+                    item.setCheckState(Qt.CheckState.Checked)
+                return True
+            if key == Qt.Key.Key_Plus:
+                self.set_report(True)
+                return True
+            if key == Qt.Key.Key_Minus:
+                self.set_report(False)
+                return True
+        # otherwise standard event processing
+        return False
+
+    def set_report(self, on):
+        row = self.table.currentRow()
+        item0 = self.table.item(row, 0)
+        if item0.checkState() != Qt.CheckState.Checked:
+            return
+        item = self.table.item(row, 1)
+        if on:
+            self.reports[row] = True
+            item.setText(WITH_REPORTS)
+        else:
+            self.reports[row] = False
+            item.setText(NO_REPORTS)
 
 
 def courseTeachersDialog(
@@ -72,8 +120,32 @@ def courseTeachersDialog(
 
     @Slot(int, int)
     def on_teacher_table_cellChanged(row, col):
+        nonlocal suppress_events
         if suppress_events: return
+        if col == 0:
+            item = ui.teacher_table.item(row, 0)
+            item1 = ui.teacher_table.item(row, 1)
+            suppress_events = True
+            if item.checkState() == Qt.CheckState.Checked:
+                reports[row] = True
+                item1.setText(WITH_REPORTS)
+            else:
+                reports[row] = False
+                item1.setText(NO_REPORTS)
+            suppress_events = False
         evaluate()
+
+    @Slot(int, int, int, int)
+    def on_teacher_table_currentCellChanged(r, c, r0, c0):
+        """This is to keep the current cell in the first column.
+        """
+        if c > 0:
+            ui.teacher_table.setCurrentCell(r, 0)
+
+    @Slot(int, int)
+    def on_teacher_table_cellClicked(r, c):
+        if c == 1:
+            event_filter.set_report(not reports[r])
 
     ##### functions #####
 
@@ -84,8 +156,11 @@ def courseTeachersDialog(
             item = ui.teacher_table.item(row, 0)
             if item.checkState() == Qt.CheckState.Checked:
                 # Include this row
-                chosen.append(rec[0])
-                tidlist.append(rec[1])
+                z = reports[row]
+                chosen.append((rec[0], z))
+                #chosen.append(rec[0])
+                tidlist.append(rec[1] if z else f"({rec[1]})")
+                #tidlist.append(rec[1])
         #print("§evaluate:", chosen, "=?", chosen0)
         ui.value.setText(", ".join(tidlist))
         pb_accept.setEnabled(chosen != chosen0)
@@ -98,6 +173,8 @@ def courseTeachersDialog(
     pb_accept = ui.buttonBox.button(
         QDialogButtonBox.StandardButton.Ok
     )
+    reports = []
+    event_filter = EventFilter(ui.teacher_table, reports)
 
     # Data initialization
     suppress_events = True
@@ -106,19 +183,24 @@ def courseTeachersDialog(
     teacher2row = {}
     for row, rec in enumerate(teachers):
         teacher2row[rec[0]] = row
+        reports.append(False)
         # Set fields
         item = QTableWidgetItem(rec[1])
         item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
         item.setCheckState(Qt.CheckState.Unchecked)
         ui.teacher_table.setItem(row, 0, item)
-        item = QTableWidgetItem(rec[2])
+        item = QTableWidgetItem(NO_REPORTS)
+        item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
         ui.teacher_table.setItem(row, 1, item)
+        item = QTableWidgetItem(rec[2])
+        ui.teacher_table.setItem(row, 2, item)
     # Set initial selection
-    for ti in start_value:
+    for ti, ri in start_value:
         row = teacher2row[ti]
         item = ui.teacher_table.item(row, 0)
         item.setCheckState(Qt.CheckState.Checked)
-        ui.teacher_table.setCurrentItem(item)   # should scroll to line
+        ui.teacher_table.setCurrentCell(row, 0) # should scroll to line
+        event_filter.set_report(ri)
 
     result = None
     chosen0 = []
@@ -146,7 +228,7 @@ if __name__ == "__main__":
         (12, "KW", "Kathrin Wollemaus"),
     ]
 
-    t0 = [1, 8,]
+    t0 = [(1, True), (8, False),]
 
     '''
     from core.db_access import get_database

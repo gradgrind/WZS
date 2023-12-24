@@ -1,7 +1,7 @@
 """
 core/list_activities.py
 
-Last updated:  2023-12-23
+Last updated:  2023-12-24
 
 Present information on activities for teachers and classes/groups.
 The information is formatted in pdf documents using the reportlab
@@ -41,14 +41,20 @@ T = Tr("core.list_activities")
 
 ### +++++
 
-from typing import NamedTuple, Optional
+from typing import NamedTuple#, Optional
 #from io import BytesIO
 
+#import lib.pylightxl as xl
 from fpdf import FPDF
 #from fpdf.enums import TableBordersLayout
 #from fpdf.fonts import FontFace
 
-from core.base import format_class_group, DATAPATH, REPORT_CRITICAL
+from core.base import (
+    format_class_group,
+    REPORT_CRITICAL,
+    REPORT_ERROR,
+    #DATAPATH,
+)
 from core.basic_data import CONFIG, get_database, print_fix
 from core.classes import GROUP_ALL
 from core.rooms import get_db_rooms, print_room_choice
@@ -57,25 +63,6 @@ from core.course_base import (
     workload_class,
     workload_teacher,
 )
-#from ui.ui_base import (
-#    ##QtGui:
-#    QTextDocument,
-#    #QPrinter,
-#    QPdfWriter,
-#    QPageSize,
-#    ##QtCore:
-#    #QMarginsF,
-#)
-
-#import lib.pylightxl as xl
-#from tables.pdf_table import TablePages
-
-#DECIMAL_SEP = CONFIG["DECIMAL_SEP"]
-
-#def PAY_FORMAT(pay):
-#    assert type(pay) == float
-#    return f"{pay:.3f}".replace(".", DECIMAL_SEP)
-
 
 class COURSE_DATA(NamedTuple):
     """Encapsulate the data gathered for a course line by the function
@@ -88,6 +75,8 @@ class COURSE_DATA(NamedTuple):
     pay: float
     colleagues: list[str]               # TID-list
     course_info: str
+    report: str
+    grades: str
 
 class TEACHER_BLOCK(NamedTuple):
     """Encapsulate the data gathered for a teacher by the function
@@ -472,6 +461,7 @@ def teacher_table_data():
         noblocklist = []
         ## Sort according to block
         for cline in courses:
+            course = cline.course
             cglist = []
             for gdata in cline.group_list:
                 c = gdata.Class.CLASS
@@ -484,9 +474,9 @@ def teacher_table_data():
                 p = tdata.PAY_FACTOR
                 id = tdata.Teacher.id
                 tlist.append((tid, p, id))
-            lb = cline.course.Lesson_block
+            lb = course.Lesson_block
             lbid = lb.id
-            block = cline.course.Lesson_block.BLOCK
+            block = course.Lesson_block.BLOCK
             ## Gather the lesson-block related info (lessons, workload, etc.)
             if block:
                 # a named block
@@ -515,7 +505,7 @@ def teacher_table_data():
             # workload/pay
             pay = 0.0
             colleagues = []
-            _blocks = cline.course.BLOCK_COUNT
+            _blocks = course.BLOCK_COUNT
             workload = lb.WORKLOAD
             if workload < 0.0:
                 nlessons = sum(llist)
@@ -536,8 +526,7 @@ def teacher_table_data():
             ]
             # The room is an ordered list of individual rooms
             # and an optional room-group.
-            course_id = cline.course.id
-            rlist = roomtable.get_room_list(course_id)
+            rlist = roomtable.get_room_list(course.id)
             croom = cline.get_classroom()
             # Show classroom instead of "$"
             rlist1 = []
@@ -548,13 +537,13 @@ def teacher_table_data():
                     rlist1.append(croom)
                 else:
                     REPORT_CRITICAL("Bug: no classroom")
-            rxtra = cline.course.Room_group
+            rxtra = course.Room_group
             #print("§get rooms:", rlist, "\n +++ ", rxtra)
             room = print_room_choice(
                 room_choice = (rlist1, rxtra.id),
                 room_lists = all_room_lists,
             )
-            sbj = cline.course.Subject
+            sbj = course.Subject
             course_data = COURSE_DATA(
                 cg_list,
                 (sbj.SID, sbj.NAME),
@@ -562,7 +551,9 @@ def teacher_table_data():
                 block_count,
                 pay,
                 colleagues,
-                cline.course.INFO
+                course.INFO,
+                course.REPORT,
+                course.GRADES,
             )
             #print("$$$", course_data)
             if block:
@@ -772,8 +763,8 @@ def make_class_table_pdf(with_comments = True):
     colwidths = []
     for h, w in (
         ## Column widths in mm (for A4 portrait)
-        # Sizes -> CONFIG? Maybe not, why should these be configurable?
-        # Maybe a "low" level config?
+# Sizes -> CONFIG? Maybe not, why should these be configurable?
+# Maybe a "low" level config?
         ("H_subject",           75),
         ("H_group",             20),
         ("H_teacher",           25),
@@ -962,10 +953,62 @@ def make_class_table_pdf(with_comments = True):
     return pdf
 
 
+#TODO:
+#EXPERIMENTAL: Getting data for reports (text & grade).
+from core.teachers import Teachers
+def report_data(GRADES = False):
+    db = get_database()
+    cgtable = db.table("COURSE_GROUPS")
+    cttable = db.table("COURSE_TEACHERS")
+    ## Iterate through all the courses, retaining only those with REPORT
+    ## and GRADES entries – and groups and teachers!
+    cg_reports = {}
+    t_reports = {}
+    for course in db.table("COURSE_BASE").records:
+        ci = course.id
+        if ci == 0: continue    # not a "real" COURSE_BASE entry
+        if GRADES:
+            if not course.GRADES:
+                continue
+        elif not course.REPORT:
+            continue
+        cglist = cgtable.get_course_groups(ci)
+        sbj = course.Subject
+        if not cglist:
+            REPORT_ERROR(
+                T("NO_GROUP", subject = sbj.NAME, id = ci)
+            )
+            continue
+        tlist = cttable.get_course_teachers(ci)
+        if not tlist:
+            REPORT_ERROR(
+                T("NO_TEACHER", subject = sbj.NAME, id = ci)
+            )
+            continue
+        #s = (sbj.NAME, sbj.SID, sbj.id)
+
+# class -> subject -> group -> teacher-list or teacher -> group-list ?
+# teacher -> class -> subject -> group-list
+# For the class grade tables, need class -> subject. The finer details
+# may be relevant for access permissions, etc.
+# For an individual teacher, need class -> subject. The finer details
+# may be relevant for access permissions, etc.
+
+        print("\n ***", sbj.NAME)
+        for cg in cglist:
+            print("cg:", cg.Class.CLASS, cg.GROUP_TAG)
+
+        for t in tlist:
+            print("t:", Teachers.get_name(t.Teacher))
+
+
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
 
 if __name__ == "__main__":
     from ui.ui_base import SAVE_FILE
+
+    report_data(GRADES = False)
+    quit(1)
 
     pdf = make_teacher_table_pay()
     filepath = SAVE_FILE("pdf-Datei (*.pdf)", "Deputate")
@@ -976,15 +1019,10 @@ if __name__ == "__main__":
         print("  --->", filepath)
 
     pdf = make_class_table_pdf()
-
-#    pdfbytes = make_class_table_pdf(activities)
     filepath = SAVE_FILE("pdf-Datei (*.pdf)", "Klassen-Stunden")
-#    filepath = saveDialog("pdf-Datei (*.pdf)", "Klassen-Stunden")
     if filepath and os.path.isabs(filepath):
         if not filepath.endswith(".pdf"):
             filepath += ".pdf"
-#        with open(filepath, "wb") as fh:
-#            fh.write(pdfbytes)
         pdf.output(filepath)
         print("  --->", filepath)
 

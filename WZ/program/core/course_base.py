@@ -1,7 +1,7 @@
 """
 core/course_base.py
 
-Last updated:  2023-12-23
+Last updated:  2023-12-24
 
 Support functions dealing with courses, lessons, etc.
 
@@ -485,6 +485,7 @@ class CourseTeachers(db_Table):
                 DB_FIELD_REFERENCE("Course", target = Courses.table),
                 DB_FIELD_REFERENCE("Teacher", target = Teachers.table),
                 DB_FIELD_FIX("PAY_FACTOR", min = 0.0),
+                DB_FIELD_TEXT("ROLE")
             )
             return True
         return False
@@ -710,6 +711,7 @@ def teachers_print_names(course_data: COURSE_LINE) -> str:
     return ", ".join(
         f"{t.Teacher.SIGNED}"
         for t in course_data.teacher_list
+        if "Z" in t.ROLE
     )
 
 

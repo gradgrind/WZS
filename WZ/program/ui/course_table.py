@@ -1,7 +1,7 @@
 """
 ui/course_table.py
 
-Last updated:  2023-12-09
+Last updated:  2023-12-24
 
 Support functions dealing with the course table.
 
@@ -145,7 +145,10 @@ class CourseTableRow:
             # the table will need to be reloaded:
             cgtable.clear_caches()
         elif field == "Teachers":
-            now = [t.Teacher.id for t in self.teacher_list]
+            now = [
+                (t.Teacher.id, "Z" in t.ROLE)
+                for t in self.teacher_list
+            ]
             db = get_database()
             teachers = db.table("TEACHERS")
             tlist = courseTeachersDialog(
@@ -158,7 +161,7 @@ class CourseTableRow:
             ttable = db.table("COURSE_TEACHERS")
             i = 0
             to_add = []
-            for t in tlist:
+            for t, rep in tlist:
                 try:
                    t0 = now[i]
                 except IndexError:
@@ -166,11 +169,16 @@ class CourseTableRow:
                         "Course": self.course.id,
                         "Teacher": t,
                         "PAY_FACTOR": "1",
+                        "ROLE": "Z" if rep else ""
                     })
                 else:
                     if t != t0:
                         rowid = self.teacher_list[i].id
-                        ttable.update_cell(rowid, "Teacher", t)
+                        ttable.update_cells(
+                            rowid,
+                            Teacher = t,
+                            ROLE = "Z" if rep else ""
+                        )
                 i += 1
             if to_add:
                 ttable.add_records(to_add)
