@@ -25,6 +25,9 @@
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
     <widget class="QTableWidget" name="teacher_table">
+     <property name="toolTip">
+      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:700;&quot;&gt;Tastatur-Eingabe&lt;/span&gt;&lt;/p&gt;&lt;p&gt;Aktuelle Zeile mit ↑,↓ ändern.&lt;/p&gt;&lt;p&gt;Leerzeichen schaltet die Lehrerwahl.&lt;/p&gt;&lt;p&gt;+, - um Zeugnisse zu wählen bzw. abzuwählen (nur für die ausgewählten Lehrer).&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+     </property>
      <property name="editTriggers">
       <set>QAbstractItemView::NoEditTriggers</set>
      </property>
@@ -90,7 +93,7 @@
      </item>
      <item row="0" column="1">
       <property name="text">
-       <string>X</string>
+       <string>☐</string>
       </property>
       <property name="textAlignment">
        <set>AlignCenter</set>
@@ -120,7 +123,7 @@
      </item>
      <item row="1" column="1">
       <property name="text">
-       <string>X</string>
+       <string>☑</string>
       </property>
       <property name="textAlignment">
        <set>AlignCenter</set>
