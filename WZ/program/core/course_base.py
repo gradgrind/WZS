@@ -675,6 +675,7 @@ def text_report_field(course_data: COURSE_LINE, text: str = None
             ))
         t1, t2 = "", ""
     # A report is only possible if there is a real group and a teacher:
+    teacher_names = teachers_print_names(course_data)
     if with_report:
         okg = False
         for cg in course_data.group_list:
@@ -686,13 +687,13 @@ def text_report_field(course_data: COURSE_LINE, text: str = None
                 course = str(course_data)
             ))
             with_report, t1, t2 = False, "", ""
-        elif not course_data.teacher_list:
+        elif not teacher_names:
             REPORT_ERROR(T["REPORT_BUT_NO_TEACHER"].format(
                 course = str(course_data)
             ))
             with_report, t1, t2 = False, "", ""
     title = t1 or subject_print_name(course_data)
-    sig = t2 or teachers_print_names(course_data)
+    sig = t2 or teacher_names
     value = f"{t1}{REPORT_SPLITTER}{t2}" if with_report else ""
     if value != report:
         # Update database (and memory mirror)
