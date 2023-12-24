@@ -41,8 +41,7 @@ T = Tr("core.list_activities")
 
 ### +++++
 
-from typing import NamedTuple#, Optional
-#from io import BytesIO
+from typing import NamedTuple
 
 #import lib.pylightxl as xl
 from fpdf import FPDF
@@ -55,7 +54,7 @@ from core.base import (
     REPORT_ERROR,
     #DATAPATH,
 )
-from core.basic_data import CONFIG, get_database, print_fix
+from core.basic_data import get_database, print_fix
 from core.classes import GROUP_ALL
 from core.rooms import get_db_rooms, print_room_choice
 from core.course_base import (
@@ -121,21 +120,6 @@ class ClassData(NamedTuple):
     lessons: str
     nlessons: int
     paystr: str         #TODO: not reliable for pay if combined groups!
-
-
-#?
-def print_class_group(klass, group):
-    """Return a representation of the class and group for the
-    teacher-lists.
-    If there is no group, return the class in brackets.
-    If the group is the whole class, just return the class.
-    Otherwise return the standard form for class + cgroup.
-    """
-    if group:
-        if group == GROUP_ALL:
-            return klass
-        return class_group_join(klass, group)
-    return f"({klass})"
 
 
 def write_xlsx(xl_db, filepath):
@@ -314,128 +298,6 @@ def make_class_table_xlsx(activities):
             )
             row_id += 1
     return db
-
-
-#?
-def make_teacher_table_room(activities):
-    """Construct a pdf with a table for each teacher, each such table
-    starting on a new page.
-    The sorting within a teacher table is first class, then block,
-    then subject.
-    """
-    def add_simple_items():
-        for item in noblocklist:
-            # The "team" tag is shown only when it is referenced later
-            pdf.add_line(item)
-        noblocklist.clear()
-
-    headers = []
-    colwidths = []
-    for h, w in (
-        ("H_team_tag",          15),
-        ("H_group",             20),
-        ("H_subject",           60),
-        ("H_units",             35),
-        ("H_room",              40),
-    ):
-        headers.append(T(h))
-        colwidths.append(w)
-
-    pdf = TablePages(
-        title=T["teacher_activities"],
-        author=CONFIG["SCHOOL_NAME"],
-        headers=headers,
-        colwidths=colwidths,
-        align=((1, "l"), (2, "p")),
-    )
-
-    noblocklist = []
-    teachers = get_teachers()
-    lg_ll = activities["Lg_LESSONS"]
-    tmap = activities["T_ACTIVITIES"]
-    for t in teachers:
-        try:
-            datalist = tmap[t]
-        except KeyError:
-            continue    # skip teachers without entries
-        tname = teachers.name(t)
-        pdf.add_page(tname)
-        items = teacher_list(datalist, lg_ll)
-        lds = {} # for detecting parallel groups
-        lesson_groups = set()
-        pay_total = 0.0
-        lessons_total = 0
-        for item in items:
-            ld = item.lesson_data
-            if ld in lds:
-                lds[ld] = 1
-            else:
-                lds[ld] = 0
-                pay_total += item.pay
-            if item.lesson_group not in lesson_groups:
-                lesson_groups.add(item.lesson_group)
-                lessons_total += item.nlessons
-        pdf.add_text(
-            f'{T("timetable_lessons")}: {lessons_total}'
-        )
-        pdf.add_vspace(5)
-
-        klass = None
-        for item in items:
-            # The lesson-data-id is shown only when it is referenced later
-            ld = item.lesson_data
-            if lds[ld] > 0:
-                # first time, show lesson-data-id
-                w = f"[{ld}]"
-                lds[ld] = -1
-                ref = ""
-                room = item.room
-            elif lds[ld] < 0:
-                ## second time, show reference to lesson-data-id
-                ref = f"→ [{ld}]"
-                w = ""
-                room = ""
-            else:
-                ref = ""
-                w = ""
-                room = item.room
-
-            if item.klass != klass:
-                add_simple_items()
-                # Add space before new class
-                pdf.add_line()
-                klass = item.klass
-
-            # Combine class and group
-            cg = print_class_group(item.klass, item.group)
-            if item.block_subject:
-                ## Add block item
-                if ref:
-                    t_lessons = ref
-                else:
-                    t_lessons = item.lessons
-                    try:
-                        n = int(item.paynum)
-                        if (n > 0) and (n != item.nlessons):
-                            t_lessons += f" [{n}]"
-                    except ValueError:
-                        pass
-                pdf.add_line((
-                    w,
-                    cg,
-                    f"{item.block_subject}::{item.subject}",
-                    t_lessons,
-                    room,
-                ))
-            else:
-                noblocklist.append(
-                    (w, cg, item.subject, ref or item.lessons, room)
-                )
-        if noblocklist:
-            add_simple_items()
-        # Add space before final underline
-        pdf.add_line()
-    return pdf.build_pdf()
 
 
 def teacher_table_data():
@@ -953,16 +815,17 @@ def make_class_table_pdf(with_comments = True):
     return pdf
 
 
-#TODO:
-#EXPERIMENTAL: Getting data for reports (text & grade).
-from core.teachers import Teachers
 def report_data(GRADES = False):
+    """Return lists of course reports for classes and teachers.
+    If <GRADES> is true, the lists are based on the GRADES flag,
+    otherwise on the REPORT field.
+    """
     db = get_database()
     cgtable = db.table("COURSE_GROUPS")
     cttable = db.table("COURSE_TEACHERS")
     ## Iterate through all the courses, retaining only those with REPORT
     ## and GRADES entries – and groups and teachers!
-    cg_reports = {}
+    c_reports = {}
     t_reports = {}
     for course in db.table("COURSE_BASE").records:
         ci = course.id
@@ -979,27 +842,34 @@ def report_data(GRADES = False):
                 T("NO_GROUP", subject = sbj.NAME, id = ci)
             )
             continue
-        tlist = cttable.get_course_teachers(ci)
+        tlist = [
+            t for t in cttable.get_course_teachers(ci)
+            if "Z" in t.ROLE
+        ]
         if not tlist:
             REPORT_ERROR(
                 T("NO_TEACHER", subject = sbj.NAME, id = ci)
             )
             continue
-        #s = (sbj.NAME, sbj.SID, sbj.id)
-
-# class -> subject -> group -> teacher-list or teacher -> group-list ?
-# teacher -> class -> subject -> group-list
-# For the class grade tables, need class -> subject. The finer details
-# may be relevant for access permissions, etc.
-# For an individual teacher, need class -> subject. The finer details
-# may be relevant for access permissions, etc.
-
-        print("\n ***", sbj.NAME)
-        for cg in cglist:
-            print("cg:", cg.Class.CLASS, cg.GROUP_TAG)
+        for g in cglist:
+            id = g.Class.id
+            try:
+                c_list = c_reports[id]
+            except KeyError:
+                c_list =  []
+                c_reports[id] = c_list
+            c_list.append((sbj, g.GROUP_TAG, tlist))
 
         for t in tlist:
-            print("t:", Teachers.get_name(t.Teacher))
+            id = t.Teacher.id
+            try:
+                t_list = t_reports[id]
+            except KeyError:
+                t_list =  []
+                t_reports[id] = t_list
+            t_list.append((sbj, cglist))
+
+    return c_reports, t_reports
 
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
@@ -1007,8 +877,35 @@ def report_data(GRADES = False):
 if __name__ == "__main__":
     from ui.ui_base import SAVE_FILE
 
-    report_data(GRADES = False)
-    quit(1)
+    print("\n ============ CLASS REPORTS ===============================")
+
+    db = get_database()
+    ctable = db.table("CLASSES")
+    c_reports, t_reports = report_data(GRADES = False)
+    for c, items in c_reports.items():
+        print("\n***", ctable[c].CLASS)
+        for item in items:
+            print("  --",
+                item[0].NAME,
+                item[1],
+                ", ".join(t.Teacher.TID for t in item[2])
+            )
+
+    print("\n ============ TEACHER REPORTS =============================")
+
+    ttable = db.table("TEACHERS")
+    for t, items in t_reports.items():
+        print("\n***", ttable.name(t))
+        for item in items:
+            print("  --",
+                item[0].NAME,
+                ", ".join(
+                    f"{cg.Class.CLASS}.{cg.GROUP_TAG}"
+                    for cg in item[1]
+                )
+            )
+
+    print("\n ===========================================")
 
     pdf = make_teacher_table_pay()
     filepath = SAVE_FILE("pdf-Datei (*.pdf)", "Deputate")
