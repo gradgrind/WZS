@@ -1,7 +1,7 @@
 """
 core/base.py
 
-Last updated:  2023-12-17
+Last updated:  2023-12-25
 
 Basic configuration and structural stuff.
 
@@ -29,8 +29,7 @@ NO_DATE = "*"  # an unspecified date
 
 ########################################################################
 
-import sys, os, re, datetime
-from typing import Tuple
+import sys, os
 
 if __name__ == "__main__":
     # Enable package import if running module directly
@@ -49,9 +48,7 @@ def APPDATAPATH(path):
 
 ### +++++
 
-class DataError(Exception):
-    pass
-
+#???
 from minion2 import Minion
 
 _Minion = Minion()
@@ -116,9 +113,9 @@ def setup(datadir):
     global __DATA, CONFIG, CALENDAR, SCHOOLYEAR
     __DATA = datadir
 #TODO: CONFIG is now a db table! Remove the version here ...
-    CONFIG = MINION(DATAPATH("CONFIG/BASE"))
-    CALENDAR = Dates.get_calendar(DATAPATH("CONFIG/Calendar"))
-    SCHOOLYEAR = Dates.calendar_year(CALENDAR)
+#    CONFIG = MINION(DATAPATH("CONFIG/BASE"))
+#    CALENDAR = Dates.get_calendar(DATAPATH("CONFIG/Calendar"))
+#    SCHOOLYEAR = Dates.calendar_year(CALENDAR)
 
 def DATAPATH(path, base=""):
     """Return a path within the school-data folder.
@@ -151,199 +148,7 @@ def year_data_path(year, path=""):
     return os.path.join(basedir, f"DATA-{year}", *path.split("/"))
 
 
-class Dates:
-    @staticmethod
-    def print_date(date, date_format, trap=True):
-        """Convert a date string from the program format (e.g. "2016-12-06")
-        to the format used for output (e.g. "06.12.2016").
-        If an invalid date is passed, a <DataError> is raised, unless
-        <trap> is false. In that case <None> – an invalid date – is returned.
-        """
-        try:
-            d = datetime.datetime.strptime(date, "%Y-%m-%d")
-            return d.strftime(date_format)
-        except:
-            if trap:
-                raise DataError(T("BAD_DATE", date = date))
-        return None
-
-    @classmethod
-    def today(cls, iso=True):
-        """Get the current date, normally in YYYY-MM-DD format.
-        If <iso> is false it will used the format produced by <dateConv>.
-        """
-        today = None
-        # Allow "faking" the current date (at least in some respects ...).
-        fakepath = DATAPATH("__TODAY__")
-        if os.path.isfile(fakepath):
-            with open(fakepath, encoding="utf-8") as fh:
-                while True:
-                    l = fh.readline().strip()
-                    if l and l[0] != "#":
-                        today = l
-                        break
-        if not today:
-            today = datetime.date.today().isoformat()
-        return today if iso else cls.dateConv(today)
-
-    @staticmethod
-    def timestamp():
-        """Return a "timestamp", accurate to the minute.
-        It can be used for dating files, etc.
-        """
-        return datetime.datetime.now().isoformat(sep="_", timespec="minutes")
-
-    @staticmethod
-    def next_year() -> str:
-        return str(int(SCHOOLYEAR) + 1)
-
-    @staticmethod
-    def day1(schoolyear):
-        """Return the date of the first day of the school year."""
-        m1 = int(CONFIG["SCHOOLYEAR_MONTH_1"])
-        y = schoolyear if m1 == 1 else str(int(schoolyear) - 1)
-        return f"{y}-{m1:02}-01"
-
-    @classmethod
-    def lastday(cls, schoolyear):
-        d = datetime.date.fromisoformat(cls.day1(str(int(schoolyear) + 1)))
-        return (d - datetime.timedelta(days=1)).isoformat()
-
-    @classmethod
-    def check_schoolyear(cls, schoolyear, d):
-        """Test whether the given date <d> lies within the schoolyear.
-        <d> must be in isoformat.
-        Return true/false.
-        """
-        d1 = cls.day1(schoolyear)
-        #oneday = datetime.timedelta(days=1)
-        d2 = cls.lastday(schoolyear)
-        try:
-            datetime.date.fromisoformat(d)
-        except ValueError:
-            raise DataError(T("BAD_DATE", date = d))
-        if d < d1:
-            return False
-        return d <= d2
-
-    @classmethod
-    def get_schoolyear(cls, d=None):
-        """Return the school-year containing the given date <d>.
-        If no date is given, use "today".
-        """
-        if not d:
-            d = cls.today()
-        y = int(d.split("-", 1)[0])
-        if d >= cls.day1(y + 1):
-            return str(y + 1)
-        return str(y)
-
-    @classmethod
-    def save_calendar(cls, text, fpath=None):
-        """Save the given text as a calendar file to the given path.
-        If no path is supplied, don't save.
-        If the path is '*', save as the current calendar file.
-        Some very minimal checks are made.
-        Return the (modified) text.
-        """
-        print("SAVE CALENDAR", fpath)
-        cls.check_calendar(_Minion.parse(text))  # check the school year
-        header = CONFIG["CALENDAR_HEADER"].format(date=cls.today())
-        try:
-            text = text.split("#---", 1)[1]
-            text = text.lstrip("-")
-            text = text.lstrip()
-        except:
-            pass
-        text = header + text
-        if fpath:
-            if fpath == '*':
-                fpath = DATAPATH("CONFIG/Calendar")
-            os.makedirs(os.path.dirname(fpath), exist_ok=True)
-            with open(fpath, "w", encoding="utf-8") as fh:
-                fh.write(text)
-        return text
-
-    @classmethod
-    def get_calendar(cls, fpath):
-        """Parse the given calendar file (full path):"""
-        cal = MINION(fpath)
-        cls.check_calendar(cal)
-        return cal
-
-    @classmethod
-    def check_calendar(cls, calendar):
-        """Check the given calendar object."""
-        schoolyear = cls.calendar_year(calendar)
-        # Check that the year is reasonable
-        y0 = cls.today().split("-", 1)[0]
-        try:
-            y1 = int(schoolyear)
-        except ValueError:
-            raise DataError(T("INVALID_SCHOOLYEAR", year = schoolyear))
-        if y1 < int(y0) or y1 > int(y0) + 2:
-            raise DataError(T("DODGY_SCHOOLYEAR", year = schoolyear))
-        for k, v in calendar.items():
-            if isinstance(v, list):
-                # range of days, check validity
-                if k[0] == "~" or (
-                    cls.check_schoolyear(schoolyear, v[0])
-                    and cls.check_schoolyear(schoolyear, v[1])
-                ):
-                    continue
-            else:
-                # single day or year field, check validity
-                if "SCHOOLYEAR" in k:
-                    continue
-                if k[0] == "~" or cls.check_schoolyear(schoolyear, v):
-                    continue
-            raise DataError(T("BAD_DATE_CAL", line = "%s: %s" % (k, v)))
-        return calendar
-
-    @staticmethod
-    def calendar_year(calendar):
-        """Return the school-year of the given calendar."""
-        try:
-            return calendar["LAST_DAY"].split("-", 1)[0]
-        except KeyError:
-            raise DataError(T("MISSING_LAST_DAY"))
-
-    @classmethod
-    def migrate_calendar(cls, new_year=None, calendar_path=None, save=True):
-        """Generate a "starter" calendar for the given school-year.
-        It simply takes the given calendar and changes anything that
-        looks like a year to fit the new year. It of course still needs
-        extensive editing, but it should allow the new year to be opened.
-        If no calendar file is supplied, use the currently active one.
-        If no <new_year> is supplied, use the one following the currently
-        active one.
-        """
-
-        def fn_sub(m):
-            y = m.group(1)
-            if y == old_lastyear:
-                y = new_lastyear
-            elif y == old_year:
-                y = new_year
-            return y
-
-        calfile = calendar_path or DATAPATH("CONFIG/Calendar")
-        with open(calfile, "r", encoding="utf-8") as fh:
-            caltext = fh.read()
-        if not new_year:
-            new_year = cls.next_year()
-        old_year = cls.calendar_year(_Minion.parse(caltext))
-        old_lastyear = str(int(old_year) - 1)
-        new_lastyear = str(int(new_year) - 1)
-        rematch = r"([0-9]{4})"
-        text = re.sub(rematch, fn_sub, caltext)
-        if save:
-            path = year_data_path(new_year, "CONFIG/Calendar")
-            return cls.save_calendar(text, fpath=path)
-        return cls.save_calendar(text)
-
-
-def class_group_split(class_group: str) -> Tuple[str,str]:
+def class_group_split(class_group: str) -> tuple[str,str]:
     """Split a full group descriptor (class.group) into class and group.
     """
     try:
@@ -386,22 +191,4 @@ def archive_testdata():
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
 
 if __name__ == "__main__":
-
-    setup(os.path.join(basedir, 'TESTDATA'))
-    print("Today (possibly faked):", Dates.today())
-    print("Current school year:", Dates.get_schoolyear())
-    print("School year of data:", SCHOOLYEAR)
-    print("A date:", Dates.print_date("2016-04-25", "%d.%m.%Y"))
-    try:
-        print("BAD Date:", Dates.print_date("2016-02-30", "%d.%m.%Y"))
-    except DataError as e:
-        print(" ... trapped:", e)
-    new_year = Dates.next_year()
-    print(
-        f"\n\nCalendar for {new_year}:\n"
-        + Dates.migrate_calendar(save=False)
-    )
-
-    t = Tr("core.base")
-    print("§translate1:", t("MISSING_LAST_DAY"))
-    print("§translate2:", t("BAD_DATE", date = "2023.12.17"))
+    pass

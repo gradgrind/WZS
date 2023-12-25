@@ -4,7 +4,7 @@ core.base: {
 #TODO: not yet fully adapted for WZ3?
     # Messages
     MISSING_LAST_DAY: "Feld „LAST_DAY“ fehlt im Kalender"
-    BAD_DATE:       "Ungültiges Datum: {date}"
+#    BAD_DATE:       "Ungültiges Datum: {date}"
     BAD_DATE_CAL:   "Ungültiges Datum im Kalender: {line}"
     INVALID_SCHOOLYEAR: "Ungültiges Schuljahr: {year}"
     DODGY_SCHOOLYEAR: "[?] Möglicherweise fehlerhaftes Schuljahr: {year}"
@@ -38,6 +38,14 @@ core.course_base: {
 #?
 #    INVALID_PAY_TAG:    "Ungültige Deputatsangabe: {n}*('{t}'={w})"
 #    BAD_GROUP:          "Unbekannte Schülergruppe: {group}"
+}
+
+core.dates: {
+#    MISSING_LAST_DAY: "Feld „LAST_DAY“ fehlt im Kalender"
+    BAD_DATE:       "Ungültiges Datum: {date}"
+#    BAD_DATE_CAL:   "Ungültiges Datum im Kalender: {line}"
+#    INVALID_SCHOOLYEAR: "Ungültiges Schuljahr: {year}"
+#    DODGY_SCHOOLYEAR: "[?] Möglicherweise fehlerhaftes Schuljahr: {year}"
 }
 
 core.db_access: {

@@ -1,5 +1,5 @@
 """
-core/basic_data.py - last updated 2023-11-24
+core/basic_data.py - last updated 2023-12-25
 
 Configuration and other basic data dependent on the database.DECIMAL_SEP
 
@@ -35,8 +35,8 @@ if __name__ == "__main__":
     from core.base import setup
     setup(os.path.join(basedir, 'TESTDATA'))
 
-from core.base import TRANSLATIONS
-T = TRANSLATIONS("core.basic_data")
+from core.base import Tr
+T = Tr("core.basic_data")
 
 ### +++++
 
@@ -69,7 +69,7 @@ def get_database():
     def db_backup():
         os.makedirs(os.path.dirname(bupath), exist_ok = True)
         copyfile(dbpath, bupath)
-        REPORT_INFO(T["MONTHLY_DB_BACKUP"].format(path=bupath))
+        REPORT_INFO(T("MONTHLY_DB_BACKUP", path = bupath))
 
     global __DB
     if __DB is None:
@@ -106,6 +106,8 @@ def get_database():
         __DB = Database(dbpath)
         # Set up the CONFIG table
         CONFIG.init(__DB)
+        # ... and the CALENDAR table
+        CALENDAR.init(__DB)
     return __DB
 
 
@@ -122,30 +124,41 @@ class _CONFIG:
 
     def __getattr__(self, key) -> Any:
         return self._map[key]
-
+#+
 CONFIG = _CONFIG()
 
 
-class Config(db_Table):
-    table = "__CONFIG__"
+class _CALENDAR:
+    def __init__(self):
+        self._map = {}
 
-    @classmethod
-    def init(cls) -> bool:
-        if cls.fields is None:
-            cls.init_fields(
-                DB_PK(),
-                DB_FIELD_TEXT("KEY", unique = True),
-                DB_FIELD_TEXT("VALUE"),
-                DB_FIELD_TEXT("COMMENT"),
-            )
-            return True
-        return False
+    def init(self, db):
+        self._map.clear()
+        hols = []
+        cstmap = {}
+        self._map["__HOLIDAYS__"] = hols
+        self._map["__CUSTOM__"] = cstmap
+        for rec in db.table("__CALENDAR__").records:
+            key = rec.KEY
+            val = (rec.DATE1, rec.DATE2) if rec.DATE2 else rec.DATE1
+            key0 = key[0]
+            if key0 == '_':
+                # Holidays
+                hols.append(val)
+            elif key0 == '*':
+                # „Custom“ values
+                cstmap[key[1:]] = val
+            else:
+                self._map[key] = val
+        d1, d2 = self._map["ACCOUNTING_YEAR"]
+        self._map["SCHOOL_YEAR"] = (
+            CONFIG.SCHOOL_YEAR_FROM.format(d1, d2).split('-', 1)[0]
+        )
 
-    #    def __init__(self, db: Database):
-    #        self.init()
-    #        super().__init__(db)
-
-DB_TABLES["__CONFIG__"] = Config
+    def __getattr__(self, key) -> Any:
+        return self._map[key]
+#+
+CALENDAR = _CALENDAR()
 
 
 def print_fix(
@@ -178,9 +191,50 @@ def print_fix(
                 break
         return fstr.replace('.', CONFIG.DECIMAL_SEP)
     return fstr
-
+#+
 def fix_is_zero(value: float) -> bool:
     abs(value) < CONFIG.DECIMAL_ZERO
+
+
+class Config(db_Table):
+    table = "__CONFIG__"
+
+    @classmethod
+    def init(cls) -> bool:
+        if cls.fields is None:
+            cls.init_fields(
+                DB_PK(),
+                DB_FIELD_TEXT("KEY", unique = True),
+                DB_FIELD_TEXT("VALUE"),
+                DB_FIELD_TEXT("COMMENT"),
+            )
+            return True
+        return False
+
+    #    def __init__(self, db: Database):
+    #        self.init()
+    #        super().__init__(db)
+#+
+DB_TABLES["__CONFIG__"] = Config
+
+
+class Calendar(db_Table):
+    table = "__CALENDAR__"
+
+    @classmethod
+    def init(cls) -> bool:
+        if cls.fields is None:
+            cls.init_fields(
+                DB_PK(),
+                DB_FIELD_TEXT("KEY", unique = True),
+                DB_FIELD_TEXT("DATE1"),
+                DB_FIELD_TEXT("DATE2"),
+                DB_FIELD_TEXT("COMMENT"),
+            )
+            return True
+        return False
+#+
+DB_TABLES["__CALENDAR__"] = Calendar
 
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
