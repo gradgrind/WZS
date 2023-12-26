@@ -11,6 +11,7 @@
         "program/core/db_access.py",
         "program/core/list_activities.py",
         "program/core/rooms.py",
+        "program/core/students.py",
         "program/core/subjects.py",
         "program/core/teachers.py",
         "program/core/time_slots.py",
