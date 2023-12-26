@@ -1,7 +1,7 @@
 """
 core/course_base.py
 
-Last updated:  2023-12-24
+Last updated:  2023-12-26
 
 Support functions dealing with courses, lessons, etc.
 
@@ -62,6 +62,7 @@ from core.db_access import (
 from core.basic_data import (
     get_database,
     REPORT_SPLITTER,
+    REPORT_ALL_NAMES,
     SUBJECT_SPLITTER,
     print_fix,
 )
@@ -675,7 +676,7 @@ def text_report_field(course_data: COURSE_LINE, text: str = None
             ))
         t1, t2 = "", ""
     # A report is only possible if there is a real group and a teacher:
-    teacher_names = teachers_print_names(course_data)
+    teacher_names = teachers_print_names(course_data.teacher_list, t2)
     if with_report:
         okg = False
         for cg in course_data.group_list:
@@ -692,8 +693,8 @@ def text_report_field(course_data: COURSE_LINE, text: str = None
                 course = str(course_data)
             ))
             with_report, t1, t2 = False, "", ""
-    title = t1 or subject_print_name(course_data)
-    sig = t2 or teacher_names
+    title = t1 or subject_print_name(course_data.course)
+    sig = t2 if (t2 and t2 != REPORT_ALL_NAMES) else teacher_names
     value = f"{t1}{REPORT_SPLITTER}{t2}" if with_report else ""
     if value != report:
         # Update database (and memory mirror)
@@ -705,15 +706,32 @@ def text_report_field(course_data: COURSE_LINE, text: str = None
     return (with_report, title, sig)
 
 
-def subject_print_name(course_data: COURSE_LINE) -> str:
-    return course_data.course.Subject.NAME.split(SUBJECT_SPLITTER)[0]
+def subject_print_name(course: db_TableRow) -> str:
+    return course.Subject.NAME.split(SUBJECT_SPLITTER)[0]
 
-def teachers_print_names(course_data: COURSE_LINE) -> str:
-    return ", ".join(
-        f"{t.Teacher.SIGNED}"
-        for t in course_data.teacher_list
+
+def report_teachers(teacher_list: list[db_TableRow]) -> list[str]:
+    """Extract the teachers who have the report ROLE from the given
+    list – only the SIGNE field is needed.
+    """
+    return [
+        t.Teacher.SIGNED
+        for t in teacher_list
         if "Z" in t.ROLE
-    )
+    ]
+
+
+def teachers_print_names(teacher_list: list[db_TableRow], value: str) -> str:
+    if value and value != REPORT_ALL_NAMES:
+        return value    # override teacher list
+    tlist = report_teachers(teacher_list)
+    if tlist:
+        if len(tlist) == 1:
+            return tlist[0]
+        if value:
+            return ", ".join(tlist)
+        return f'[{" / ".join(tlist)}]'
+    return ""
 
 
 def print_workload(

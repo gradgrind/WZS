@@ -1,7 +1,7 @@
 """
 ui/modules/course_editor.py
 
-Last updated:  2023-12-23
+Last updated:  2023-12-26
 
 Edit course and blocks+lessons data.
 
@@ -69,7 +69,8 @@ from core.course_base import (
     text_report_field,
     grade_report_field,
     subject_print_name,
-    teachers_print_names,
+    report_teachers,
+#    teachers_print_names,
     block_courses,
 )
 
@@ -83,6 +84,7 @@ from ui.dialogs.dialog_workload import workloadDialog
 from ui.dialogs.dialog_block_name import blockNameDialog
 from ui.dialogs.dialog_parallel_lessons import parallelsDialog
 from ui.dialogs.dialog_text_line import textLineDialog
+from ui.dialogs.dialog_report_signature import reportSignatureDialog
 from ui.dialogs.dialog_integer import integerDialog
 from ui.dialogs.dialog_make_course_tables import exportTable
 
@@ -518,7 +520,7 @@ class CourseEditorPage(QObject):
         title, sig = self.course_data.course.REPORT.split(REPORT_SPLITTER)
         new_text = textLineDialog(
             title,
-            default = subject_print_name(self.course_data),
+            default = subject_print_name(self.course_data.course),
             title = T["REPORT_TITLE_LABEL"],
             parent = self.ui.report_title,
         )
@@ -529,10 +531,9 @@ class CourseEditorPage(QObject):
 
     def edit_report_teachers(self):
         title, sig = self.course_data.course.REPORT.split(REPORT_SPLITTER)
-        new_text = textLineDialog(
+        new_text = reportSignatureDialog(
             sig,
-            default = teachers_print_names(self.course_data),
-            title = T["REPORT_TEACHERS_LABEL"],
+            report_teachers(self.course_data.teacher_list),
             parent = self.ui.report_teachers,
         )
         if new_text is not None:

@@ -1,7 +1,7 @@
 """
 core/list_activities.py
 
-Last updated:  2023-12-24
+Last updated:  2023-12-26
 
 Present information on activities for teachers and classes/groups.
 The information is formatted in pdf documents using the reportlab
@@ -54,13 +54,15 @@ from core.base import (
     REPORT_ERROR,
     #DATAPATH,
 )
-from core.basic_data import get_database, print_fix
+from core.basic_data import get_database, print_fix, REPORT_SPLITTER
 from core.classes import GROUP_ALL
 from core.rooms import get_db_rooms, print_room_choice
 from core.course_base import (
     filter_activities,
     workload_class,
     workload_teacher,
+    subject_print_name,
+    teachers_print_names,
 )
 
 class COURSE_DATA(NamedTuple):
@@ -830,10 +832,23 @@ def report_data(GRADES = False):
     for course in db.table("COURSE_BASE").records:
         ci = course.id
         if ci == 0: continue    # not a "real" COURSE_BASE entry
+        tlist = [
+            t for t in cttable.get_course_teachers(ci)
+            if "Z" in t.ROLE
+        ]
         if GRADES:
-            if not course.GRADES:
+            if course.GRADES:
+                report_info = None
+            else:
                 continue
-        elif not course.REPORT:
+        elif course.REPORT:
+            # If no overrides, get the default title and signature values
+            t1, t2 = course.REPORT.split(REPORT_SPLITTER, 1)
+            if not t1:
+                t1 = subject_print_name(course)
+            t2 = teachers_print_names(tlist, t2)
+            report_info = (t1, t2)
+        else:
             continue
         cglist = cgtable.get_course_groups(ci)
         sbj = course.Subject
@@ -842,10 +857,6 @@ def report_data(GRADES = False):
                 T("NO_GROUP", subject = sbj.NAME, id = ci)
             )
             continue
-        tlist = [
-            t for t in cttable.get_course_teachers(ci)
-            if "Z" in t.ROLE
-        ]
         if not tlist:
             REPORT_ERROR(
                 T("NO_TEACHER", subject = sbj.NAME, id = ci)
@@ -858,7 +869,7 @@ def report_data(GRADES = False):
             except KeyError:
                 c_list =  []
                 c_reports[id] = c_list
-            c_list.append((sbj, g.GROUP_TAG, tlist))
+            c_list.append((sbj, report_info, g.GROUP_TAG, tlist))
 
         for t in tlist:
             id = t.Teacher.id
@@ -867,7 +878,7 @@ def report_data(GRADES = False):
             except KeyError:
                 t_list =  []
                 t_reports[id] = t_list
-            t_list.append((sbj, cglist))
+            t_list.append((sbj, report_info, cglist))
 
     return c_reports, t_reports
 
@@ -888,7 +899,8 @@ if __name__ == "__main__":
             print("  --",
                 item[0].NAME,
                 item[1],
-                ", ".join(t.Teacher.TID for t in item[2])
+                item[2],
+                ", ".join(t.Teacher.TID for t in item[3])
             )
 
     print("\n ============ TEACHER REPORTS =============================")
@@ -899,9 +911,10 @@ if __name__ == "__main__":
         for item in items:
             print("  --",
                 item[0].NAME,
+                item[1],
                 ", ".join(
                     f"{cg.Class.CLASS}.{cg.GROUP_TAG}"
-                    for cg in item[1]
+                    for cg in item[2]
                 )
             )
 

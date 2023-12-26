@@ -280,6 +280,10 @@ ui.dialogs.dialog_parallel_lessons: {
     NEW_TAG:        "Neu"
 }
 
+ui.dialogs.dialog_report_signature: {
+    ALL_TEACHERS:   "Alle"
+}
+
 ui.dialogs.dialog_pupil_groups: {
     EMPTY_GROUPS_ERROR: "Bei Verarbeitung der Untergruppen:\n\n - {e}"
     MULTIPLE_GROUPS_IN_DIV: "Ungültige gespeicherte Gruppen: {g1} + {g2}"

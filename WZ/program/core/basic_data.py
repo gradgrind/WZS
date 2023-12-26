@@ -1,5 +1,5 @@
 """
-core/basic_data.py - last updated 2023-12-25
+core/basic_data.py - last updated 2023-12-26
 
 Configuration and other basic data dependent on the database.DECIMAL_SEP
 
@@ -61,6 +61,7 @@ __DB = None # the current database, set in "get_database"
 # "CONFIG" is a {key: value} configuration mapping for the current database
 #CONFIG: dict[str, Any] = {}
 REPORT_SPLITTER = '#'
+REPORT_ALL_NAMES = '*'
 SUBJECT_SPLITTER = '*'
 
 ### -----
