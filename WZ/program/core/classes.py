@@ -1,5 +1,5 @@
 """
-core/classes.py - last updated 2023-12-09
+core/classes.py - last updated 2023-12-27
 
 Manage class data.
 
@@ -115,7 +115,7 @@ class Classes(db_Table):
 #        super().__init__(db)
 
     def class_list(self, skip_null: bool = True):
-        """Return an ordered list of teachers.
+        """Return an ordered list of classes.
         """
         classes = []
         for data in self.records:

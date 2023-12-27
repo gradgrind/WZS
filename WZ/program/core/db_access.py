@@ -1,7 +1,7 @@
 """
 core/db_access.py
 
-Last updated:  2023-12-09
+Last updated:  2023-12-27
 
 Helper functions for accessing the database.
 
@@ -56,6 +56,7 @@ from typing import Any
 import sqlite3
 import re
 import json
+#TODO: Am I using json schemas anywhere???
 import fastjsonschema
 import weakref
 
@@ -343,6 +344,46 @@ class db_Table:
         #print("§setattr:", ftype.field, v, "\n  ++", self.id2index)
         setattr(self[rowid], ftype.field, v)
         return True
+
+    def update_json_cell(
+        self,
+        rowid: int,
+        field: str,
+        **jsonfields: dict[str, str|int]
+    ):
+        """Update a table cell containing json.
+        Writing the null string to a json-field will remove the corresponding
+        key, if it is present.
+        Also the memory-based data structure will be updated.
+        """
+        ftype = self.field2type[field]
+        if not isinstance(ftype, DB_FIELD_JSON):
+            REPORT_CRITICAL(
+                "Bug: <update_json_cell> called on non-json field:"
+                f" {self.table}.{field}"
+            )
+        record = self[rowid]
+        jsonmap = getattr(record, ftype.field)
+        newmap = {}
+        for k, v in jsonmap.items():
+            try:
+                v1 = jsonfields.pop(k)
+                if v1 != "":
+                    newmap[k] = v1
+            except KeyError:
+                newmap[k] = v
+        # New json-fields
+        newmap.update(jsonfields)
+        # Prepare text value
+        value = json.dumps(
+            newmap,
+            ensure_ascii = False,
+            separators = (',', ':')
+        )
+        self.db.update(self.table, rowid, ftype.field0, value)
+        ## Set the memory cell
+        setattr(record, ftype.field, newmap)
+
 
     def update_cells(self, rowid: int, **fields: dict[str, str|int]) -> bool:
         """Update fields of a table record. The values should already be
