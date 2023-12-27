@@ -56,7 +56,6 @@ from typing import Any
 import sqlite3
 import re
 import json
-#TODO: Am I using json schemas anywhere???
 import fastjsonschema
 import weakref
 

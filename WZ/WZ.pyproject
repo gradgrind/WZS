@@ -19,6 +19,7 @@
         "program/grades/grades_base.py",
         "program/grades/make_grade_reports.py",
         "program/minion2.py",
+        "program/tables/matrix.py",
         "program/ui/README_icons",
         "program/ui/course_table.py",
         "program/ui/dialogs/dialog_block_name.py",

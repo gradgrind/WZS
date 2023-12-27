@@ -976,6 +976,9 @@ def MakeGradeTable(table:dict, clear:bool=False) -> bytes:
         gtable.write(rowix[0], col, "")
     # Delete excess columns
     gtable.delEndCols(col + 1)
+
+
+
     ### Add pupils and grades
     for pdata, pgrades in table["PUPIL_LIST"]:
         row = gtable.nextrow()

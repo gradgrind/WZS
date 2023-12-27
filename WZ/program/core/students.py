@@ -85,6 +85,17 @@ class Students(db_Table):
 #        self.init()
 #        super().__init__(db)
 
+    @staticmethod
+    def get_name(data):
+        """Return the short form of the name from the given record.
+        """
+        return f"{data.FIRSTNAME} {data.LASTNAME}"
+
+    def name(self, id):
+        """Return the short form of the name from the given db-id.
+        """
+        return self.get_name(self[id])
+
     def student_list(self, class_id: int):
         """Return an ordered list of subjects from the given class.
         """

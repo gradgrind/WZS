@@ -137,8 +137,12 @@ grades.grades_base: {
     NO_PUPIL_GRADES:    "Keine Schüler bzw. Noten: {report_info}"
 }
 
-grades.gradetable: {
+grades.grade_tables: {
+    TEMPLATE_HEADER_WRONG: "Vorlage hat fehlerhafte Kopfzeilen:\n  {path}"
+    NO_MIN_COL:     "Vorlage hat keine Markierung in der ersten Zeile für die minimale Breite:\n  {path}"
+
 #TODO ... not yet implemented/adapted
+
 #TODO: to be replaced by grades_base?
     TITLE:          "Notentabelle, erstellt {time}"
     PID:            "ID"
@@ -213,6 +217,14 @@ local.abitur: {
     NO_SLOT:        "Fach mit Kennzeichen {sid}: zu viele Fächer dieses „Fachtyps“, kein Platz"
     TOO_FEW_SUBJECTS: "Zu wenig Fächer von Typ „{tag}“"
     EMPTY_SLOTS:    "Keine Daten für {n} Felder"
+}
+
+tables.matrix: {
+    INFO_ITEM_MISSING: "In Vorlage {path}, unerwartete Info-Zeile: {key}"
+    INFO_EXCESS_ITEMS: "Für Vorlage {path}, unerwartete Info-Einträge:\n  {items}"
+    WARN_HIDE_NOT_WORKING: "Das Verbergen von Spalten ist aufgrund eines Programm-Mangels (noch) nicht möglich"
+    TOO_FEW_COLUMNS: "Noteneingabe-Vorlage hat zu wenige Spalten:\n  {path}"
+    TOO_FEW_ROWS: "Noteneingabe-Vorlage hat zu wenige Zeilen:\n  {path}"
 }
 
 tables.pdf_table: {
