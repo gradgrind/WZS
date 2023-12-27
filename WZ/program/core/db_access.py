@@ -207,7 +207,7 @@ class DB_FIELD:
         Input: the database field value.
         Return: checked value or None, error-message or ""
         """
-        return val
+        return val, ""
 
 
 class db_Table:
@@ -349,11 +349,11 @@ class db_Table:
         self,
         rowid: int,
         field: str,
-        **jsonfields: dict[str, str|int]
+        **jsonfields: dict[str, Any]
     ):
         """Update a table cell containing json.
-        Writing the null string to a json-field will remove the corresponding
-        key, if it is present.
+        Writing the empty string to a json-field will remove the
+        corresponding key, if it is present.
         Also the memory-based data structure will be updated.
         """
         ftype = self.field2type[field]
@@ -622,22 +622,28 @@ class DB_FIELD_JSON(DB_FIELD):
             * error-message or ""
         """
         if not isinstance(text, str):
-            return self.empty, "TODO: Not a string"
+            return (
+                {} if self.empty is None else self.empty,
+                "TODO: Not a string"
+            )
         if text:
             try:
                 obj = json.loads(text)
             except json.JSONDecodeError:
-                return {}, f"TODO: Invalid JSON: '{text}'"
+                return (
+                    {} if self.empty is None else self.empty,
+                    f"TODO: Invalid JSON: '{text}'"
+                )
             if self.schema:
                 try:
                     self.schema(obj)
                 except fastjsonschema.JsonSchemaException as e:
                     return (
-                        self.empty,
+                        {} if self.empty is None else self.empty,
                         f"TODO: Doesn't match schema:\n  {e.message}"
                     )
             return obj, ""
-        return self.empty, ""
+        return {} if self.empty is None else self.empty, ""
 
 
 class DB_FIELD_FIX(DB_FIELD):

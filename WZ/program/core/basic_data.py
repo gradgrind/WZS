@@ -1,7 +1,8 @@
 """
-core/basic_data.py - last updated 2023-12-26
+core/basic_data.py - last updated 2023-12-27
 
-Configuration and other basic data dependent on the database.DECIMAL_SEP
+Configuration and other basic data dependent on the database.
+
 
 ==============================
 Copyright 2023 Michael Towers
@@ -19,7 +20,7 @@ Copyright 2023 Michael Towers
    limitations under the License.
 """
 
-DATABASE = "wzx_2.sqlite"
+DATABASE = "wz.sqlite"
 
 ########################################################################
 

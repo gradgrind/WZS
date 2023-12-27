@@ -330,6 +330,20 @@ def make_divisions(group_info: dict[str, GroupInfo]) -> str:
 if __name__ == "__main__":
 
     import fastjsonschema
+    from core.db_access import CONFIG_SCHEMA
+
+    # JSON schema for mappings str -> str, the keys are restricted
+    SIMPLE_SCHEMA = {
+        "type": "object",
+        "patternProperties":
+            { "^[A-Za-z_][A-Za-z0-9_]*$": {"type": "string"}},
+        #"additionalProperties": {"type": "string"},
+        "additionalProperties": False
+    }
+    print("$$$1", fastjsonschema.validate(
+        SIMPLE_SCHEMA,
+        {'H': 'hello', "_ab3": "2"}
+    ))
 
     print("???1", fastjsonschema.validate({'type': 'string'}, 'hello'))
     print("???2", fastjsonschema.validate(DIVISIONS_SCHEMA, [['hello']]))

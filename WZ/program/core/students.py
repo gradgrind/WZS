@@ -46,6 +46,14 @@ from core.db_access import (
 )
 from core.classes import Classes
 
+EXTRA_SCHEMA = {
+    "type": "object",
+    "patternProperties":
+        { "^[A-Za-z_][A-Za-z0-9_]*$": {"type": "string"}},
+    #"additionalProperties": {"type": "string"},
+    "additionalProperties": False
+}
+
 ### -----
 
 
@@ -68,7 +76,7 @@ class Students(db_Table):
                 DB_FIELD_TEXT("DATE_ENTRY"),
                 DB_FIELD_TEXT("DATE_EXIT"),
                 DB_FIELD_TEXT("BIRTHPLACE"),
-                DB_FIELD_JSON("EXTRA"), # empty = {}?
+                DB_FIELD_JSON("EXTRA", schema = EXTRA_SCHEMA)
             )
             return True
         return False
@@ -85,7 +93,7 @@ class Students(db_Table):
             for data in self.records
             if data.Class.id == class_id
         ]
-#
+#+
 DB_TABLES[Students.table] = Students
 
 
@@ -105,6 +113,6 @@ if __name__ == "__main__":
 
     classes = Classes(db)
     for cid, CLASS, NAME in classes.class_list():
-        print("\n Class", CLASS)
+        print(f"\n Class {CLASS}\n==============")
         for s in students.student_list(cid):
             print("  --", s)
