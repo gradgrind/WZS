@@ -1,5 +1,5 @@
 """
-core/students.py - last updated 2023-12-27
+core/students.py - last updated 2023-12-28
 
 Manage students data.
 
@@ -96,14 +96,17 @@ class Students(db_Table):
         """
         return self.get_name(self[id])
 
-    def student_list(self, class_id: int):
+    def student_list(self, class_id: int, group: str = None):
         """Return an ordered list of subjects from the given class.
+        If a group is given, include only those students who are in the group.
         """
-        return [
-            data
-            for data in self.records
-            if data.Class.id == class_id
-        ]
+        slist = []
+        for data in self.records:
+            if data.Class.id == class_id:
+                if group and group not in data.EXTRA["GROUPS"].split():
+                    continue
+                slist.append(data)
+        return slist
 #+
 DB_TABLES[Students.table] = Students
 
@@ -117,7 +120,8 @@ if __name__ == "__main__":
     #print("\n?create-sql:", Students.sql_create_table())
 
     students = Students(db)
-    slist = students.student_list(21)
+    #for s in students.student_list(23, "R"):
+    #    print("  --", s)
 
     #students.update_json_cell(415, "EXTRA", LEVEL="Gym", SEX="w")
     #print("§§§", slist[-1])

@@ -1,5 +1,5 @@
 """
-grades/grade_tables.py - last updated 2023-12-27
+grades/grade_tables.py - last updated 2023-12-28
 
 Manage grade tables.
 
@@ -88,6 +88,13 @@ def make_grade_table(template, data, grades = None) -> bool:
         template.write(rowix[0], col, "")
     # Delete excess columns
     template.delEndCols(col + 1)
+
+    ## Add students
+
+
+    # Hide "control" data
+    template.hideCol(0)
+    template.hideHeader0()
     return True
 
 
@@ -144,14 +151,20 @@ if __name__ == "__main__":
     filepath = DATAPATH("NOTEN_SEK_I", "TEMPLATES")
     template = ClassMatrix(filepath)
 
+    c = 21
+    g = ""
+
     smap = {}
-    for s in c_reports[21]:
+    for s in c_reports[c]:
+#TODO: Filter subjects on group as well as class.
+# s = (sbj, report_info, g.GROUP_TAG, tlist)
+#        if g and 'g covered by s[2]':
+#            # include subject
         sdata = s[0]
 #        slist.append((sdata.SORTING, sdata.NAME, sdata.sid, sdata.id))
 #        slist.sort()
         smap[sdata.id] = sdata
         slist = sorted(smap.values(), key = lambda x: (x.SORTING, x.NAME))
-
 
     make_grade_table(
         template,
@@ -161,5 +174,6 @@ if __name__ == "__main__":
             "SUBJECTS": slist,
         },
     )
+
 
     print(" ->", template.save(filepath + "__test1"))

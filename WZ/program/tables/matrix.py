@@ -1,5 +1,5 @@
 """
-tables/matrix.py - last updated 2023-12-27
+tables/matrix.py - last updated 2023-12-28
 
 Edit a table template (xlsx).
 
@@ -39,7 +39,7 @@ from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter  # , column_index_from_string
 from openpyxl.styles import Protection
 
-from core.base import REPORT_ERROR, REPORT_WARNING
+from core.base import REPORT_ERROR#, REPORT_WARNING
 
 class MatrixError(Exception):
     pass
@@ -194,14 +194,22 @@ class ClassMatrix(Table):
     def hideCol(self, index: int, clearheader: bool = False) -> None:
         """Hide the given column (0-indexed). Optionally clear the subject.
         """
-        REPORT_WARNING(T("WARN_HIDE_NOT_WORKING"))
-# TODO: disabled pending hidden column fix in openpyxl ...
-#        letter: str = self.columnLetter(index)
-#        self._wb.active.column_dimensions[letter].hidden = True
+        # At some time this wasn't working. It seems to be fixed now ...
+        #REPORT_WARNING("WARNING: Column-hiding not working")
+        letter: str = self.columnLetter(index)
+        self._wb.active.column_dimensions[letter].hidden = True
         if clearheader:
             # Clear any existing "subject"
             for i in self.header_rowindex:
                 self.write(1, index, "")
+
+    def hideHeader0(self):
+        """Hide the row containing the first header line – for the case
+        when the contents are special keys and thus not so relevant for
+        the user.
+        """
+        row = self.header_rowindex[0] + 1
+        self._wb.active.row_dimensions[row].hidden= True
 
     def nextcol(self) -> int:
         """Iterate over header columns with 'X' in template.
