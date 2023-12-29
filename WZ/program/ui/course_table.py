@@ -1,7 +1,7 @@
 """
 ui/course_table.py
 
-Last updated:  2023-12-24
+Last updated:  2023-12-29
 
 Support functions dealing with the course table.
 
@@ -24,16 +24,22 @@ Copyright 2023 Michael Towers
 =-LICENCE========================================
 """
 
+### +++++
+
 from typing import Optional
 
 from core.base import REPORT_CRITICAL
 from core.basic_data import get_database
 from core.classes import GROUP_ALL
-from core.course_base import COURSE_LINE
+from core.course_base import COURSE_LINE, REPORT_WRITER
 
 from ui.dialogs.dialog_course_groups import courseGroupsDialog
 from ui.dialogs.dialog_course_teachers import courseTeachersDialog
 from ui.dialogs.dialog_choose_subject import chooseSubjectDialog
+
+DEFAULT_TEACHER_ROLE = REPORT_WRITER
+
+### -----
 
 class CourseTable:
     """Manage the data from the database and the display table.
@@ -146,7 +152,7 @@ class CourseTableRow:
             cgtable.clear_caches()
         elif field == "Teachers":
             now = [
-                (t.Teacher.id, "Z" in t.ROLE)
+                (t.Teacher.id, REPORT_WRITER in t.ROLE)
                 for t in self.teacher_list
             ]
             db = get_database()
@@ -169,7 +175,7 @@ class CourseTableRow:
                         "Course": self.course.id,
                         "Teacher": t,
                         "PAY_FACTOR": "1",
-                        "ROLE": "Z" if rep else ""
+                        "ROLE": REPORT_WRITER if rep else ""
                     })
                 else:
                     if t != t0:
@@ -177,7 +183,7 @@ class CourseTableRow:
                         ttable.update_cells(
                             rowid,
                             Teacher = t,
-                            ROLE = "Z" if rep else ""
+                            ROLE = REPORT_WRITER if rep else ""
                         )
                 i += 1
             if to_add:

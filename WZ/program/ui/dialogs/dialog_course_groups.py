@@ -1,7 +1,7 @@
 """
 ui/dialogs/dialog_course_groups.py
 
-Last updated:  2023-12-09
+Last updated:  2023-12-29
 
 Supporting "dialog" for the course editor – edit the groups in a course.
 
@@ -126,12 +126,12 @@ def courseGroupsDialog(
             if item.checkState() == Qt.CheckState.Checked:
                 # Include this row
                 cb = ui.class_table.cellWidget(row, 1)
-                g = cb.currentText()
+                g = cb.currentText().split("=", 1)[0]
                 groups.append((rec[0], g))
                 cglist.append(format_class_group(rec[1], g))
         #print("§evaluate:", groups, "=?", groups0)
         ui.value.setText(", ".join(cglist))
-        pb_accept.setEnabled(groups != groups0)
+        pb_accept.setEnabled(dict(groups) != groups0)
 
     ##### dialog main ######
 
@@ -174,16 +174,19 @@ def courseGroupsDialog(
         item = ui.class_table.item(row, 0)
         item.setCheckState(Qt.CheckState.Checked)
         cb = ui.class_table.cellWidget(row, 1)
-        cb.setCurrentText(g)
+        for i in range(cb.count()):
+            text = cb.itemText(i)
+            if text.split("=", 1)[0] == g:
+                cb.setCurrentIndex(i)
+                break
         cb.setEnabled(True)
 
     result = None
-    groups0 = []
+    # Use a <dict> to check for changed entries because this will
+    # ignore the order (a list comparison wouldn't).
+    groups0 = dict(start_value)
     groups = []
     evaluate()
-    for g in groups:
-        groups0.append(g)
-    pb_accept.setEnabled(False)
     suppress_events = False
     if parent:
         ui.move(parent.mapToGlobal(parent.pos()))
@@ -202,7 +205,7 @@ if __name__ == "__main__":
         (12, "10G", [("A", "BG", "R", "G=A+BG", "B=BG+R"), ("X", "Y"),]),
     ]
 
-    start_groups = [(1, "B"), (8, "*"),]
+    start_groups = [(12, "B"), (8, "*"),]
 
     '''
     from core.db_access import get_database
@@ -222,5 +225,5 @@ if __name__ == "__main__":
 
     print("\n----->", courseGroupsDialog(
         start_value = start_groups,
-        class_groups=class_groups
+        class_groups = class_groups
     ))

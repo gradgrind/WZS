@@ -1,5 +1,5 @@
 """
-core/classes.py - last updated 2023-12-27
+core/classes.py - last updated 2023-12-29
 
 Manage class data.
 
@@ -330,7 +330,6 @@ def make_divisions(group_info: dict[str, GroupInfo]) -> str:
 if __name__ == "__main__":
 
     import fastjsonschema
-    from core.db_access import CONFIG_SCHEMA
 
     # JSON schema for mappings str -> str, the keys are restricted
     SIMPLE_SCHEMA = {

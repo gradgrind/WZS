@@ -1,5 +1,5 @@
 """
-grades/grade_tables.py - last updated 2023-12-28
+grades/grade_tables.py - last updated 2023-12-29
 
 Manage grade tables.
 
@@ -135,6 +135,7 @@ if __name__ == "__main__":
     db = get_database()
 
     ctable = db.table("CLASSES")
+#TODO: Does report_data() need caching?
     c_reports, t_reports = report_data(GRADES = True)
     for c, items in c_reports.items():
         print("\n***", ctable[c].CLASS)
@@ -151,8 +152,14 @@ if __name__ == "__main__":
     filepath = DATAPATH("NOTEN_SEK_I", "TEMPLATES")
     template = ClassMatrix(filepath)
 
-    c = 21
-    g = ""
+#    from core.classes import GROUP_ALL
+    c = 23
+#    g = GROUP_ALL
+    g = "R" # or None?
+
+    divdata = ctable.group_data(c)
+    if g:
+        g_atoms = divdata["group_info"][g].atomic_group_bitmap
 
     smap = {}
     for s in c_reports[c]:
@@ -160,6 +167,8 @@ if __name__ == "__main__":
 # s = (sbj, report_info, g.GROUP_TAG, tlist)
 #        if g and 'g covered by s[2]':
 #            # include subject
+
+
         sdata = s[0]
 #        slist.append((sdata.SORTING, sdata.NAME, sdata.sid, sdata.id))
 #        slist.sort()

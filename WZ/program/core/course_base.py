@@ -1,7 +1,7 @@
 """
 core/course_base.py
 
-Last updated:  2023-12-26
+Last updated:  2023-12-29
 
 Support functions dealing with courses, lessons, etc.
 
@@ -71,6 +71,10 @@ from core.teachers import Teachers
 from core.subjects import Subjects
 from core.rooms import Rooms, RoomGroups
 from core.time_slots import TimeSlots
+
+REPORT_WRITER = "Z" # flag for teacher's ROLE in table COURSE_TEACHERS
+# Note that its presence does not indicate that there actually are
+# reports for the course – that is set in the COURSE_BASE table.
 
 ## Regular expressions
 # Block field: "<short name>:<full name>*<tag>#<notes>"
@@ -717,7 +721,7 @@ def report_teachers(teacher_list: list[db_TableRow]) -> list[str]:
     return [
         t.Teacher.SIGNED
         for t in teacher_list
-        if "Z" in t.ROLE
+        if REPORT_WRITER in t.ROLE
     ]
 
 

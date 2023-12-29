@@ -1,7 +1,7 @@
 """
 core/list_activities.py
 
-Last updated:  2023-12-26
+Last updated:  2023-12-29
 
 Present information on activities for teachers and classes/groups.
 The information is formatted in pdf documents using the reportlab
@@ -63,6 +63,7 @@ from core.course_base import (
     workload_teacher,
     subject_print_name,
     teachers_print_names,
+    REPORT_WRITER,
 )
 
 class COURSE_DATA(NamedTuple):
@@ -834,7 +835,7 @@ def report_data(GRADES = False):
         if ci == 0: continue    # not a "real" COURSE_BASE entry
         tlist = [
             t for t in cttable.get_course_teachers(ci)
-            if "Z" in t.ROLE
+            if REPORT_WRITER in t.ROLE
         ]
         if GRADES:
             if course.GRADES:

@@ -1,7 +1,7 @@
 """
 ui/modules/course_editor.py
 
-Last updated:  2023-12-26
+Last updated:  2023-12-29
 
 Edit course and blocks+lessons data.
 
@@ -34,8 +34,8 @@ if __name__ == "__main__":
     from core.base import setup
     setup(os.path.join(basedir, 'TESTDATA'))
 
-from core.base import TRANSLATIONS
-T = TRANSLATIONS("ui.modules.course_editor")
+from core.base import Tr
+T = Tr("ui.modules.course_editor")
 
 ### +++++
 
@@ -54,10 +54,15 @@ from ui.ui_base import (
     ### other
     SHOW_CONFIRM,
 )
-from ui.course_table import CourseTable, CourseTableRow
+from ui.course_table import CourseTable, CourseTableRow, DEFAULT_TEACHER_ROLE
 from ui.table_support import Table
 
-from core.base import REPORT_CRITICAL, REPORT_ERROR, REPORT_INFO
+from core.base import (
+    REPORT_CRITICAL,
+    REPORT_ERROR,
+    REPORT_WARNING,
+    REPORT_INFO,
+)
 from core.db_access import db_TableRow
 from core.basic_data import get_database, REPORT_SPLITTER, print_fix
 from core.rooms import get_db_rooms
@@ -107,6 +112,7 @@ class CourseEditorPage(QObject):
         )
         self.ui_table = Table(self.ui.course_table)
         self.course_table = CourseTable(self.ui_table)
+        self.lesson_table = Table(self.ui.lesson_table)
 
         ## Set up activation for the editors for the read-only fields
         self.field_editors = {
@@ -273,7 +279,6 @@ class CourseEditorPage(QObject):
         lesson_units = self.db.table("LESSON_UNITS")
         lessons = lesson_units.get_block_units(lesson_block.id)
         self.lesson_list = lessons
-        self.lesson_table = Table(self.ui.lesson_table)
         self.lesson_table.set_row_count(len(lessons))
         self.block_parallels = set()
         self.n_lessons = 0
@@ -291,7 +296,7 @@ class CourseEditorPage(QObject):
             if lpid:
                 if lpid in self.block_parallels:
                     REPORT_ERROR(
-                        T["DOUBLE_PARALLEL"].format(tag = l.Parallel.TAG)
+                        T("DOUBLE_PARALLEL", tag = l.Parallel.TAG)
                     )
                     l._write("Parallel", 0) # remove the parallel tag
                 else:
@@ -322,7 +327,7 @@ class CourseEditorPage(QObject):
             #print("§lesson length:", l0)
             new_length = integerDialog(
                 l0,
-                title = T["LESSON_LENGTH"],
+                title = T("LESSON_LENGTH"),
                 default = 1,
                 min = 1,
                 max = len(self.db.table("TT_PERIODS").records) - 1,
@@ -374,9 +379,7 @@ class CourseEditorPage(QObject):
                             lp._table.delete_records([lpid0])
                 elif lpid:
                     if lpid in self.block_parallels:
-                        REPORT_ERROR(
-                            T["DOUBLE_PARALLEL"].format(tag = tag)
-                        )
+                        REPORT_ERROR(T("DOUBLE_PARALLEL", tag = tag))
                     else:
                         # Attach to existing group
                         assert ldata._write("Parallel", lpid)
@@ -521,7 +524,7 @@ class CourseEditorPage(QObject):
         new_text = textLineDialog(
             title,
             default = subject_print_name(self.course_data.course),
-            title = T["REPORT_TITLE_LABEL"],
+            title = T("REPORT_TITLE_LABEL"),
             parent = self.ui.report_title,
         )
         if new_text is not None:
@@ -544,7 +547,7 @@ class CourseEditorPage(QObject):
     def edit_course_notes(self):
         new_text = textLineDialog(
             self.course_data.course.INFO,
-            title = T["COURSE_INFO_LABEL"],
+            title = T("COURSE_INFO_LABEL"),
             parent = self.ui.notes,
         )
         if new_text is not None:
@@ -738,7 +741,7 @@ class CourseEditorPage(QObject):
         class-group will have this field substituted.
         """
         if not self.course_data:
-            REPORT_INFO(T["NO_COURSE"])
+            REPORT_INFO(T("NO_COURSE"))
             return
         tlist = self.db.table("TEACHERS").teacher_list()
         classes = self.db.table("CLASSES")
@@ -790,21 +793,47 @@ class CourseEditorPage(QObject):
         The fields of the current course, if there is one, will be taken
         as "template".
         """
+        cdata = self.course_data
+        if cdata:
+            course = cdata.course._todict()
+            #print("§course:", course)
+            glist = [
+                {"Class": g.Class.id, "GROUP_TAG": g.GROUP_TAG}
+                for g in self.course_data.group_list
+            ]
+            #print("§groups:", glist)
+            tlist = [
+                {   "Teacher": t.Teacher.id,
+                    "PAY_FACTOR": print_fix(t.PAY_FACTOR),
+                    "ROLE": t.ROLE,
+                }
+                for t in self.course_data.teacher_list
+            ]
+            subject = course["Subject"]
+            room_group = course["Room_group"]
+        else:
+            # According to view, set class or teacher.
+            if self.filter_field == "CLASS":
+                glist = [{"Class": self.filter_value, "GROUP_TAG": "*"}]
+                tlist = []
+            elif self.filter_field == "TEACHER":
+                glist = []
+                tlist = [{
+                    "Teacher": self.filter_value,
+                    "PAY_FACTOR": "1",
+                    "ROLE": DEFAULT_TEACHER_ROLE,
+                }]
+            else:
+                REPORT_WARNING(T("SUBJECT_VIEW_ADD_COURSE"))
+                return
+            subject = 0
+            room_group = 0
+        #print("§teachers:", tlist)
         block = blockNameDialog()
+        if block is None:
+            return
         #print("§block:", repr(block))
         #print("§new_course:", self.course_data)
-        course = self.course_data.course._todict()
-        #print("§course:", course)
-        glist = [
-            {"Class": g.Class.id, "GROUP_TAG": g.GROUP_TAG}
-            for g in self.course_data.group_list
-        ]
-        #print("§groups:", glist)
-        tlist = [
-            {"Teacher": t.Teacher.id, "PAY_FACTOR": print_fix(t.PAY_FACTOR)}
-            for t in self.course_data.teacher_list
-        ]
-        #print("§teachers:", tlist)
         if block.id is None:
             # New block => new record in LESSON_BLOCKS
             lbtable = self.db.table("LESSON_BLOCKS")
@@ -818,10 +847,10 @@ class CourseEditorPage(QObject):
             lbid = block.id
         cbtable = self.db.table("COURSE_BASE")
         cbid = cbtable.add_records([{
-            "Subject": course["Subject"],
+            "Subject": subject,
             "Lesson_block": lbid,
             "BLOCK_COUNT": "1",
-            "Room_group": course["Room_group"],
+            "Room_group": room_group,
             "REPORT": "",
             "GRADES": "",
             "INFO": "",
@@ -839,6 +868,8 @@ class CourseEditorPage(QObject):
             to_add.append(t)
 #TODO: entries in TT_ROOMS?
         self.db.table("COURSE_TEACHERS").add_records(to_add)
+
+#TODO: select new line!!!
         self.load_course_table()
 
     @Slot()
@@ -849,7 +880,7 @@ class CourseEditorPage(QObject):
         """
         row = self.ui_table.current_row()
         assert row >= 0, "No course, delete button should be disabled"
-        if not SHOW_CONFIRM(T["REALLY_DELETE"]):
+        if not SHOW_CONFIRM(T("REALLY_DELETE")):
             return
         # If there are no other courses using the LESSON_BLOCKS record,
         # that must be deleted, which would mean the LESSON_UNITS records
@@ -909,8 +940,8 @@ class CourseEditorPage(QObject):
                 nlessons, total = workload_teacher(
                     self.filter_value, self.course_table.records
                 )
-                self.ui.total.setText(T["TEACHER_TOTAL"].format(
-                    n=nlessons, total=print_fix(total)
+                self.ui.total.setText(T("TEACHER_TOTAL",
+                    n = nlessons, total = print_fix(total)
                 ))
             self.ui.total.setEnabled(True)
         else:
