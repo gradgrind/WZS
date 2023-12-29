@@ -231,15 +231,15 @@ class CourseEditorPage(QObject):
             combo_class.currentIndex()
         )
 
-    def load_course_table(self, select_index=-1, table_row=-1):
+    def load_course_table(self, select_index = -1, select_course = None):
         """This is called to load or refresh the course list.
-        <select_index> is the index of the filter selection list to be used.
-        If it is not supplied (value -1), the existing filter value,
-        <self.filter_value> will be used – this is useful for table
-        refreshes.
-        <table_row> allows a particular row to be selected initially.
-        If it is not supplied (value -1), the existing row number will be
-        used, if possible – this is useful for table refreshes.
+        <select_index> is the index of the filter selection list to be
+        used. If it is not supplied (value -1), the existing filter
+        value, <self.filter_value> will be used – this is useful for
+        table refreshes.
+        <select_course> allows a particular course to be selected
+        initially. If it is not supplied, the existing row number
+        will be used, if possible – this is useful for table refreshes.
         """
         # A LESSON_BLOCKS record may be shared by multiple COURSE_BASE
         # records, but only if it has a non-empty "BLOCK" field.
@@ -247,8 +247,7 @@ class CourseEditorPage(QObject):
         if select_index >= 0:
             self.filter_value = self.select_list[select_index][0]
             #print("\n§filter_value:", self.filter_value, self.select_list)
-        if table_row < 0:
-            table_row = self.ui_table.current_row()
+        table_row = self.ui_table.current_row()
 
         # <filter_activities> returns a list of <COURSE_LINE> objects
         alist = filter_activities(self.filter_field, self.filter_value)
@@ -256,14 +255,16 @@ class CourseEditorPage(QObject):
         #print("§courses:", alist)
         _sh = self.suppress_handlers
         self.suppress_handlers = True
-        self.course_table.load(alist)
+        table_row = self.course_table.load(alist, select_course)
         #print("§records:", self.course_table.records)
         self.course_data = None
         self.ui.pb_delete_course.setEnabled(False)
         self.ui.frame_r.setEnabled(False)
         rn = len(self.course_table.records)
         if rn > 0:
-            if table_row >= rn:
+            if table_row < 0:
+                table_row = 0
+            elif table_row >= rn:
                 table_row = rn - 1
             self.ui.course_table.setCurrentCell(table_row, 0)
         else:
@@ -868,9 +869,8 @@ class CourseEditorPage(QObject):
             to_add.append(t)
 #TODO: entries in TT_ROOMS?
         self.db.table("COURSE_TEACHERS").add_records(to_add)
-
-#TODO: select new line!!!
-        self.load_course_table()
+        # Select new line
+        self.load_course_table(select_course = cbid)
 
     @Slot()
     def on_pb_delete_course_clicked(self):

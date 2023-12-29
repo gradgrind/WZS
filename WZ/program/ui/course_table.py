@@ -49,14 +49,18 @@ class CourseTable:
         self.records: list[CourseTableRow] = []
         self.display_table = display_table  # course_editor::Table
 
-    def load(self, course_list):
+    def load(self, course_list, select_course = None) -> int:
         self.display_table.set_row_count(len(course_list))
         self.records.clear()
+        line = -1
         for row, cdata in enumerate(course_list):
             ctrow = CourseTableRow(cdata)
+            if select_course and ctrow.course.id == select_course:
+                line = row
             self.records.append(ctrow)
             for col in range(len(ctrow.fields)):
                 self.display_table.write(row, col, ctrow.show_col(col))
+        return line
 
     def edit_cell(self, row, col):
         """Activate the editor on the given cell.
