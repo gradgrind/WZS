@@ -1,5 +1,5 @@
 """
-grades/grade_tables.py - last updated 2023-12-29
+grades/grade_tables.py - last updated 2023-12-30
 
 Manage grade tables.
 
@@ -38,6 +38,7 @@ T = Tr("grades.grade_tables")
 
 from core.base import REPORT_ERROR, REPORT_WARNING
 from core.basic_data import CALENDAR
+from core.classes import format_class_group
 from core.list_activities import report_data
 
 ### -----
@@ -158,31 +159,56 @@ if __name__ == "__main__":
     g = "R" # or None?
 
     divdata = ctable.group_data(c)
-    if g:
-        g_atoms = divdata["group_info"][g].atomic_group_bitmap
+    group_info = divdata["group_info"]
+#TODO:
+    assert g, "Are no-pupil groups filtered out by report_data()?"
+
+    g_atoms = group_info[g].atomic_group_set
+    print("§g_atoms:", g_atoms)
 
     smap = {}
+    smap0 = {}
     for s in c_reports[c]:
-#TODO: Filter subjects on group as well as class.
-# s = (sbj, report_info, g.GROUP_TAG, tlist)
-#        if g and 'g covered by s[2]':
-#            # include subject
+        ## Filter subjects on group as well as class.
+        # s = (sbj, report_info, GROUP_TAG, tlist)
+        s_id = s[0].id
+        smap0[s_id] = s[0]
+        ags = group_info[s[2]].atomic_group_set
+        print("§s:", s[0].SID, s[2], ags, [t.Teacher.TID for t in s[3]])
+        these_ags = ags & g_atoms
+        if these_ags:
+            tset = {t.Teacher.id for t in s[3]}
+            try:
+                sagmap = smap[s_id]
+            except KeyError:
+                sagmap = {}
+                smap[s_id] = sagmap
+            for ag in (these_ags):
+                try:
+                    sagmap[ag].update(tset)
+                except KeyError:
+                    sagmap[ag] = tset.copy()
 
+    print("§smap:", smap)
 
-        sdata = s[0]
-#        slist.append((sdata.SORTING, sdata.NAME, sdata.sid, sdata.id))
-#        slist.sort()
-        smap[sdata.id] = sdata
-        slist = sorted(smap.values(), key = lambda x: (x.SORTING, x.NAME))
+#TODO: The above code could be put in a function returning <smap>.
+# The code below is for the xlsx table.
+
+    ## For the grade table, build a sorted list of the subject objects
+    slist = [smap0[s_id] for s_id in smap]
+    slist.sort(key = lambda x: (x.SORTING, x.NAME))
+    for s in slist:
+        print("  --", s)
+
+#    quit(2)
 
     make_grade_table(
         template,
         data = {
-            "CLASS_GROUP": "11G",
+            "CLASS_GROUP": format_class_group(ctable[c].CLASS, g),
             "OCCASION": "1. Halbjahr",
             "SUBJECTS": slist,
         },
     )
-
 
     print(" ->", template.save(filepath + "__test1"))
