@@ -1,7 +1,7 @@
 """
 ui/dialogs/dialog_choose_subject.py
 
-Last updated:  2023-11-29
+Last updated:  2023-12-30
 
 Supporting "dialog" – select a subject.
 
@@ -34,8 +34,8 @@ if __name__ == "__main__":
     from core.base import setup
     setup(os.path.join(basedir, 'TESTDATA'))
 
-#from core.base import TRANSLATIONS, REPORT_ERROR
-#T = TRANSLATIONS("ui.dialogs.dialog_choose_subject")
+#from core.base import Tr
+#T = Tr("ui.dialogs.dialog_choose_subject")
 
 ### +++++
 
@@ -44,41 +44,14 @@ from typing import Optional
 from ui.ui_base import (
     ### QtWidgets:
     QWidget,
-    QDialogButtonBox,
     ### QtGui:
     ### QtCore:
-    QObject,
-    QEvent,
-    Qt,
     Slot,
     ### other
     load_ui,
 )
 
 ### -----
-
-
-class ComboBox(QObject):
-    """Implement an event filter for pressing the return key on the combobox.
-    Normally it would activate the pop-up, but override that here
-    so that the accept key is activated (if it is enabled).
-    """
-    def __init__(self, cb, pb_accept):
-        super().__init__()
-        self.pb_accept = pb_accept
-        cb.installEventFilter(self)
-
-    def eventFilter(self, obj: QWidget, event: QEvent) -> bool:
-        if (
-            event.type() == QEvent.Type.KeyPress
-            and event.key() == Qt.Key.Key_Return
-        ):
-            if self.pb_accept.isEnabled():
-                self.pb_accept.clicked.emit()
-            return True
-        # otherwise standard event processing
-        return False
-
 
 def chooseSubjectDialog(
     start_value: int,
@@ -88,53 +61,26 @@ def chooseSubjectDialog(
 
     ##### slots #####
 
-    @Slot()
-    def on_accepted():
-        nonlocal result
-        result = chosen
-
     @Slot(int)
     def on_cb_subject_currentIndexChanged(row):
         if suppress_events: return
-        evaluate()
+        nonlocal result
+        result = subjects[ui.cb_subject.currentIndex()][0]
+        ui.accept()
 
     ##### functions #####
-
-    def evaluate():
-        nonlocal chosen
-        chosen = subjects[ui.cb_subject.currentIndex()][0]
-        pb_accept.setEnabled(chosen != start_value)
 
     ##### dialog main ######
 
     # Don't pass a parent because that would add a child with each call of
     # the dialog.
     ui = load_ui("dialog_choose_subject.ui", None, locals())
-    pb_accept = ui.buttonBox.button(
-        QDialogButtonBox.StandardButton.Ok
-    )
-    event_filter = ComboBox(ui.cb_subject, pb_accept)
-
     # Data initialization
     suppress_events = True
-
-    row = combotable(ui.cb_subject, subjects, start_value)
-
-    '''
-    ui.cb_subject.clear()
-    row = -1
-    for id, sid, name in subjects:
-        if id == start_value:
-            row = ui.cb_subject.count()
-        ui.cb_subject.addItem(f"{sid}: {name}")
-    '''
-
+    row = combotable2(ui.cb_subject, subjects, start_value)
     # Set initial selection
     ui.cb_subject.setCurrentIndex(row)
-
     result = None
-    chosen = start_value
-    pb_accept.setEnabled(False)
     suppress_events = False
 
     # In case a screen position was passed in:
@@ -145,16 +91,18 @@ def chooseSubjectDialog(
     return result
 
 
-# A possibility of displaying the popup list as a table.
+### A possibility of displaying the popup list as a table.
 from ui.ui_base import (
-    QStandardItemModel,
-    QStandardItem,
-    QTableView,
+#    QStandardItemModel,
+#    QStandardItem,
+#    QTableView,
     QAbstractItemView,
 
     QTableWidget,
     QTableWidgetItem,
 )
+'''
+# Using QTableView with QStandardItemModel ...
 def combotable(combobox, datalist, v0):
     model = QStandardItemModel(len(datalist), 3)
     #model.setHorizontalHeaderLabels(("title", "name"))
@@ -172,33 +120,37 @@ def combotable(combobox, datalist, v0):
     viewhh = view.horizontalHeader()
     viewhh.setStretchLastSection(True)
     viewhh.hide()
+    view.verticalHeader().hide()
     combobox.setView(view)
     view.hideColumn(0)
     view.setSelectionBehavior(QAbstractItemView.SelectRows)
     #view.setFixedWidth(350)
     return row
+'''
 
-# Similar, but more standalone and with QWidget ...
-def combotable2(datalist):
-    ui = load_ui("dialog_choose_subject.ui", None, locals())
-    combobox = ui.cb_subject
+# Using QTableWidget ...
+def combotable2(combobox, datalist, v0):
     table = QTableWidget(len(datalist), 3, combobox)
-    #table.setHorizontalHeaderLabels(("tag", "name"))
+    row = -1
     for i in range(table.rowCount()):
+        rowdata = datalist[i]
+        if rowdata[0] == v0:
+            row = i
         for j in range(table.columnCount()):
-            it = QTableWidgetItem(datalist[i][j])
+            it = QTableWidgetItem(rowdata[j])
             table.setItem(i, j, it)
     combobox.setModel(table.model())
     combobox.setModelColumn(2)
     viewhh = table.horizontalHeader()
     viewhh.setStretchLastSection(True)
     viewhh.hide()
+    table.verticalHeader().hide()
     combobox.setView(table)
     table.hideColumn(0)
     table.setSelectionBehavior(QAbstractItemView.SelectRows)
     #table.setFixedWidth(350)
+    return row
 
-    ui.exec()
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
 
@@ -211,21 +163,18 @@ if __name__ == "__main__":
         (12, "Ku", "Kunst"),
     ]
 
-#    '''
-    from core.db_access import get_database
+    '''
+    from core.basic_data import get_database
     from core.subjects import Subjects
 
     db = get_database()
     subjects = Subjects(db)
     slist = subjects.subject_list()
-#    '''
+    '''
 
     print("\n?subjects:")
     for s in slist:
         print("   --", s)
-
-    combotable2(slist)
-#    quit(1)
 
     print("\n----->", chooseSubjectDialog(
         start_value = -1,
