@@ -1,7 +1,7 @@
 """
 core/list_activities.py
 
-Last updated:  2023-12-29
+Last updated:  2023-12-30
 
 Present information on activities for teachers and classes/groups.
 The information is formatted in pdf documents using the reportlab
@@ -49,13 +49,12 @@ from fpdf import FPDF
 #from fpdf.fonts import FontFace
 
 from core.base import (
-    format_class_group,
     REPORT_CRITICAL,
     REPORT_ERROR,
     #DATAPATH,
 )
 from core.basic_data import get_database, print_fix, REPORT_SPLITTER
-from core.classes import GROUP_ALL
+from core.classes import GROUP_ALL, format_class_group
 from core.rooms import get_db_rooms, print_room_choice
 from core.course_base import (
     filter_activities,

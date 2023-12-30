@@ -1,7 +1,7 @@
 """
 ui/modules/course_editor.py
 
-Last updated:  2023-12-29
+Last updated:  2023-12-30
 
 Edit course and blocks+lessons data.
 
@@ -65,6 +65,7 @@ from core.base import (
 )
 from core.db_access import db_TableRow
 from core.basic_data import get_database, REPORT_SPLITTER, print_fix
+from core.classes import GROUP_ALL
 from core.rooms import get_db_rooms
 from core.course_base import (
     filter_activities,
@@ -77,6 +78,8 @@ from core.course_base import (
     report_teachers,
 #    teachers_print_names,
     block_courses,
+    REPORT_WRITER,
+    BLOCK,
 )
 
 from ui.dialogs.dialog_change_teacher_class import newTeacherClassDialog
@@ -92,6 +95,7 @@ from ui.dialogs.dialog_text_line import textLineDialog
 from ui.dialogs.dialog_report_signature import reportSignatureDialog
 from ui.dialogs.dialog_integer import integerDialog
 from ui.dialogs.dialog_make_course_tables import exportTable
+from ui.dialogs.dialog_new_course import newCourseDialog
 
 def display_parallel(lesson_rec: db_TableRow) -> str:
     """Construct a display text for a parallel tag.
@@ -746,12 +750,17 @@ class CourseEditorPage(QObject):
             return
         tlist = self.db.table("TEACHERS").teacher_list()
         classes = self.db.table("CLASSES")
+#TODO:
+        REPORT_WARNING("TODO: Consider empty group and teacher lists!")
         class_groups = [
             (rec.id, rec.CLASS, rec.DIVISIONS) for rec in classes.records
             if rec.id
         ]
         t0 = [t.Teacher.id for t in self.course_data.teacher_list]
-        cg0 = [(g.Class.id, g.GROUP_TAG) for g in self.course_data.group_list]
+        cg0 = [
+            (g.Class.id, g.GROUP_TAG)
+            for g in self.course_data.group_list
+        ]
         changes = newTeacherClassDialog(
             start_teachers = t0,
             start_classes = cg0,
@@ -795,46 +804,70 @@ class CourseEditorPage(QObject):
         as "template".
         """
         cdata = self.course_data
+        course = cdata.course
+        tpaymap = {}
         if cdata:
-            course = cdata.course._todict()
-            #print("§course:", course)
-            glist = [
-                {"Class": g.Class.id, "GROUP_TAG": g.GROUP_TAG}
-                for g in self.course_data.group_list
-            ]
-            #print("§groups:", glist)
-            tlist = [
-                {   "Teacher": t.Teacher.id,
-                    "PAY_FACTOR": print_fix(t.PAY_FACTOR),
-                    "ROLE": t.ROLE,
-                }
-                for t in self.course_data.teacher_list
-            ]
-            subject = course["Subject"]
-            room_group = course["Room_group"]
+            glist = []
+            for g in cdata.group_list:
+                id = g.Class.id
+                assert id > 0
+                glist.append((id, g.GROUP_TAG))
+            tlist = []
+            for t in cdata.teacher_list:
+                id = t.Teacher.id
+                assert id > 0
+                tlist.append((id, REPORT_WRITER in t.ROLE))
+                tpaymap[t] = print_fix(t.PAY_FACTOR)
+            subject_id = course.Subject.id
+            room_group_id = course.Room_group.id
+            block0 = course.Lesson_block
         else:
-            # According to view, set class or teacher.
+            # No course to act as base. According to view,
+            # set class or teacher.
             if self.filter_field == "CLASS":
-                glist = [{"Class": self.filter_value, "GROUP_TAG": "*"}]
+                if self.filter_value > 0:
+                    glist = [(self.filter_value, GROUP_ALL)]
+                else:
+                    glist = []
                 tlist = []
             elif self.filter_field == "TEACHER":
                 glist = []
-                tlist = [{
-                    "Teacher": self.filter_value,
-                    "PAY_FACTOR": "1",
-                    "ROLE": DEFAULT_TEACHER_ROLE,
-                }]
-            else:
-                REPORT_WARNING(T("SUBJECT_VIEW_ADD_COURSE"))
-                return
-            subject = 0
-            room_group = 0
-        #print("§teachers:", tlist)
-        block = blockNameDialog()
-        if block is None:
-            return
-        #print("§block:", repr(block))
+                if self.filter_value > 0:
+                    tlist = [(self.filter_value, DEFAULT_TEACHER_ROLE)]
+                else:
+                    tlist = []
+            subject_id = 0
+            room_group_id = 0
+            block0 = None
+        #print("§block0:", block0, type(block0))
         #print("§new_course:", self.course_data)
+        stg = newCourseDialog(
+            start_subject = subject_id,
+            start_teachers = tlist,
+            start_groups = glist,
+            block = block0,
+            parent = self.ui.course_table,
+        )
+        if stg is None:
+            return
+        subject_id, tlist, glist, block = stg
+        assert subject_id
+        if (not tlist) and not (glist):
+            REPORT_WARNING(T("ADD_COURSE_NO_TEACHERS_OR_STUDENTS"))
+            return
+        # Prepare the data for adding to the database
+        new_role0 = DEFAULT_TEACHER_ROLE.replace(REPORT_WRITER, "")
+        tdblist = [
+            {   "Teacher": t,
+                "PAY_FACTOR": tpaymap.get(t) or "1",
+                "ROLE": DEFAULT_TEACHER_ROLE if r else new_role0,
+            }
+            for t, r in tlist
+        ]
+        gdblist = [
+            {"Class": c, "GROUP_TAG": g}
+            for c, g in glist
+        ]
         if block.id is None:
             # New block => new record in LESSON_BLOCKS
             lbtable = self.db.table("LESSON_BLOCKS")
@@ -848,27 +881,30 @@ class CourseEditorPage(QObject):
             lbid = block.id
         cbtable = self.db.table("COURSE_BASE")
         cbid = cbtable.add_records([{
-            "Subject": subject,
+            "Subject": subject_id,
             "Lesson_block": lbid,
             "BLOCK_COUNT": "1",
-            "Room_group": room_group,
+            "Room_group": room_group_id,
             "REPORT": "",
             "GRADES": "",
             "INFO": "",
         }])[0]
-        # Copy over teacher(s) and group(s), new entries are be needed in
+        # Add teacher(s) and group(s), new entries are needed in
         # the associated tables.
-        to_add = []
-        for g in glist:
-            g["Course"] = cbid
-            to_add.append(g)
-        self.db.table("COURSE_GROUPS").add_records(to_add)
+        if gdblist:
+            to_add = []
+            for g in gdblist:
+                g["Course"] = cbid
+                to_add.append(g)
+            self.db.table("COURSE_GROUPS").add_records(to_add)
         to_add.clear()
-        for t in tlist:
-            t["Course"] = cbid
-            to_add.append(t)
+        if tdblist:
+            to_add = []
+            for t in tdblist:
+                t["Course"] = cbid
+                to_add.append(t)
+            self.db.table("COURSE_TEACHERS").add_records(to_add)
 #TODO: entries in TT_ROOMS?
-        self.db.table("COURSE_TEACHERS").add_records(to_add)
         # Select new line
         self.load_course_table(select_course = cbid)
 

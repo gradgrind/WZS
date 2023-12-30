@@ -46,7 +46,6 @@ from core.base import (
     REPORT_CRITICAL,
     REPORT_ERROR,
     REPORT_WARNING,
-    format_class_group,
 )
 from core.db_access import (
     DB_TABLES,
@@ -66,7 +65,7 @@ from core.basic_data import (
     SUBJECT_SPLITTER,
     print_fix,
 )
-from core.classes import Classes
+from core.classes import Classes, format_class_group
 from core.teachers import Teachers
 from core.subjects import Subjects
 from core.rooms import Rooms, RoomGroups

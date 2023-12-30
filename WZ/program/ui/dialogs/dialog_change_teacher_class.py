@@ -1,7 +1,7 @@
 """
 ui/dialogs/dialog_change_teacher_class.py
 
-Last updated:  2023-12-10
+Last updated:  2023-12-30
 
 Supporting "dialog", for the course editor – change all occurrences of
 a class or teacher in a courses display page.
@@ -42,8 +42,8 @@ T = TRANSLATIONS("ui.dialogs.dialog_change_teacher_class")
 
 from typing import Optional
 
-from core.base import format_class_group, REPORT_INFO
-from core.classes import GROUP_ALL
+from core.base import REPORT_INFO
+from core.classes import GROUP_ALL, format_class_group
 from ui.ui_base import (
     ### QtWidgets:
     QWidget,

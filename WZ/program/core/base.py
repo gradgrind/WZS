@@ -1,7 +1,7 @@
 """
 core/base.py
 
-Last updated:  2023-12-25
+Last updated:  2023-12-30
 
 Basic configuration and structural stuff.
 
@@ -134,28 +134,11 @@ def RESOURCEPATH(path):
 ### -----
 
 
-def format_class_group(c: str, g: str) -> str:
-    """Make a full class-group descriptor from the class and the possibly
-    null ("") group.
-    """
-    return f"{c}.{g}" if g else f"({c})"
-
-
 def year_data_path(year, path=""):
     """Return the directory (full path) containing the data for the
     given year.
     """
     return os.path.join(basedir, f"DATA-{year}", *path.split("/"))
-
-
-def class_group_split(class_group: str) -> tuple[str,str]:
-    """Split a full group descriptor (class.group) into class and group.
-    """
-    try:
-        class_group, g = class_group.split(".", 1)
-    except ValueError:
-        g = ""
-    return class_group, g
 
 
 # TODO:

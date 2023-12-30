@@ -30,6 +30,7 @@
         "program/ui/dialogs/dialog_course_teachers.py",
         "program/ui/dialogs/dialog_integer.py",
         "program/ui/dialogs/dialog_make_course_tables.py",
+        "program/ui/dialogs/dialog_new_course.py",
         "program/ui/dialogs/dialog_parallel_lessons.py",
         "program/ui/dialogs/dialog_report_signature.py",
         "program/ui/dialogs/dialog_room_choice.py",

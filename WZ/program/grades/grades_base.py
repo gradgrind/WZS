@@ -1,7 +1,7 @@
 """
 grades/gradetable.py
 
-Last updated:  2023-06-16
+Last updated:  2023-12-30
 
 Access grade data, read and build grade tables.
 
@@ -21,6 +21,8 @@ Copyright 2023 Michael Towers
    limitations under the License.
 =-LICENCE========================================
 """
+
+#TODO: not used (yet)
 
 # Bear in mind that a pupil's groups and "level" can change during a
 # school-year. Thus these fields are saved along with the grades when
@@ -55,7 +57,7 @@ T = TRANSLATIONS("grades.grades_base")
 from typing import Optional
 import datetime
 
-from core.base import class_group_split, Dates
+from core.base import Dates
 from core.db_access import (
     db_read_table,
     read_pairs,
@@ -65,6 +67,7 @@ from core.db_access import (
     write_pairs_dict,
 )
 from core.basic_data import SHARED_DATA
+from core.classes import class_group_split
 from core.pupils import pupil_name, pupil_data
 from core.report_courses import get_pupil_grade_matrix
 from tables.spreadsheet import read_DataTable

@@ -379,7 +379,7 @@ ui.modules.course_editor: {
     TEACHER_TOTAL:  "Stundenplanbelegung: {n} Stunden ;  Deputatsstunden: {total}"
     DOUBLE_PARALLEL: "Parallel-Kennung '{tag}' schon bei einer anderen Stunde des Blocks vorhanden"
     NO_COURSE:      "Kein Kurs!"
-    SUBJECT_VIEW_ADD_COURSE: "Kurs ohne Lehrpersonen und Schülergruppe wird nicht erstellt"
+    ADD_COURSE_NO_TEACHERS_OR_STUDENTS: "Kurs ohne Lehrpersonen und Schülergruppe wird nicht erstellt"
 }
 
 ui.modules.grades_manager: {

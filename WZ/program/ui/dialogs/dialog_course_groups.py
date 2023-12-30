@@ -1,7 +1,7 @@
 """
 ui/dialogs/dialog_course_groups.py
 
-Last updated:  2023-12-29
+Last updated:  2023-12-30
 
 Supporting "dialog" for the course editor – edit the groups in a course.
 
@@ -34,8 +34,8 @@ if __name__ == "__main__":
     from core.base import setup
     setup(os.path.join(basedir, 'TESTDATA'))
 
-#from core.base import TRANSLATIONS, REPORT_ERROR
-#T = TRANSLATIONS("ui.dialogs.dialog_course_groups")
+#from core.base import Tr
+#T = Tr("ui.dialogs.dialog_course_groups")
 
 ### +++++
 
@@ -55,7 +55,7 @@ from ui.ui_base import (
     load_ui,
 )
 
-from core.base import format_class_group
+from core.classes import format_class_group, GROUP_ALL
 
 ### -----
 
@@ -81,7 +81,7 @@ def courseGroupsDialog(
 
     if basic_entries is None:
         # Prefix "no group" and "whole class" entries
-        basic_entries = ['', '*']
+        basic_entries = ['', GROUP_ALL]
 
     ##### slots #####
 

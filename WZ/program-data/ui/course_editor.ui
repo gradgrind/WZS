@@ -357,10 +357,7 @@
       <item row="3" column="0" colspan="2">
        <widget class="QGroupBox" name="report_checkbox">
         <property name="toolTip">
-         <string>Normalerweise wird das Fach als Überschrift genommen,
-die unterrichtende Lehrkraft (die „Verantwortliche“) als Unterschrift.
-
-Hiere können diese aber bei Bedarf angepasst werden.</string>
+         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Normalerweise wird das Fach als Überschrift genommen,&lt;/p&gt;&lt;p&gt;die unterrichtende Lehrkraft (die „Verantwortliche“) als Unterschrift.&lt;/p&gt;&lt;p&gt;Diese können aber bei Bedarf angepasst werden.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
         </property>
         <property name="title">
          <string>Zeugnis</string>

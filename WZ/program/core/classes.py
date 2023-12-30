@@ -1,5 +1,5 @@
 """
-core/classes.py - last updated 2023-12-29
+core/classes.py - last updated 2023-12-30
 
 Manage class data.
 
@@ -62,6 +62,30 @@ class DIV_Error(Exception):
     """An exception class for errors occurring while reading
     class divisions.
     """
+
+#TODO: Add configuration option and code to support schools with
+# no class divisions.
+def format_class_group(c: str, g: str) -> str:
+    """Make a full class-group descriptor from the class and the possibly
+    null ("") group.
+    """
+    if g:
+        if g == GROUP_ALL:
+            return c
+        return f"{c}.{g}"
+    return f"({c})"
+#+
+def class_group_split(class_group: str) -> tuple[str,str]:
+    """Split a full group descriptor (class.group, etc.) into class and group.
+    """
+    if class_group.startswith("("):
+        assert class_group.endswith(")")
+        return (class_group.strip("()"), "")
+    try:
+        class_group, g = class_group.split(".", 1)
+    except ValueError:
+        g = GROUP_ALL
+    return (class_group, g)
 
 ### -----
 

@@ -110,13 +110,13 @@ class CourseTableRow:
             db = get_database()
             classes = db.table("CLASSES")
             class_groups = [
-                (rec.id, rec.CLASS, rec.DIVISIONS) for rec in classes.records
+                (rec.id, rec.CLASS, rec.DIVISIONS)
+                for rec in classes.records
                 if rec.id
             ]
             cg = courseGroupsDialog(
                 start_value = now,
                 class_groups = class_groups,
-                basic_entries = ["", GROUP_ALL]
             )
             if cg is None:
                 return False
