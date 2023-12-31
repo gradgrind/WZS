@@ -139,7 +139,8 @@ grades.grades_base: {
 
 grades.grade_tables: {
     TEMPLATE_HEADER_WRONG: "Vorlage hat fehlerhafte Kopfzeilen:\n  {path}"
-    NO_MIN_COL:     "Vorlage hat keine Markierung in der ersten Zeile für die minimale Breite:\n  {path}"
+    NO_MIN_COL:         "Vorlage hat keine Markierung in der ersten Zeile für die minimale Breite:\n  {path}"
+    UNEXPECTED_GRADE:   "Unerwartete Note ({grade}) in nicht belegtem Fach ({subject}) für {student}"
 
 #TODO ... not yet implemented/adapted
 
