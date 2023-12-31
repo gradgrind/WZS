@@ -1,7 +1,7 @@
 """
 core/base.py
 
-Last updated:  2023-12-30
+Last updated:  2023-12-31
 
 Basic configuration and structural stuff.
 
@@ -48,14 +48,14 @@ def APPDATAPATH(path):
 
 ### +++++
 
-#???
+#deprecated???
 from minion2 import Minion
 
 _Minion = Minion()
 MINION = _Minion.parse_file
 
 __TRANSLATIONS = MINION(APPDATAPATH("Translations.minion"))
-def Tr(module_key):
+def Tr0(module_key):
     tk = __TRANSLATIONS[module_key]
     def __translator(key, **kargs):
         return tk[key].format(**kargs)
@@ -63,6 +63,16 @@ def Tr(module_key):
 #TODO: deprecated (use <Tr>)
 def TRANSLATIONS(module):
     return __TRANSLATIONS[module]
+
+# new version?
+from configparser import ConfigParser
+__TRANSLATIONS2 = ConfigParser()
+__TRANSLATIONS2.read(APPDATAPATH("Translations.ini"), encoding = "utf-8")
+def Tr(module_key):
+    tk = __TRANSLATIONS2[module_key]
+    def __translator(key, **kargs):
+        return tk[key].replace("¶", "\n").format(**kargs)
+    return __translator
 
 T = Tr("core.base")
 
@@ -174,4 +184,20 @@ def archive_testdata():
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
 
 if __name__ == "__main__":
-    pass
+    from configparser import ConfigParser
+    cfg = ConfigParser()
+    cfg.optionxform = lambda option: option
+    # This more or less works, but I should probably substitute something else
+    # for \n as INI-format doesn't handle this well.
+#    cfg.read_dict(__TRANSLATIONS)
+#    with open(
+#        APPDATAPATH("Translations.ini"), "w", encoding = "utf-8"
+#    ) as fh:
+#        cfg.write(fh)
+#    cfg.read(APPDATAPATH("Translations.ini"), encoding = "utf-8")
+#    for sec in cfg.sections():
+#        print("\n ***", sec)
+#        print("  --", cfg.items(sec))
+
+    T = Tr("ui.dialogs.dialog_class_groups")
+    print("§Message:", T("EMPTY_GROUPS_ERROR", e = "** error **"))
