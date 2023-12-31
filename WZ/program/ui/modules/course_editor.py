@@ -1,7 +1,7 @@
 """
 ui/modules/course_editor.py
 
-Last updated:  2023-12-30
+Last updated:  2023-12-31
 
 Edit course and blocks+lessons data.
 
@@ -804,9 +804,9 @@ class CourseEditorPage(QObject):
         as "template".
         """
         cdata = self.course_data
-        course = cdata.course
         tpaymap = {}
         if cdata:
+            course = cdata.course
             glist = []
             for g in cdata.group_list:
                 id = g.Class.id
@@ -891,15 +891,14 @@ class CourseEditorPage(QObject):
         }])[0]
         # Add teacher(s) and group(s), new entries are needed in
         # the associated tables.
+        to_add = []
         if gdblist:
-            to_add = []
             for g in gdblist:
                 g["Course"] = cbid
                 to_add.append(g)
             self.db.table("COURSE_GROUPS").add_records(to_add)
-        to_add.clear()
+            to_add.clear()
         if tdblist:
-            to_add = []
             for t in tdblist:
                 t["Course"] = cbid
                 to_add.append(t)
