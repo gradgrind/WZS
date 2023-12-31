@@ -1,10 +1,12 @@
 """
 ui/dialogs/dialog_make_course_tables.py
 
-Last updated:  2023-12-23
+Last updated:  2023-12-31
 
 Supporting "dialog", for the course editor – allow the export of teacher
 and class data, etc., in table form.
+
+Also support the generation of grade table.
 
 
 =+LICENCE=============================
@@ -42,10 +44,12 @@ T = Tr("ui.dialogs.dialog_make_course_tables")
 ### +++++
 
 from typing import Optional
+import json
 
 from ui.ui_base import (
     ### QtWidgets:
     QWidget,
+    QListWidgetItem,
     ### QtGui:
     ### QtCore:
     Slot,
@@ -53,6 +57,7 @@ from ui.ui_base import (
     load_ui,
     SAVE_FILE,
 )
+from core.basic_data import CONFIG
 from core.list_activities import (
     make_teacher_table_pay,
     make_class_table_pdf,
@@ -104,6 +109,27 @@ def exportTable(
             pdf.output(filepath)
             output(f"---> {filepath}")
 
+    @Slot(int)
+    def on_occasion_currentIndexChanged(i):
+        if suppress_handlers: return
+        fill_group_list()
+
+    @Slot(QListWidgetItem)
+    def on_grade_tables_itemClicked(item):
+#TODO
+        print("§clicked", ui.grade_tables.row(item), item.text())
+# Get template
+# (in <make_grade_table()>?) get class-id
+# Generate table
+        filepath = SAVE_FILE(
+            f'{T("xlsx_file")} (*.xlsx)',
+            T("grade_table", group = item.text())
+        )
+        if filepath and os.path.isabs(filepath):
+            if not filepath.endswith(".xlsx"):
+                filepath += ".xlsx"
+#TODO            write_xlsx(cdb, filepath)
+            output(f"---> {filepath}")
 
 #TODO
     @Slot()
@@ -114,7 +140,7 @@ def exportTable(
         """
         cdb = make_class_table_xlsx(self.activities)
         filepath = SAVE_FILE(
-            "Excel-Datei (*.xlsx)", T["class_lessons"]
+            "Excel™-Datei (*.xlsx)", T["class_lessons"]
         )
         if filepath and os.path.isabs(filepath):
             if not filepath.endswith(".xlsx"):
@@ -130,17 +156,38 @@ def exportTable(
     def output(text):
         ui.output_box.appendPlainText(text)
 
+    def fill_group_list():
+        ui.grade_tables.clear()
+        i = ui.occasion.currentIndex()
+        if i < 0: return
+        ui.grade_tables.addItems(occasions[i][1])
+
+
     ##### dialog main ######
 
     # Don't pass a parent because that would add a child with each call of
     # the dialog.
     ui = load_ui("dialog_make_course_tables.ui", None, locals())
 
-    # Data initialization: there is nothing to do.
+    ### Data initialization.
+    suppress_handlers = True
+    # Set up the "occasions" choice.
+    ui.occasion.clear()
+    occasions = [
+        (k, v.split())
+        for k, v in json.loads(CONFIG.GRADE_OCCASION).items()
+    ]
+    occasions.sort()
+    print("§occasions:", occasions)
+
+    ui.occasion.addItems(p[0] for p in occasions)
+    ui.occasion.setCurrentIndex(-1)
+    fill_group_list()
 
     if parent:
         ui.move(parent.mapToGlobal(parent.pos()))
     # Activate the dialog
+    suppress_handlers = False
     ui.output_box.clear()
     result = None
     ui.exec()
