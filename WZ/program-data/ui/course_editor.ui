@@ -242,13 +242,36 @@
      <item>
       <layout class="QHBoxLayout" name="horizontalLayout_2">
        <item>
-        <widget class="QToolButton" name="pb_new_course">
+        <widget class="QPushButton" name="pb_change_all">
          <property name="toolTip">
-          <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Unterrichtsstunde zum Element hinzufügen&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+          <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Alle Vorkommnisse einer Lehrkraft bzw. Klasse in dieser Tabelle durch eine andere ersetzen.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+         </property>
+         <property name="text">
+          <string>Lehrer oder Klasse ersetzen</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="horizontalSpacer_3">
+         <property name="orientation">
+          <enum>Qt::Horizontal</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>40</width>
+           <height>20</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+       <item>
+        <widget class="QToolButton" name="pb_delete_course">
+         <property name="toolTip">
+          <string>aktuellen Kurs löschen </string>
          </property>
          <property name="icon">
           <iconset>
-           <normaloff>../icons/icon_new.svg</normaloff>../icons/icon_new.svg</iconset>
+           <normaloff>../icons/icon_remove.svg</normaloff>../icons/icon_remove.svg</iconset>
          </property>
         </widget>
        </item>
@@ -269,36 +292,13 @@
         </spacer>
        </item>
        <item>
-        <widget class="QToolButton" name="pb_delete_course">
+        <widget class="QToolButton" name="pb_new_course">
          <property name="toolTip">
-          <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Unterrichtsstunde vom Element entfernen. Die letzte Stunde kann auf diese Weise nicht entfernt werden, dafür muss der Kurs (bzw. alle Kurse) vom Element getrennt werden. &lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+          <string>einen neuen Kurs zur Tabelle hinzufügen</string>
          </property>
          <property name="icon">
           <iconset>
-           <normaloff>../icons/icon_remove.svg</normaloff>../icons/icon_remove.svg</iconset>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <spacer name="horizontalSpacer_3">
-         <property name="orientation">
-          <enum>Qt::Horizontal</enum>
-         </property>
-         <property name="sizeHint" stdset="0">
-          <size>
-           <width>40</width>
-           <height>20</height>
-          </size>
-         </property>
-        </spacer>
-       </item>
-       <item>
-        <widget class="QPushButton" name="pb_change_all">
-         <property name="toolTip">
-          <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Alle Vorkommnisse einer Lehrkraft bzw. Klasse in dieser Tabelle durch eine andere ersetzen.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-         </property>
-         <property name="text">
-          <string>Lehrer oder Klasse ersetzen</string>
+           <normaloff>../icons/icon_new.svg</normaloff>../icons/icon_new.svg</iconset>
          </property>
         </widget>
        </item>
@@ -680,7 +680,7 @@
         <item>
          <widget class="QToolButton" name="lesson_sub">
           <property name="toolTip">
-           <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Unterrichtsstunde vom Element entfernen. Die letzte Stunde kann auf diese Weise nicht entfernt werden, dafür muss der Kurs (bzw. alle Kurse) vom Element getrennt werden. &lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+           <string>aktuelle Unterrichtsstunde vom Kurs entfernen</string>
           </property>
           <property name="icon">
            <iconset>
@@ -691,7 +691,7 @@
         <item>
          <widget class="QToolButton" name="lesson_add">
           <property name="toolTip">
-           <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Unterrichtsstunde zum Element hinzufügen&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+           <string>Unterrichtsstunde zum Kurs hinzufügen</string>
           </property>
           <property name="icon">
            <iconset>

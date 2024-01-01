@@ -1,10 +1,10 @@
 """
-core/classes.py - last updated 2023-12-30
+core/classes.py - last updated 2024-01-01
 
 Manage class data.
 
 =+LICENCE=================================
-Copyright 2023 Michael Towers
+Copyright 2024 Michael Towers
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -30,14 +30,15 @@ if __name__ == "__main__":
     from core.base import setup
     setup(os.path.join(basedir, 'TESTDATA'))
 
-from core.base import TRANSLATIONS
-T = TRANSLATIONS("core.classes")
+from core.base import Tr
+T = Tr("core.classes")
 
 ### +++++
 
 from typing import NamedTuple, Optional
 from itertools import product
 
+from core.base import REPORT_CRITICAL
 from core.db_access import (
     DB_TABLES,
     db_Table,
@@ -75,8 +76,9 @@ def format_class_group(c: str, g: str) -> str:
         return f"{c}.{g}"
     return f"({c})"
 #+
-def class_group_split(class_group: str) -> tuple[str,str]:
-    """Split a full group descriptor (class.group, etc.) into class and group.
+def class_group_split(class_group: str) -> tuple[str, str]:
+    """Split a full group descriptor (class.group, etc.) into class and
+    group.
     """
     if class_group.startswith("("):
         assert class_group.endswith(")")
@@ -86,6 +88,20 @@ def class_group_split(class_group: str) -> tuple[str,str]:
     except ValueError:
         g = GROUP_ALL
     return (class_group, g)
+#+
+def class_group_split_with_id(class_group: str) -> tuple[int, str]:
+    """Split a full group descriptor (class.group, etc.) into class and
+    group. The class is returned as its database id.
+    """
+    c, g = class_group_split(class_group)
+    classes = get_database().table("CLASSES")
+    for rec in classes.records:
+        if rec.CLASS == c:
+            return (rec.id, g)
+    REPORT_CRITICAL(
+        "Bug: classes::class_group_split_with_id:"
+        f" group '{class_group}' is unknown"
+    )
 
 ### -----
 
@@ -179,65 +195,55 @@ class Classes(db_Table):
                         # simple group
                         if check_group_name(g):
                             if g in group_info:
-                                raise DIV_Error(
-                                    T["REPEATED_GROUP"].format(
-                                        div = div, group = g
-                                    )
-                                )
+                                raise DIV_Error(T("REPEATED_GROUP",
+                                    div = div, group = g
+                                ))
                             g0list.append(g)
                             gx = (idiv, ig)
                             ig += 1
                             group_info[g] = [gx, None]
 #                           gx2g[gx] = g
                         else:
-                            raise DIV_Error(
-                                T["INVALID_GROUP"].format(
-                                    div = div, group = g
-                                )
-                            )
+                            raise DIV_Error(T("INVALID_GROUP", 
+                                div = div, group = g
+                            ))
                     else:
                         # compound group
                         if check_group_name(gg):
                             if gg in group_info:
-                                raise DIV_Error(
-                                    T["REPEATED_GROUP"].format(
-                                        div = div, group = gg
-                                    )
-                                )
-                        else:
-                            raise DIV_Error(
-                                T["INVALID_GROUP"].format(
+                                raise DIV_Error(T("REPEATED_GROUP",
                                     div = div, group = gg
-                                )
-                            )
+                                ))
+                        else:
+                            raise DIV_Error(T("INVALID_GROUP",
+                                div = div, group = gg
+                            ))
                         gclist = []
                         for gc in cstr.split('+'):
                             if gc in g0list:
                                 if gc in gclist:
                                     raise DIV_Error(
-                                        T["REPEATED_COMPOUND_GROUP"].format(
+                                        T("REPEATED_COMPOUND_GROUP",
                                             div = div, group = gc
                                         )
                                     )
                                 gclist.append(gc)
                             else:
                                 raise DIV_Error(
-                                    T["INVALID_COMPOUND_GROUP"].format(
+                                    T("INVALID_COMPOUND_GROUP",
                                         div = div, group = gc
                                     )
                                 )
                         if len(gclist) < 2:
-                            raise DIV_Error(
-                                T["TOO_FEW_PRIMARIES"].format(
-                                    div = div, group = g
-                                )
-                            )
+                            raise DIV_Error(T("TOO_FEW_PRIMARIES",
+                                div = div, group = g
+                            ))
                         igg -= 1
                         group_info[gg] = [(idiv, igg), gclist]
                         # Note that with this indexing the compound groups
                         # are indexed in reverse order of appearance.
                 if len(g0list) < 2:
-                    raise DIV_Error(T["TOO_FEW_GROUPS"].format(div = div))
+                    raise DIV_Error(T("TOO_FEW_GROUPS", div = div))
                 raw_divs.append(g0list)
             aglist = list(product(*raw_divs)) if raw_divs else []
             ## Construct a mapping, group -> {constituent atomic groups}.

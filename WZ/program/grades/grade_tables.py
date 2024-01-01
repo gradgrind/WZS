@@ -1,11 +1,11 @@
 """
-grades/grade_tables.py - last updated 2023-12-31
+grades/grade_tables.py - last updated 2024-01-01
 
 Manage grade tables.
 
 
 =+LICENCE=================================
-Copyright 2023 Michael Towers
+Copyright 2024 Michael Towers
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -37,7 +37,7 @@ T = Tr("grades.grade_tables")
 ### +++++
 
 from core.base import REPORT_ERROR, REPORT_WARNING, REPORT_CRITICAL
-from core.basic_data import CALENDAR
+from core.basic_data import CALENDAR, get_database
 from core.classes import format_class_group, GROUP_ALL
 import core.students    # needed to initialize STUDENTS table
 from core.list_activities import report_data
@@ -50,7 +50,7 @@ def subject_map(
     class_id: int,
     group: str = GROUP_ALL,
     report_info = None,         # class-info from <report_data()>
-):
+) -> tuple[dict, dict]:
     """Return subject information for the given class-group.
     A pair of mappings is returned:
         - {subject-id: {atomic-group-id: {set of teacher-ids}}}
@@ -61,8 +61,7 @@ def subject_map(
     divdata = classes.group_data(class_id)
     group_info = divdata["group_info"]
     g_atoms = group_info[group].atomic_group_set
-    print("§g_atoms:", g_atoms)
-
+    #print("§g_atoms:", g_atoms)
     # No-pupil- and no-teacher-groups are not filtered out by <report_data()>,
     # but the course editor shouldn't let them be declared as having reports.
     smap = {}
@@ -71,11 +70,10 @@ def subject_map(
         report_info = report_data(GRADES = True)[0]
     for s in report_info[class_id]:
         ## Filter subjects on group as well as class.
-        # s = (sbj, report_info, GROUP_TAG, tlist)
+        #: s = (sbj, report_info, GROUP_TAG, tlist)
         s_id = s[0].id
         ags = group_info[s[2]].atomic_group_set
-        print("§s:", s[0].SID, s[2], ags, [t.Teacher.TID for t in s[3]])
-
+        #print("§s:", s[0].SID, s[2], ags, [t.Teacher.TID for t in s[3]])
         these_ags = ags & g_atoms
         if these_ags:
             s_info[s_id] = s[0]
@@ -90,8 +88,7 @@ def subject_map(
                     sagmap[ag].update(tset)
                 except KeyError:
                     sagmap[ag] = tset.copy()
-
-    print("§smap:", smap)
+    #print("§smap:", smap)
     return (smap, s_info)
 
 

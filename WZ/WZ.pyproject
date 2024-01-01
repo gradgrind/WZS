@@ -37,6 +37,8 @@
         "program/ui/dialogs/dialog_text_line.py",
         "program/ui/dialogs/dialog_workload.py",
         "program/ui/modules/course_editor.py",
+        "program/ui/modules/grades_manager.py",
+        "program/ui/rotated_table_header.py",
         "program/ui/table_support.py",
         "program/ui/ui_base.py"
     ]
