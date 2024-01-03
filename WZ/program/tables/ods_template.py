@@ -41,7 +41,7 @@ from tables.ods_support import (
     substitute_zip_content,
     XML_Reader,
     XML_writer,
-    ODS_Row_Handler,
+    ODS_Handler,
 )
 
 ### -----
@@ -61,10 +61,10 @@ def process_row(element, rows):
         for i, c in enumerate(cells):
             print("  --", c)
             atr = c["attributes"]
-            if ODS_Row_Handler.cell_text(c) == "$":
+            if ODS_Handler.cell_text(c) == "$":
                 print("§-index = ", i)
 #??? Maybe rather cover the cell?
-                ODS_Row_Handler.set_cell_text(c, None)
+                ODS_Handler.set_cell_text(c, None)
             try:
                 repeat = int(atr["table:number-columns-repeated"])
             except KeyError:
@@ -79,10 +79,9 @@ def process_row(element, rows):
 
 
 def process_xml(xml: str) -> str:
-
-    row_handler = ODS_Row_Handler(row_handler = process_row)
-    handler = XML_Reader(process_element = row_handler.process_row)
-    root = handler.parse_string(xml)
+    handler = ODS_Handler(row_handler = process_row)
+    xml_reader = XML_Reader(process_element = handler.process_element)
+    root = xml_reader.parse_string(xml)
     return '<?xml version="1.0" encoding="UTF-8"?>\n' + XML_writer(root)
 
 

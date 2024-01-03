@@ -193,23 +193,75 @@ def substitute_zip_content(
 
 ####### ODS handling #######
 
-class ODS_Row_Handler:
-    """Process a table row by row.
+class ODS_Handler:
+    """Process a table element by element.
+    The basic version supports operations on rows and columns, note
+    however that columns offer little scope for manipulation.
+    Hiding individual rows and columns is supported.
     """
-    def __init__(self, row_handler = None):
+    def __init__(self,
+        row_handler = None,     # function(row-element) -> bool
+        column_handler = None,  # function(column-element) -> bool
+        hidden_rows = None,     # iterable
+        hidden_columns = None,  # iterable
+    ):
         self.row_handler = row_handler
+        self.column_handler = column_handler
+        if hidden_rows:
+            self.hidden_rows = sorted(hidden_rows, reverse = True)
+        else:
+            self.hidden_rows = []
+        if hidden_columns:
+            self.hidden_columns = sorted(hidden_columns, reverse = True)
+        else:
+            self.hidden_columns = []
         self.rows = []
+        self.col_elements = []
+        self.col_count = 0
+
+    def process_element(self, element):
+        tag = element["name"]
+        if tag == "table:table-row":
+            return self.process_row(element)
+        elif tag == "table:table-column":
+            return self.process_column(element)
+        return True
+
+    def process_column(self, element) -> bool:
+        self.col_elements.append(element)
+        attrs = element["attributes"]
+        try:
+            _n = attrs["table:number-columns-repeated"]
+            n = int(_n)
+        except KeyError:
+            n = 1
+        new_col = self.col_count + n
+        if self.hidden_columns:
+            h = self.hidden_columns[-1]
+            if h < new_col:
+                # Hide a column covered by this element
+                assert h >= self.col_count
+                del self.hidden_columns[-1]
+                if n == 1:
+                    # The simple case ...
+                    attrs["table:visibility"] = "collapse"
+                else:
+                    print("TODO:", n, "... need to split the column element")
+#TODO
+        self.col_count += n
+        return True
 
     def process_row(self, element) -> bool:
         """An element has been parsed to <element>.
         If it is a table row, process it and add it to <self.rows>.
         Only if a true value is returned will the element be retained.
         """
-        if element["name"] == "table:table-row":
-            if self.row_handler:
-                if not self.row_handler(element, self.rows):
-                    return False
-            self.rows.append(element)
+        if len(self.rows) in self.hidden_rows:
+            element["attributes"]["table:visibility"] = "collapse"
+#TODO: Do I need to manage repeating rows, like columns?
+        if self.row_handler and not self.row_handler(element, self.rows):
+            return False
+        self.rows.append(element)
         return True
 
     @staticmethod
@@ -268,16 +320,20 @@ class ODS_Row_Handler:
 if __name__ == "__main__":
     from core.base import DATAPATH
 
-    def dummy_xml(xml: str) -> str:
-        handler = XML_Reader(report_clean = True)
-        root = handler.parse_string(xml)
+    def simple_xml(xml: str) -> str:
+        handler = ODS_Handler(hidden_rows = [5], hidden_columns = [0])
+        xml_handler = XML_Reader(
+            process_element = handler.process_element,
+            report_clean = True
+        )
+        root = xml_handler.parse_string(xml)
         return '<?xml version="1.0" encoding="UTF-8"?>\n' + XML_writer(root)
 
 #TODO: Could add a file-chooser dialog for the source file
     filepath = DATAPATH("GRADES_SEK_I.ods", "TEMPLATES/GRADE_TABLES")
     ods = substitute_zip_content(
         filepath,
-        process = dummy_xml
+        process = simple_xml
     )
     filepath = filepath.rsplit('.', 1)[0] + '_X.ods'
     with open(filepath, 'bw') as fh:
