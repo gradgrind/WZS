@@ -36,9 +36,17 @@ T = Tr("grades.grade_tables")
 
 ### +++++
 
-from core.base import REPORT_ERROR, REPORT_WARNING, REPORT_CRITICAL
-from core.basic_data import CALENDAR, get_database
-from core.classes import format_class_group, GROUP_ALL
+import json
+
+from core.base import (
+    DATAPATH,
+    REPORT_ERROR,
+    REPORT_WARNING,
+    REPORT_CRITICAL
+)
+from core.db_access import db_TableRow
+from core.basic_data import CALENDAR, get_database, CONFIG
+from core.classes import GROUP_ALL, class_group_split_with_id
 import core.students    # needed to initialize STUDENTS table
 from core.list_activities import report_data
 
@@ -49,7 +57,7 @@ NO_GRADE = '/'
 def subject_map(
     class_id: int,
     group: str = GROUP_ALL,
-    report_info = None,         # class-info from <report_data()>
+    report_info = None,         # class-info from <report_data()[0]>
 ) -> tuple[dict, dict]:
     """Return subject information for the given class-group.
     A pair of mappings is returned:
@@ -92,18 +100,16 @@ def subject_map(
     return (smap, s_info)
 
 
-def make_grade_table(
-    template,
-    occasion: str,
+################################################################
+
+def students_grade_info(
     class_id: int,
-    group: str = GROUP_ALL,
-    grades = None
-) -> bool:
-    """Build a basic pupil/subject table for grade input using a
-    template appropriate for the given group.
-    If grades are supplied, fill the table with these.
-    Return true if successfully completed.
-    """
+    group: str,
+    smap: dict[int, dict[int, set[int]]],
+    #:: smap[s_id] = {atomic-group-id: {set of teacher-ids}}
+    s_info: dict[int, db_TableRow],
+    #:: s_info = {subject-id: db_TableRow("SUBJECTS")}
+):
     db = get_database()
     classes = db.table("CLASSES")
     divdata = classes.group_data(class_id)
@@ -112,7 +118,77 @@ def make_grade_table(
         REPORT_CRITICAL(
             "Bug: Null group passed to grade_tables::make_grade_table"
         )
-    class_group = format_class_group(classes[class_id].CLASS, group)
+
+    ## Build a sorted list of the subject objects
+    slist = [s_info[s_id] for s_id in smap]
+    slist.sort(key = lambda x: (x.SORTING, x.NAME))
+
+    ## Build students list
+    students = db.table("STUDENTS")
+    allags = group_info[GROUP_ALL].atomic_group_set
+    if group == GROUP_ALL:
+        plist = students.student_list(class_id)
+    else:
+        plist = students.student_list(class_id, group)
+    p_subjects = {}
+    #:: {student_id: {{subject_id: { teacher_id, ... }}, ... } ... }
+    for pdata in plist:
+        #print("§pdata:", pdata)
+        gfield = pdata.EXTRA["GROUPS"]
+        ags = allags.copy()
+        if gfield:
+            for g in gfield.split():
+                ags.intersection_update(group_info[g].atomic_group_set)
+        #print("§ags:", ags)
+        ## Collect sets of teachers for each subject.
+        subjects = {}     # {s_id: { t_id, ... }}
+        p_subjects[pdata.id] = subjects
+        for sbj in slist:
+            s_id = sbj.id
+            agmap = smap[s_id]
+            tset = set()
+            for ag in ags:
+                ts = agmap.get(ag)
+                if ts:
+                    tset.update(ts)
+            #print("§tset:", s_id, tset)
+            subjects[s_id] = tset
+    return (slist, plist, p_subjects)
+
+
+################################################################
+
+
+def make_grade_table(
+    occasion: str,
+    class_group: str,
+    report_info = None,     # class-info from <report_data()[0]>
+    grades = None
+):# -> Optional[template]?:
+    """Build a basic pupil/subject table for grade input using a
+    template appropriate for the given group.
+    If grades are supplied, fill the table with these.
+    Return the template if successful, else <None>.
+    """
+#    db = get_database()
+#    classes = db.table("CLASSES")
+#    divdata = classes.group_data(class_id)
+#    group_info = divdata["group_info"]
+
+    ## Get template
+    gscale = json.loads(CONFIG.GRADE_SCALE)
+    grade_scale = (gscale.get(class_group) or gscale.get('*')
+    )
+    templates = json.loads(CONFIG.GRADE_TABLE_TEMPLATE)
+    template_file = DATAPATH(templates[grade_scale], "TEMPLATES")
+    template = ClassMatrix(template_file)
+
+    class_id, group = class_group_split_with_id(class_group)
+    if not group:
+        REPORT_CRITICAL(
+            "Bug: Null group passed to grade_tables::make_grade_table"
+        )
+
     info = {
         "+1": CALENDAR.SCHOOL_YEAR, # e.g. "2024"
         "+2": class_group,          # e.g. "12G.R"
@@ -120,7 +196,6 @@ def make_grade_table(
     }
     print("§info:", info)
     template.setInfo(info)
-
 
     for min_width, val in enumerate(template.rows[0]):
         if val and min_width > 10:
@@ -135,16 +210,16 @@ def make_grade_table(
     rowix: list[int] = template.header_rowindex  # indexes of header rows
     if len(rowix) != 2:
         REPORT_ERROR(T("TEMPLATE_HEADER_WRONG", path = template.template))
-        return False
+        return None
     sidcol: list[tuple[str, int]] = []
     sid: str
 
-    smap, s_info = subject_map(class_id, group)
-#TODO: pass in report_info
-
-    ## Build a sorted list of the subject objects
-    slist = [s_info[s_id] for s_id in smap]
-    slist.sort(key = lambda x: (x.SORTING, x.NAME))
+    ## Get the subject data for this group
+    smap, s_info = subject_map(class_id, group, report_info)
+    ## ... and the student data
+    slist, plist, p_subjects = students_grade_info(
+        class_id, group, smap, s_info
+    )
     #for s in slist:
     #    print("  --", s)
     for sbj in slist:
@@ -163,31 +238,19 @@ def make_grade_table(
     template.delEndCols(col + 1)
 
     ## Add students
-    students = db.table("STUDENTS")
-    allags = group_info[GROUP_ALL].atomic_group_set
-    if group == GROUP_ALL:
-        plist = students.student_list(class_id)
-    else:
-        plist = students.student_list(class_id, group)
 #TODO
     for pdata in plist:
+        #print("§pdata:", pdata)
         row = template.nextrow()
 #TODO: id instead of PID?
         template.write(row, 0, pdata.PID)
-        pname = students.get_name(pdata)
+#        pname = students.get_name(pdata)
+        pname = pdata._table.get_name(pdata)
         template.write(row, 1, pname)
 #TODO: Is there a better way of discovering whether (and where) a "level"
 # should be written?
         if template.rows[row][3] == "X":
             template.write(row, 3, pdata.EXTRA.get("LEVEL") or "")
-
-        #print("§pdata:", pdata)
-        gfield = pdata.EXTRA["GROUPS"]
-        ags = allags.copy()
-        if gfield:
-            for g in gfield.split():
-                ags.intersection_update(group_info[g].atomic_group_set)
-        print("§ags:", ags)
 
         ## Write NO_GRADE where no teachers are available (based on group).
         ## Otherwise write grades, if supplied.
@@ -198,20 +261,15 @@ def make_grade_table(
                 pgrades = {}
         else:
             pgrades = {}
-        # smap[s_id] = {atomic-group-id: {set of teacher-ids}}
+        subjects = p_subjects[pdata.id]
         for s_id, col in sidcol:
-            agmap = smap[s_id]
-            tset = set()
-            for ag in ags:
-                ts = agmap.get(ag)
-                if ts:
-                    tset.update(ts)
-            #print("§tset:", tset)
             gr = pgrades.get(s_id)
-            if tset:
+            if subjects[s_id]:
+                # There is a set of teachers
                 if gr:
                     template.write(row, col, gr)
             else:
+                # No teachers
                 if gr and gr != NO_GRADE:
                     REPORT_WARNING(T("UNEXPECTED_GRADE",
                         grade = gr,
@@ -227,13 +285,13 @@ def make_grade_table(
     # Hide "control" data
     template.hideCol(0)
     template.hideHeader0()
-    return True
+    return template
 
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
 
 if __name__ == "__main__":
-    from core.base import DATAPATH
+    #from core.base import DATAPATH
 
     '''
     configfile = DATAPATH("CONFINI.ini", "TEMPLATES")
@@ -261,7 +319,6 @@ if __name__ == "__main__":
     print(config["DEFAULT"]["MULTILINE"])
     '''
 
-    from core.basic_data import get_database
     from tables.matrix import ClassMatrix
 
     db = get_database()
@@ -281,20 +338,15 @@ if __name__ == "__main__":
 
 #    quit(2)
 
-    filepath = DATAPATH("NOTEN_SEK_I", "TEMPLATES")
-    template = ClassMatrix(filepath)
-
-    c = 23
-    g = GROUP_ALL
-#    g = "R"
+#    filepath = DATAPATH("NOTEN_SEK_I", "TEMPLATES")
+#    template = ClassMatrix(filepath)
 
     grades = {434: {6: "1+", 12: "4"}}
 
-    if make_grade_table(
-        template,
+    template = make_grade_table(
         occasion = "1. Halbjahr",
-        class_id = c,
-        group = g,
+        class_group = "12G.G",
         grades = grades,
-    ):
-        print(" ->", template.save(filepath + "__test1"))
+    )
+    if template:
+        print(" ->", template.save(template.template + "__test1"))

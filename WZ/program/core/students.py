@@ -1,11 +1,11 @@
 """
-core/students.py - last updated 2023-12-28
+core/students.py - last updated 2024-01-01
 
 Manage students data.
 
 
 =+LICENCE=================================
-Copyright 2023 Michael Towers
+Copyright 2024 Michael Towers
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -97,7 +97,7 @@ class Students(db_Table):
         return self.get_name(self[id])
 
     def student_list(self, class_id: int, group: str = None):
-        """Return an ordered list of subjects from the given class.
+        """Return an ordered list of students from the given class.
         If a group is given, include only those students who are in the group.
         """
         slist = []

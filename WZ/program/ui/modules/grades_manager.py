@@ -128,6 +128,9 @@ class ManageGradesPage(QObject):
         print("\n§§smap:", smap)
         print("\n§§s_info:", s_info)
 
+
+
+
     ### slots ###
 
     @Slot(int)
