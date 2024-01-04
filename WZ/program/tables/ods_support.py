@@ -201,16 +201,11 @@ def substitute_zip_content(
 #TODO: It might not be too difficult to reinstate repeated rows and columns
 # after any processing has been done? Is it worth it, though?
 
-#TODO: sheet protection
-'''
-#Changed, at the start of the "table:table" node:
-<table:table table:name="Sheet" table:style-name="ta1" table:protected="true">
-#Added:
-<loext:table-protection loext:select-protected-cells="true" loext:select-unprotected-cells="true"/>
-# Was there previously:
-<office:forms form:automatic-focus="false" form:apply-design-mode="false"/>
-<table:table-column table:style-name="co1" table:default-cell-style-name="ce7"/>
-'''
+#TODO, sheet protection: It is implemented (without password), but I am
+# not sure how useful it is. Firstly, the template could be password
+# protected, so the code here might be superfluous. Secondly, not all
+# editors respect the protection (ONLYOFFICE accepts protection, but
+# seems unbothered by a password).
 
 
 class ODS_Handler:
@@ -286,11 +281,6 @@ class ODS_Handler:
                     except:
                         l = 1
                     ll.append((v, l))
-                try:
-                    r = int(c["attributes"][self.REPEAT_ROW])
-                except KeyError:
-                    r = 1
-
                 # Count row length, not including empty trailing cells
                 length = 0
                 j = len(ll)
@@ -301,16 +291,14 @@ class ODS_Handler:
                         length += l
                 if length > max_length:
                     max_length = length
-                rows.append((i, r, length, ll))
-
-                print("  ???", i, r, length, ll)
-
+                ll
+                rows.append((length, i))
+                #print("§row:", length, i)
         # Remove trailing empty rows
         while len(rows) > 1:
-            i, r, length, ll = rows[-1]
+            length, i = rows[-1]
             if length:
                 break
-            #print(f"DEL ROW {i} x {r}")
             del rows[-1]
             del table_children[i]
         #print(f"MAX LENGTH = {max_length}")
@@ -333,17 +321,20 @@ class ODS_Handler:
                     del attrs[self.REPEAT_COL]
                 except KeyError:
                     rpt = 1
-                new_table.append(el)
+                hc = -1 # note hidden column, if any
                 if _col in self.hidden_columns:
-                    el["attributes"][self.VISIBLE] = self.HIDDEN
+                    hc = len(new_table)
+                new_table.append(el)
                 _col += 1
                 while rpt > 1 and _col < max_length:
                     rpt -= 1
                     el = deepcopy(el)
-                    new_table.append(el)
                     if _col in self.hidden_columns:
-                        el["attributes"][self.VISIBLE] = self.HIDDEN
+                        hc = len(new_table)
+                    new_table.append(el)
                     _col += 1
+                if hc >= 0:
+                    new_table[hc]["attributes"][self.VISIBLE] = self.HIDDEN
 
             elif etype == self.TABLE_ROW:
                 # Rebuild the row, trimming excess columns and
@@ -351,6 +342,7 @@ class ODS_Handler:
                 # Repeated rows are also expanded.
                 try:
                     row_rpt = int(attrs[self.REPEAT_ROW])
+                    del attrs[self.REPEAT_ROW]
                 except KeyError:
                     row_rpt = 1
                 cells = el["children"]
@@ -393,9 +385,11 @@ class ODS_Handler:
         element["children"] = new_table
         if self.table_handler:
             self.table_handler(new_table)
+        # Add protection, if requested
         if self.protected:
             element["attributes"].update(self.PROTECT)
-            new_table.insert(0, self.PROTECT_EXTRA)
+            if new_table[0]["name"] != self.PROTECT_EXTRA["name"]:
+                new_table.insert(0, self.PROTECT_EXTRA)
         return [element]
 
     @staticmethod
@@ -487,7 +481,7 @@ if __name__ == "__main__":
             table_handler = remove_column,
             hidden_rows = [5],
             hidden_columns = [0],
-            protected = True,
+#            protected = True,
         )
         xml_handler = XML_Reader(
             process_element = handler.process_element,
@@ -497,7 +491,8 @@ if __name__ == "__main__":
         return '<?xml version="1.0" encoding="UTF-8"?>\n' + XML_writer(root)
 
 #TODO: Could add a file-chooser dialog for the source file
-    filepath = DATAPATH("GRADES_SEK_I.ods", "TEMPLATES/GRADE_TABLES")
+    #filepath = DATAPATH("GRADES_SEK_I.ods", "TEMPLATES/GRADE_TABLES")
+    filepath = DATAPATH("GRADES_SEK_II.ods", "TEMPLATES/GRADE_TABLES")
     #filepath = DATAPATH("test2.ods", "TEMPLATES/GRADE_TABLES")
     ods = substitute_zip_content(
         filepath,
