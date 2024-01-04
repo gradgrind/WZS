@@ -16,6 +16,7 @@
         "program/core/teachers.py",
         "program/core/time_slots.py",
         "program/grades/grade_tables.py",
+        "program/grades/grade_tables_2.py",
         "program/grades/grades_base.py",
         "program/grades/make_grade_reports.py",
         "program/minion2.py",

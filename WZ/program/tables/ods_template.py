@@ -46,6 +46,7 @@ from tables.ods_support import (
 
 ### -----
 
+#TODO: Strip excess rows and columns ...
 
 # Process table rows
 
