@@ -201,6 +201,18 @@ def substitute_zip_content(
 #TODO: It might not be too difficult to reinstate repeated rows and columns
 # after any processing has been done? Is it worth it, though?
 
+#TODO: sheet protection
+'''
+#Changed, at the start of the "table:table" node:
+<table:table table:name="Sheet" table:style-name="ta1" table:protected="true">
+#Added:
+<loext:table-protection loext:select-protected-cells="true" loext:select-unprotected-cells="true"/>
+# Was there previously:
+<office:forms form:automatic-focus="false" form:apply-design-mode="false"/>
+<table:table-column table:style-name="co1" table:default-cell-style-name="ce7"/>
+'''
+
+
 class ODS_Handler:
     """Process a table element by element.
     The table rows and columns are "expanded" to avoid difficulties with
@@ -221,12 +233,22 @@ class ODS_Handler:
     VISIBLE = "table:visibility"
     HIDDEN = "collapse"
     VALUE_TYPE = "office:value-type"
+    PROTECT = {"table:protected": "true"}
+    PROTECT_EXTRA = {
+        "name": "loext:table-protection",
+        "attributes": {
+            "loext:select-protected-cells": "true",
+            "loext:select-unprotected-cells": "true"
+        },
+        "children": []
+    }
 
     def __init__(self,
         row_handler = None,     # function(row-element) -> bool
         table_handler = None,   # function(table-elements: list)
         hidden_rows = None,     # iterable
         hidden_columns = None,  # iterable
+        protected = False,
     ):
         self.row_handler = row_handler
         self.table_handler = table_handler
@@ -238,6 +260,7 @@ class ODS_Handler:
             self.hidden_columns = hidden_columns
         else:
             self.hidden_columns = []
+        self.protected = protected
 
     def process_element(self, element) -> list[dict]:
         """This processes the given element and returns a list of
@@ -370,6 +393,9 @@ class ODS_Handler:
         element["children"] = new_table
         if self.table_handler:
             self.table_handler(new_table)
+        if self.protected:
+            element["attributes"].update(self.PROTECT)
+            new_table.insert(0, self.PROTECT_EXTRA)
         return [element]
 
     @staticmethod
@@ -460,7 +486,8 @@ if __name__ == "__main__":
         handler = ODS_Handler(
             table_handler = remove_column,
             hidden_rows = [5],
-            hidden_columns = [0]
+            hidden_columns = [0],
+            protected = True,
         )
         xml_handler = XML_Reader(
             process_element = handler.process_element,
