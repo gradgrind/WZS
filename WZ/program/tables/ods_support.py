@@ -201,22 +201,21 @@ def substitute_zip_content(
 #TODO: It might not be too difficult to reinstate repeated rows and columns
 # after any processing has been done? Is it worth it, though?
 
-#TODO: (trailing) column deletion
-
 class ODS_Handler:
     """Process a table element by element.
     The table rows and columns are "expanded" to avoid difficulties with
     "repeated" elements in the XML. Also, trailing empty rows and columns
-    are removed.
-    Always leave one row, each row should have at least one cell.
+    are removed, but always leave one row, and each row should have at
+    least one cell.
 
-#TODO: Only trailing column (and row) deletion supported?
     Deletion and hiding of individual rows and columns is supported.
     """
     ## ODF keys
     TABLE = "table:table"
     TABLE_ROW = "table:table-row"
     TABLE_COL = "table:table-column"
+    TABLE_CELL = "table:table-cell"
+    COVERED_TABLE_CELL = "table:covered-table-cell"
     REPEAT_ROW = "table:number-rows-repeated"
     REPEAT_COL = "table:number-columns-repeated"
     VISIBLE = "table:visibility"
@@ -225,10 +224,12 @@ class ODS_Handler:
 
     def __init__(self,
         row_handler = None,     # function(row-element) -> bool
+        table_handler = None,   # function(table-elements: list)
         hidden_rows = None,     # iterable
         hidden_columns = None,  # iterable
     ):
         self.row_handler = row_handler
+        self.table_handler = table_handler
         if hidden_rows:
             self.hidden_rows = hidden_rows
         else:
@@ -249,14 +250,12 @@ class ODS_Handler:
         max_length = 0
         table_children = element["children"]
         for i, c in enumerate(table_children):
-            if c["name"] == "table:table-row":
+            if c["name"] == self.TABLE_ROW:
                 ll = []
                 for cc in c["children"]:
                     # Assume all children are cells or covered cells
                     cn = cc["name"]
-                    assert cn in (
-                        "table:table-cell", "table:covered-table-cell"
-                    )
+                    assert cn in (self.TABLE_CELL, self.COVERED_TABLE_CELL)
                     ccattrs = cc["attributes"]
                     v = self.VALUE_TYPE in ccattrs
                     try:
@@ -304,7 +303,7 @@ class ODS_Handler:
             if etype == self.TABLE_COL:
                 if _col >= max_length:
                     # Lose this column descriptor
-                    REPORT_WARNING(f"Debug, dropping column: {el}")
+                    print(f"*** Debug, dropping column: {el}")
                     continue
                 try:
                     rpt = int(attrs[self.REPEAT_COL])
@@ -369,6 +368,8 @@ class ODS_Handler:
             else:
                 new_table.append(el)
         element["children"] = new_table
+        if self.table_handler:
+            self.table_handler(new_table)
         return [element]
 
     @staticmethod
@@ -421,14 +422,46 @@ class ODS_Handler:
             except KeyError:
                 pass
 
+    @classmethod
+    def delete_column(cls, elements: list[dict], col: int):
+        """Remove the given column (0-indexed).
+        If the value is negative, delete all columns starting at <- col>.
+        """
+        if col < 0:
+            col0 = -col
+        else:
+            col0 = col
+        c = 0
+        for i, element in enumerate(elements):
+            if element["name"] == cls.TABLE_COL:
+                if c >= col0:
+                    del elements[i]
+                    if col >= 0:
+                        break
+                c += 1
+        for element in elements:
+            if element["name"] == cls.TABLE_ROW:
+                cells = element["children"]
+                if col < 0:
+                    del cells[col0:]
+                else:
+                    del cells[col0]
+
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
 
 if __name__ == "__main__":
     from core.base import DATAPATH
 
+    def remove_column(elements):
+        ODS_Handler.delete_column(elements, -22)
+
     def simple_xml(xml: str) -> str:
-        handler = ODS_Handler(hidden_rows = [5], hidden_columns = [0])
+        handler = ODS_Handler(
+            table_handler = remove_column,
+            hidden_rows = [5],
+            hidden_columns = [0]
+        )
         xml_handler = XML_Reader(
             process_element = handler.process_element,
             report_clean = True
