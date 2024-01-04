@@ -1,5 +1,5 @@
 """
-tables/ods_support.py - last updated 2024-01-03
+tables/ods_support.py - last updated 2024-01-04
 
 Support reading and simple editing of ods-tables (for LibreOffice).
 
@@ -37,6 +37,7 @@ if __name__ == "__main__":
 ### +++++
 
 from typing import Optional
+from copy import deepcopy
 
 import zipfile as zf
 import io
@@ -54,7 +55,8 @@ trtable = str.maketrans({
 })
 #+
 def xmlesc(txt):
-    """Use for text and attribute values if building xml "by hand"."""
+    """Use for text and attribute values if building xml "by hand".
+    """
     return txt.translate(trtable)
 
 ### -----
@@ -65,8 +67,8 @@ class XML_Reader(ContentHandler):
     def __init__(self, process_element = None, report_clean = False):
         """Set up an XML reader.
         If a function is passed to <process_element>, each completed
-        element will be processed by it. This function must return a
-        true value in order for the element to be retained.
+        element will be processed by it. This function returns a list
+        of elements which are to substitute the original element.
 
         If <report_clean> is true, empty elements will be
         reported. This is for testing purposes.
@@ -109,7 +111,10 @@ class XML_Reader(ContentHandler):
         if len(self.element_stack) > 1:
             child = self.element_stack.pop()
             if self.process_element:
-                self.process_element(child)
+                children = self.process_element(child)
+                if children:
+                    self.element_stack[-1]["children"] += children
+                return
             self.element_stack[-1]["children"].append(child)
 
     def characters(self, content: str):
@@ -193,76 +198,178 @@ def substitute_zip_content(
 
 ####### ODS handling #######
 
+#TODO: It might not be too difficult to reinstate repeated rows and columns
+# after any processing has been done? Is it worth it, though?
+
+#TODO: (trailing) column deletion
+
 class ODS_Handler:
     """Process a table element by element.
-    The basic version supports operations on rows and columns, note
-    however that columns offer little scope for manipulation.
-    Hiding individual rows and columns is supported.
+    The table rows and columns are "expanded" to avoid difficulties with
+    "repeated" elements in the XML. Also, trailing empty rows and columns
+    are removed.
+    Always leave one row, each row should have at least one cell.
+
+#TODO: Only trailing column (and row) deletion supported?
+    Deletion and hiding of individual rows and columns is supported.
     """
+    ## ODF keys
+    TABLE = "table:table"
+    TABLE_ROW = "table:table-row"
+    TABLE_COL = "table:table-column"
+    REPEAT_ROW = "table:number-rows-repeated"
+    REPEAT_COL = "table:number-columns-repeated"
+    VISIBLE = "table:visibility"
+    HIDDEN = "collapse"
+    VALUE_TYPE = "office:value-type"
+
     def __init__(self,
         row_handler = None,     # function(row-element) -> bool
-        column_handler = None,  # function(column-element) -> bool
         hidden_rows = None,     # iterable
         hidden_columns = None,  # iterable
     ):
         self.row_handler = row_handler
-        self.column_handler = column_handler
         if hidden_rows:
-            self.hidden_rows = sorted(hidden_rows, reverse = True)
+            self.hidden_rows = hidden_rows
         else:
             self.hidden_rows = []
         if hidden_columns:
-            self.hidden_columns = sorted(hidden_columns, reverse = True)
+            self.hidden_columns = hidden_columns
         else:
             self.hidden_columns = []
-        self.rows = []
-        self.col_elements = []
-        self.col_count = 0
 
-    def process_element(self, element):
-        tag = element["name"]
-        if tag == "table:table-row":
-            return self.process_row(element)
-        elif tag == "table:table-column":
-            return self.process_column(element)
-        return True
-
-    def process_column(self, element) -> bool:
-        self.col_elements.append(element)
-        attrs = element["attributes"]
-        try:
-            _n = attrs["table:number-columns-repeated"]
-            n = int(_n)
-        except KeyError:
-            n = 1
-        new_col = self.col_count + n
-        if self.hidden_columns:
-            h = self.hidden_columns[-1]
-            if h < new_col:
-                # Hide a column covered by this element
-                assert h >= self.col_count
-                del self.hidden_columns[-1]
-                if n == 1:
-                    # The simple case ...
-                    attrs["table:visibility"] = "collapse"
-                else:
-                    print("TODO:", n, "... need to split the column element")
-#TODO
-        self.col_count += n
-        return True
-
-    def process_row(self, element) -> bool:
-        """An element has been parsed to <element>.
-        If it is a table row, process it and add it to <self.rows>.
-        Only if a true value is returned will the element be retained.
+    def process_element(self, element) -> list[dict]:
+        """This processes the given element and returns a list of
+        elements to be added instead.
         """
-        if len(self.rows) in self.hidden_rows:
-            element["attributes"]["table:visibility"] = "collapse"
-#TODO: Do I need to manage repeating rows, like columns?
-        if self.row_handler and not self.row_handler(element, self.rows):
-            return False
-        self.rows.append(element)
-        return True
+        if element["name"] != self.TABLE:
+            return [element]
+        ## First pass, collect information about extents
+        rows = []
+        max_length = 0
+        table_children = element["children"]
+        for i, c in enumerate(table_children):
+            if c["name"] == "table:table-row":
+                ll = []
+                for cc in c["children"]:
+                    # Assume all children are cells or covered cells
+                    cn = cc["name"]
+                    assert cn in (
+                        "table:table-cell", "table:covered-table-cell"
+                    )
+                    ccattrs = cc["attributes"]
+                    v = self.VALUE_TYPE in ccattrs
+                    try:
+                        l = int(ccattrs[self.REPEAT_COL])
+                    except:
+                        l = 1
+                    ll.append((v, l))
+                try:
+                    r = int(c["attributes"][self.REPEAT_ROW])
+                except KeyError:
+                    r = 1
+
+                # Count row length, not including empty trailing cells
+                length = 0
+                j = len(ll)
+                while j > 0:
+                    j -= 1
+                    v, l = ll[j]
+                    if v or length:
+                        length += l
+                if length > max_length:
+                    max_length = length
+                rows.append((i, r, length, ll))
+
+                print("  ???", i, r, length, ll)
+
+        # Remove trailing empty rows
+        while len(rows) > 1:
+            i, r, length, ll = rows[-1]
+            if length:
+                break
+            #print(f"DEL ROW {i} x {r}")
+            del rows[-1]
+            del table_children[i]
+        #print(f"MAX LENGTH = {max_length}")
+
+        ## Second pass, rebuild table
+        new_table = []
+        row = 0
+        _col = 0
+        for el in table_children:
+            etype = el["name"]
+            attrs = el["attributes"]
+
+            if etype == self.TABLE_COL:
+                if _col >= max_length:
+                    # Lose this column descriptor
+                    REPORT_WARNING(f"Debug, dropping column: {el}")
+                    continue
+                try:
+                    rpt = int(attrs[self.REPEAT_COL])
+                    del attrs[self.REPEAT_COL]
+                except KeyError:
+                    rpt = 1
+                new_table.append(el)
+                if _col in self.hidden_columns:
+                    el["attributes"][self.VISIBLE] = self.HIDDEN
+                _col += 1
+                while rpt > 1 and _col < max_length:
+                    rpt -= 1
+                    el = deepcopy(el)
+                    new_table.append(el)
+                    if _col in self.hidden_columns:
+                        el["attributes"][self.VISIBLE] = self.HIDDEN
+                    _col += 1
+
+            elif etype == self.TABLE_ROW:
+                # Rebuild the row, trimming excess columns and
+                # expanding repeated cells.
+                # Repeated rows are also expanded.
+                try:
+                    row_rpt = int(attrs[self.REPEAT_ROW])
+                except KeyError:
+                    row_rpt = 1
+                cells = el["children"]
+                new_row = []
+                el["children"] = new_row
+                subrows = [el]
+                col = 0
+                for cell in cells:
+                    if col >= max_length:
+                        # Lose this and any following cells
+                        break
+                    c_attrs = cell["attributes"]
+                    try:
+                        rpt = int(c_attrs[self.REPEAT_COL])
+                        del c_attrs[self.REPEAT_COL]
+                    except KeyError:
+                        rpt = 1
+                    new_row.append(cell)
+                    col += 1
+                    while rpt > 1 and col < max_length:
+                        rpt -= 1
+                        new_row.append(deepcopy(cell))
+                        col += 1
+                # Now handle repeated rows
+                while row_rpt > 1:
+                    row_rpt -= 1
+                    subrows.append(deepcopy(el))
+                # Pass the rows through the external handler, if any
+                for el in subrows:
+                    if row in self.hidden_rows:
+                        el["attributes"][self.VISIBLE] = self.HIDDEN
+                    row += 1
+                    if self.row_handler:
+                        if not self.row_handler(el):
+                            continue
+                    new_table.append(el)
+
+            else:
+                new_table.append(el)
+        element["children"] = new_table
+        return [element]
 
     @staticmethod
     def cell_text(cell_node) -> str:
@@ -331,6 +438,7 @@ if __name__ == "__main__":
 
 #TODO: Could add a file-chooser dialog for the source file
     filepath = DATAPATH("GRADES_SEK_I.ods", "TEMPLATES/GRADE_TABLES")
+    #filepath = DATAPATH("test2.ods", "TEMPLATES/GRADE_TABLES")
     ods = substitute_zip_content(
         filepath,
         process = simple_xml
