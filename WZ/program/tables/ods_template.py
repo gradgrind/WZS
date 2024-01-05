@@ -1,7 +1,7 @@
 """
-tables/ods_template.py - last updated 2024-01-03
+tables/ods_template.py - last updated 2024-01-05
 
-Use ods-tables (for LibreOffice) as templates.
+Use ods-tables (ODF / LibreOffice) as templates.
 Can be used to produce grade tables.
 
 
@@ -50,54 +50,72 @@ from tables.ods_support import (
 
 # Process table rows
 
-row_count = 0
-def process_row(element, rows):
+class ODS_GradeTable:
+    def __init__(self):#, filepath: str):
+        self.row_count = 0
+        self.min_cols = 0
+        self.hidden_rows = []
+        self.hidden_columns = []
 
-    print("TODO")
-    return True
-
-    if len(rows) == 0:
-        cells = element["children"]
-        col = 0
-        for i, c in enumerate(cells):
-            print("  --", c)
-            atr = c["attributes"]
-            if ODS_Handler.cell_text(c) == "$":
-                print("§-index = ", i)
+    def process_row(self, element):
+        result = True    # retain row
+        if self.row_count == 0:
+            cells = element["children"]
+            for i, c in enumerate(cells):
+                print("  --", c)
+                #atr = c["attributes"]
+                if ODS_Handler.cell_text(c) == "$":
+                    print("$-index = ", i)
+                    self.min_cols = i + 1
 #??? Maybe rather cover the cell?
-                ODS_Handler.set_cell_text(c, None)
-            try:
-                repeat = int(atr["table:number-columns-repeated"])
-            except KeyError:
-                repeat = 1
-            col += repeat
-            print("%%%", repeat, col)
+                    ODS_Handler.set_cell_text(c, None)
 
 #        if row_count < 12:
 #            print(f"\n§ROW {row_count:03d}:")
 #            for c in element["children"]:
 #                print("  --", c)
 
+        elif self.row_count > 20:
+            result = False
+        self.row_count += 1
+        return result
 
-def process_xml(xml: str) -> str:
-    handler = ODS_Handler(row_handler = process_row)
-    xml_reader = XML_Reader(process_element = handler.process_element)
-    root = xml_reader.parse_string(xml)
-    return '<?xml version="1.0" encoding="UTF-8"?>\n' + XML_writer(root)
+    def process_xml(self, xml: str) -> str:
+        handler = ODS_Handler(
+            table_handler = self.process_table,
+            row_handler = self.process_row,
+            hidden_rows = self.hidden_rows,         # e.g. [5]
+            hidden_columns = self.hidden_columns,   # presumably [0]
+            protected = True,
+        )
+        xml_reader = XML_Reader(process_element = handler.process_element)
+        root = xml_reader.parse_string(xml)
+        return '<?xml version="1.0" encoding="UTF-8"?>\n' + XML_writer(root)
+
+    def process_table(self, elements):
+#TODO
+        ODS_Handler.delete_column(elements, -22)
+
+
+
+    def handle_file(self):
+#TODO: Could add a file-chooser dialog for the source file
+        filepath = DATAPATH("GRADES_SEK_I.ods", "TEMPLATES/GRADE_TABLES")
+        #filepath = DATAPATH("GRADES_SEK_II.ods", "TEMPLATES/GRADE_TABLES")
+        #filepath = DATAPATH("test2.ods", "TEMPLATES/GRADE_TABLES")
+        ods = substitute_zip_content(
+            filepath,
+            process = self.process_xml
+        )
+        filepath = filepath.rsplit('.', 1)[0] + '_X.ods'
+        with open(filepath, 'bw') as fh:
+            fh.write(ods)
+        print(" -->", filepath)
 
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
 
 if __name__ == "__main__":
     from core.base import DATAPATH
-
-#TODO: Could add a file-chooser dialog for the source file
-    filepath = DATAPATH("GRADES_SEK_I.ods", "TEMPLATES/GRADE_TABLES")
-    ods = substitute_zip_content(
-        filepath,
-        process = process_xml
-    )
-    filepath = filepath.rsplit('.', 1)[0] + '_X.ods'
-    with open(filepath, 'bw') as fh:
-        fh.write(ods)
-    print(" -->", filepath)
+    gt = ODS_GradeTable()
+    gt.handle_file()
