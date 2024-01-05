@@ -1,15 +1,17 @@
 """
 core/list_activities.py
 
-Last updated:  2023-12-30
+Last updated:  2024-01-05
 
 Present information on activities for teachers and classes/groups.
 The information is formatted in pdf documents using the reportlab
 library.
+
+#TODO???
 Also (unformatted) xlsx spreadsheets can be exported.
 
 =+LICENCE=============================
-Copyright 2023 Michael Towers
+Copyright 2024 Michael Towers
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -41,7 +43,7 @@ T = Tr("core.list_activities")
 
 ### +++++
 
-from typing import NamedTuple
+from typing import NamedTuple, Optional
 
 #import lib.pylightxl as xl
 from fpdf import FPDF
@@ -53,6 +55,7 @@ from core.base import (
     REPORT_ERROR,
     #DATAPATH,
 )
+from core.db_access import db_TableRow
 from core.basic_data import get_database, print_fix, REPORT_SPLITTER
 from core.classes import GROUP_ALL, format_class_group
 from core.rooms import get_db_rooms, print_room_choice
@@ -817,7 +820,16 @@ def make_class_table_pdf(with_comments = True):
     return pdf
 
 
-def report_data(GRADES = False):
+def report_data(GRADES = False) -> tuple[
+    # class-based report info
+    dict[str, list[
+        tuple[db_TableRow, Optional[tuple[str, str]], str, list[db_TableRow]]
+    ]],
+    # teacher-base report info
+    dict[str, list[
+        tuple[db_TableRow, Optional[tuple[str, str]], list[db_TableRow]]
+    ]]
+]:
     """Return lists of course reports for classes and teachers.
     If <GRADES> is true, the lists are based on the GRADES flag,
     otherwise on the REPORT field.
@@ -838,7 +850,7 @@ def report_data(GRADES = False):
         ]
         if GRADES:
             if course.GRADES:
-                report_info = None
+                report_title_signed = None
             else:
                 continue
         elif course.REPORT:
@@ -847,7 +859,7 @@ def report_data(GRADES = False):
             if not t1:
                 t1 = subject_print_name(course)
             t2 = teachers_print_names(tlist, t2)
-            report_info = (t1, t2)
+            report_title_signed = (t1, t2)
         else:
             continue
         cglist = cgtable.get_course_groups(ci)
@@ -869,8 +881,7 @@ def report_data(GRADES = False):
             except KeyError:
                 c_list =  []
                 c_reports[id] = c_list
-            c_list.append((sbj, report_info, g.GROUP_TAG, tlist))
-
+            c_list.append((sbj, report_title_signed, g.GROUP_TAG, tlist))
         for t in tlist:
             id = t.Teacher.id
             try:
@@ -878,7 +889,7 @@ def report_data(GRADES = False):
             except KeyError:
                 t_list =  []
                 t_reports[id] = t_list
-            t_list.append((sbj, report_info, cglist))
+            t_list.append((sbj, report_title_signed, cglist))
 
     return c_reports, t_reports
 

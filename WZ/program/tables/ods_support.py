@@ -1,5 +1,5 @@
 """
-tables/ods_support.py - last updated 2024-01-04
+tables/ods_support.py - last updated 2024-01-05
 
 Support reading and simple editing of ods-tables (for LibreOffice).
 
@@ -216,6 +216,7 @@ class ODS_Handler:
     least one cell.
 
     Deletion and hiding of individual rows and columns is supported.
+    These must be specified by the table handler.
     """
     ## ODF keys
     TABLE = "table:table"
@@ -228,6 +229,9 @@ class ODS_Handler:
     VISIBLE = "table:visibility"
     HIDDEN = "collapse"
     VALUE_TYPE = "office:value-type"
+    EXT_VALUE_TYPE = "calcext:value-type"
+    STRING_TYPE = "string"
+    TEXT = "text:p"
     PROTECT = {"table:protected": "true"}
     PROTECT_EXTRA = {
         "name": "loext:table-protection",
@@ -240,22 +244,10 @@ class ODS_Handler:
 
     def __init__(self,
         row_handler = None,     # function(row-element) -> bool
-        table_handler = None,   # function(table-elements: list)
-        hidden_rows = None,     # iterable
-        hidden_columns = None,  # iterable
-        protected = False,
+        table_handler = None,   # function(table-elements: list) -> dict
     ):
         self.row_handler = row_handler
         self.table_handler = table_handler
-        if hidden_rows:
-            self.hidden_rows = hidden_rows
-        else:
-            self.hidden_rows = []
-        if hidden_columns:
-            self.hidden_columns = hidden_columns
-        else:
-            self.hidden_columns = []
-        self.protected = protected
 
     def process_element(self, element) -> list[dict]:
         """This processes the given element and returns a list of
@@ -305,7 +297,6 @@ class ODS_Handler:
 
         ## Second pass, rebuild table
         new_table = []
-        row = 0
         _col = 0
         for el in table_children:
             etype = el["name"]
@@ -321,20 +312,13 @@ class ODS_Handler:
                     del attrs[self.REPEAT_COL]
                 except KeyError:
                     rpt = 1
-                hc = -1 # note hidden column, if any
-                if _col in self.hidden_columns:
-                    hc = len(new_table)
                 new_table.append(el)
                 _col += 1
                 while rpt > 1 and _col < max_length:
                     rpt -= 1
                     el = deepcopy(el)
-                    if _col in self.hidden_columns:
-                        hc = len(new_table)
                     new_table.append(el)
                     _col += 1
-                if hc >= 0:
-                    new_table[hc]["attributes"][self.VISIBLE] = self.HIDDEN
 
             elif etype == self.TABLE_ROW:
                 # Rebuild the row, trimming excess columns and
@@ -372,9 +356,6 @@ class ODS_Handler:
                     subrows.append(deepcopy(el))
                 # Pass the rows through the external handler, if any
                 for el in subrows:
-                    if row in self.hidden_rows:
-                        el["attributes"][self.VISIBLE] = self.HIDDEN
-                    row += 1
                     if self.row_handler:
                         if not self.row_handler(el):
                             continue
@@ -384,26 +365,41 @@ class ODS_Handler:
                 new_table.append(el)
         element["children"] = new_table
         if self.table_handler:
-            self.table_handler(new_table)
-        # Add protection, if requested
-        if self.protected:
-            element["attributes"].update(self.PROTECT)
-            if new_table[0]["name"] != self.PROTECT_EXTRA["name"]:
-                new_table.insert(0, self.PROTECT_EXTRA)
+            info = self.table_handler(new_table)
+            hidden_rows = info.get("hidden_rows") or []
+            hidden_columns = info.get("hidden_columns") or []
+            # Hide rows and columns
+            col, row = 0, 0
+            if hidden_columns or hidden_rows:
+                for el in new_table:
+                    etype = el["name"]
+                    if etype == self.TABLE_COL and hidden_columns:
+                        if col in hidden_columns:
+                            el["attributes"][self.VISIBLE] = self.HIDDEN
+                        col += 1
+                    elif etype == self.TABLE_ROW and hidden_rows:
+                        if row in hidden_rows:
+                            el["attributes"][self.VISIBLE] = self.HIDDEN
+                        row += 1
+            # Add protection, if requested
+            if info.get("protected"):
+                element["attributes"].update(self.PROTECT)
+                if new_table[0]["name"] != self.PROTECT_EXTRA["name"]:
+                    new_table.insert(0, self.PROTECT_EXTRA)
         return [element]
 
-    @staticmethod
-    def cell_text(cell_node) -> str:
+    @classmethod
+    def cell_text(cls, cell_node) -> str:
         text = ""
         for c in cell_node["children"]:
-            if c["name"] == "text:p":
+            if c["name"] == cls.TEXT:
                 for t in c["children"]:
                     try:
                         text += t["value"]
                     except KeyError:
                         REPORT_WARNING(
                             "Debug: ODS_Row_Handler\n"
-                            f"Unhandled item in <text:p>: {t}"
+                            f"Unhandled item in <{cls.TEXT}>: {t}"
                         )
             else:
                 REPORT_WARNING(
@@ -413,8 +409,8 @@ class ODS_Handler:
         #print("§cell_text:", cell_node, "->", text)
         return text
 
-    @staticmethod
-    def set_cell_text(cell_node, text):
+    @classmethod
+    def set_cell_text(cls, cell_node, text):
         """Set text in the given cell. If <text> is empty, the cell will
         be cleared.
 
@@ -428,17 +424,17 @@ class ODS_Handler:
         atr = cell_node["attributes"]
         if text:
             tnode = {
-                'name': 'text:p',
-                'attributes': {},
-                'children': [{'value': text}]
+                "name": cls.TEXT,
+                "attributes": {},
+                "children": [{"value": text}]
             }
             clist.append(tnode)
-            atr["office:value-type"] = "string"
-            atr["calcext:value-type"] = "string"
+            atr[cls.VALUE_TYPE] = cls.STRING_TYPE
+            atr[cls.EXT_VALUE_TYPE] = cls.STRING_TYPE
         else:
             try:
-                del atr["office:value-type"]
-                del atr["calcext:value-type"]
+                del atr[cls.VALUE_TYPE]
+                del atr[cls.EXT_VALUE_TYPE]
             except KeyError:
                 pass
 
@@ -475,13 +471,15 @@ if __name__ == "__main__":
 
     def remove_column(elements):
         ODS_Handler.delete_column(elements, -22)
+        return {
+            "hidden_rows": [5],
+            "hidden_columns": [0],
+            "protected": True,
+        }
 
     def simple_xml(xml: str) -> str:
         handler = ODS_Handler(
             table_handler = remove_column,
-            hidden_rows = [5],
-            hidden_columns = [0],
-#            protected = True,
         )
         xml_handler = XML_Reader(
             process_element = handler.process_element,
