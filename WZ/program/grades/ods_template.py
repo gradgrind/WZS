@@ -47,19 +47,15 @@ from tables.ods_support import (
     XML_writer,
     ODS_Handler,
 )
-from grades.grade_tables_2 import grade_table_info
+from grades.grade_tables import grade_table_info
 
 ### -----
 
-#TODO: Strip excess rows and columns ...
-
-# Process table rows
+#TODO: Consider the possibility of adding rows and columns – it might
+# simplify template construction.
 
 class GradeTable:
-    def __init__(self):#, filepath: str):
-        pass
-
-    def make_grade_table(self,
+    def __init__(self,
         occasion: str,
         class_group: str,
         report_info: dict[str, list] = None, # <report_data()[0]>
@@ -77,15 +73,22 @@ class GradeTable:
         self.hidden_columns = [0]
         self.subject_keys = {}
         self.max_col = 0
+        self.student_index = 0
 
         ## Get template
         gscale = json.loads(CONFIG.GRADE_SCALE)
         grade_scale = gscale.get(class_group) or gscale.get('*')
         templates = json.loads(CONFIG.GRADE_TABLE_TEMPLATE)
-        template_file = DATAPATH(templates[grade_scale], "TEMPLATES")
-        #print("§template:", template_file)
-        if not template_file.endswith(".ods"):
-            template_file = f"{template_file}.ods"
+        self.template_file = DATAPATH(templates[grade_scale], "TEMPLATES")
+        #print("§template:", self.template_file)
+        if not self.template_file.endswith(".ods"):
+            self.template_file = f"{self.template_file}.ods"
+
+        # Suggestion for the output file name
+        self.output_file_name = T("GRADE_FILE",
+            occasion = occasion.replace(" ", "_"),
+            group = class_group
+        )
 
         self.info, self.subject_list, self.student_list = grade_table_info(
             occasion = occasion,
@@ -103,15 +106,14 @@ class GradeTable:
 #            (105, "XE", "EEEEEEEEEEEEEEEEEEEE"),
 #        ]
 
-
-        ods = substitute_zip_content(
-            template_file,
+        self.ods = substitute_zip_content(
+            self.template_file,
             process = self.process_xml
         )
-        filepath = template_file.rsplit('.', 1)[0] + '_X.ods'
+
+    def save(self, filepath):
         with open(filepath, 'bw') as fh:
-            fh.write(ods)
-        print(" -->", filepath)
+            fh.write(self.ods)
 
     def process_row(self, element):
         result = True    # retain row
@@ -127,16 +129,11 @@ class GradeTable:
                     self.min_cols = i + 1
             ODS_Handler.set_cell_text(last, today())
 
-#--
-        elif self.row_count > 20:
-            result = False
-#TODO: Be careful when deleting rows – consider what effect this has
-# on <self.row_count>.
-
         elif not self.subject_keys:
             ### Head/Info part
             c0 = ODS_Handler.cell_text(cells[0])
             if c0 == '§':
+                self.hidden_rows.append(self.row_count)
                 ## Add the subject keys
                 i = 0
                 j = 1
@@ -150,10 +147,8 @@ class GradeTable:
                             self.max_col = j
                             break
                         else:
-                            key = sid
-#TODO: Rather <key = str(s_id)>?
-                            self.subject_keys[ci] = key
-                            ODS_Handler.set_cell_text(cell, key)
+                            self.subject_keys[ci] = (s_id, sname)
+                            ODS_Handler.set_cell_text(cell, str(s_id))
                         i += 1
                     j += 1
                 else:
@@ -162,10 +157,13 @@ class GradeTable:
                             n = len(self.subject_list) - i
                         ))
                 while j < self.min_cols:
-                    ODS_Handler.set_cell_text(cells[j], None)
+                    cell = cells[j]
+                    ci = ODS_Handler.cell_text(cell)
+                    self.subject_keys[ci] = (None, None)
+                    ODS_Handler.set_cell_text(cell, None)
                     j += 1
                 self.max_col = j
-                print("§max_col:", self.max_col)
+                #print("§max_col:", self.max_col)
 
             else:
                 for i, c in enumerate(cells):
@@ -183,27 +181,57 @@ class GradeTable:
                         REPORT_WARNING(T("MISSING_INFO", key = c0))
                     ODS_Handler.set_cell_text(cells[2], text)
 
-
-
-
         else:
-            c0 = ODS_Handler.cell_text(cells[0])
+            cell0 = cells[0]
+            c0 = ODS_Handler.cell_text(cell0)
             if c0 == '§':
                 # Add a student line
-                pass
-
+                try:
+                    stdata = self.student_list[self.student_index]
+                except IndexError:
+                    # No students left, lose the row
+                    return False
+                #print("???", stdata)
+                self.student_index += 1
+                ODS_Handler.set_cell_text(cell0, str(stdata['§']))
+                grades = stdata["GRADES"]
+                gi = 0
+                for cell in cells[1:]:
+                    ci = ODS_Handler.cell_text(cell)
+                    if ci.startswith('§'):
+                        try:
+                            text = stdata[ci]
+                        except KeyError:
+                            try:
+                                s_id, _ = self.subject_keys[ci]
+                            except KeyError:
+                                # No subjects left
+                                break
+                            else:
+                                try:
+                                    text = grades[gi]
+                                except IndexError:
+                                    text = None
+                                gi += 1
+                                ODS_Handler.set_cell_text(cell, text)
+                        else:
+                            ODS_Handler.set_cell_text(cell, text)
 
             elif c0 == '*':
-                pass
-
+                # Add the subject names
+                for cell in cells[1:]:
+                    ci = ODS_Handler.cell_text(cell)
+                    if ci.startswith('§'):
+                        try:
+                            s_id, sname = self.subject_keys[ci]
+                        except KeyError:
+                            # No subjects left
+                            break
+                        else:
+                            ODS_Handler.set_cell_text(cell, sname)
         self.row_count += 1
         return result
 
-#TODO: Problem with hidden rows and columns! At present they cannot
-# be determined based on the table contents. It should be fairly easy
-# to adapt the row handling to allow a "hide" flag to be returned.
-# But at present the hidden columns are done before the row handler
-# is called.
     def process_xml(self, xml: str) -> str:
         handler = ODS_Handler(
             table_handler = self.process_table,
@@ -219,24 +247,8 @@ class GradeTable:
         return {
             "hidden_rows": self.hidden_rows,
             "hidden_columns": self.hidden_columns,
-#            "protected": True,
+            "protected": True,
         }
-
-
-
-    def handle_file(self):
-#TODO: Could add a file-chooser dialog for the source file
-        filepath = DATAPATH("GRADES_SEK_I.ods", "TEMPLATES/GRADE_TABLES")
-        #filepath = DATAPATH("GRADES_SEK_II.ods", "TEMPLATES/GRADE_TABLES")
-        #filepath = DATAPATH("test2.ods", "TEMPLATES/GRADE_TABLES")
-        ods = substitute_zip_content(
-            filepath,
-            process = self.process_xml
-        )
-        filepath = filepath.rsplit('.', 1)[0] + '_X.ods'
-        with open(filepath, 'bw') as fh:
-            fh.write(ods)
-        print(" -->", filepath)
 
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
@@ -244,7 +256,29 @@ class GradeTable:
 if __name__ == "__main__":
     from core.basic_data import get_database
     db = get_database()
-    gt = GradeTable()
-    gt.make_grade_table("1. Halbjahr", "12G.R",
-        grades = {434: {6: "1+", 12: "4"}}
+
+    gt = GradeTable("1. Halbjahr", "12G.R",
+#        grades = {434: {6: "1+", 12: "4"}}
     )
+    filepath = os.path.join(
+        os.path.dirname(gt.template_file),
+        gt.output_file_name
+    )
+    gt.save(filepath)
+    print(" -->", filepath)
+
+    gt = GradeTable("1. Halbjahr", "12G.G")
+    filepath = os.path.join(
+        os.path.dirname(gt.template_file),
+        gt.output_file_name
+    )
+    gt.save(filepath)
+    print(" -->", filepath)
+
+    gt = GradeTable("1. Halbjahr", "11G")
+    filepath = os.path.join(
+        os.path.dirname(gt.template_file),
+        gt.output_file_name
+    )
+    gt.save(filepath)
+    print(" -->", filepath)
