@@ -50,6 +50,8 @@ def APPDATAPATH(path):
 
 from configparser import ConfigParser
 
+__REPORT = None
+
 ### -----
 
 __TRANSLATIONS = ConfigParser()

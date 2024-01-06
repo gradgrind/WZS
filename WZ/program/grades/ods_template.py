@@ -191,7 +191,7 @@ class GradeTable:
                 except IndexError:
                     # No students left, lose the row
                     return False
-                #print("???", stdata)
+                #print("§stdata", stdata)
                 self.student_index += 1
                 ODS_Handler.set_cell_text(cell0, str(stdata['§']))
                 grades = stdata["GRADES"]

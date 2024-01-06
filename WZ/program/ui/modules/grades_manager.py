@@ -193,7 +193,7 @@ class ManageGradesPage(QObject):
 #TODO: Are the stdata keys not a bit strange?
 
         for i, stdata in enumerate(self.student_list):
-            print("???", stdata)
+            #print("%stadata:", stdata)
             pname = stdata['§N']
             plevel = stdata.get('§M') or ""
             grades = stdata["GRADES"]

@@ -478,6 +478,28 @@ class ODS_Handler:
 if __name__ == "__main__":
     from core.base import DATAPATH
 
+    def read_only(element: dict) -> bool:
+        """A row handler for <ODS_Handler>, which just reads the data.
+        """
+        line = [
+            ODS_Handler.cell_text(c)
+            for c in element["children"]
+        ]
+        print(" --", line)
+        return False
+
+    def read_xml(xml: str) -> None:
+        """A read-only handler for ods tables.
+        """
+        handler = ODS_Handler(
+            row_handler = read_only,
+        )
+        xml_handler = XML_Reader(
+            process_element = handler.process_element,
+        )
+        xml_handler.parse_string(xml)
+        return None
+
     def remove_column(elements):
         ODS_Handler.delete_column(elements, -22)
         return {
@@ -501,6 +523,12 @@ if __name__ == "__main__":
     #filepath = DATAPATH("GRADES_SEK_I.ods", "TEMPLATES/GRADE_TABLES")
     filepath = DATAPATH("GRADES_SEK_II.ods", "TEMPLATES/GRADE_TABLES")
     #filepath = DATAPATH("test2.ods", "TEMPLATES/GRADE_TABLES")
+
+    ods = substitute_zip_content(
+        filepath,
+        process = read_xml
+    )
+
     ods = substitute_zip_content(
         filepath,
         process = simple_xml

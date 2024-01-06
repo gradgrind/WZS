@@ -152,7 +152,6 @@ class RotatedHeaderView(QHeaderView):
 
     def _get_data(self, index):
         data = self.model().headerData(index, self.orientation())
-        print("???", index, repr(data))
         return data
 
 
