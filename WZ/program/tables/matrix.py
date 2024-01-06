@@ -1,3 +1,5 @@
+#deprecated: now concentrating on ods files – see tables.ods_support,
+# and grades, ods_template, which uses it.
 """
 tables/matrix.py - last updated 2023-12-28
 

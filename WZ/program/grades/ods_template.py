@@ -74,33 +74,26 @@ def readGradeTable(filepath: str):
                 stag = row[j]
                 if stag:
                     s_col.append((int(stag), j))
-
         elif id == '*':
             # Subject line
             for stag, j in s_col:
                 s_names[stag] = row[j]
-            print("§SUBJECTS:", s_names)
-
+        elif s_col:
+            # Student grades
+            try:
+                p_id = int(id)
+            except ValueError:
+                REPORT_ERROR(T("BAD_PID", line = i + 1, pid = id))
+                continue
+            pgrades = {}
+            grades[p_id] = pgrades
+            pgrades["__NAME__"] = row[1]
+            for stag, j in s_col:
+                pgrades[stag] = row[j]
         else:
-            if s_col:
-                # Student grades
-                try:
-                    p_id = int(id)
-                except ValueError:
-                    REPORT_ERROR(T("BAD_PID", line = i + 1, pid = id))
-                    continue
-                pgrades = {}
-                grades[p_id] = pgrades
-                pgrades["__NAME__"] = row[1]
-                for stag, j in s_col:
-                    pgrades[stag] = row[j]
-                print("§PID:", p_id, pgrades)
-
-            else:
-                # Info tag
-                info[id] = row[1:3]
-
-    print("§info:", info)
+            # Info tag
+            info[id] = row[1:3]
+    return (info, s_names, grades)
 
 
 #TODO: Consider the possibility of adding rows and columns – it might
@@ -309,9 +302,14 @@ if __name__ == "__main__":
     from core.basic_data import get_database
     db = get_database()
 
-    #TODO:
+#TODO:
     filepath = DATAPATH("test_read_grades.ods", "working_data")
-    readGradeTable(filepath)
+    print(f"*** READ GRADE TABLE {filepath}")
+    info, s_names, grades = readGradeTable(filepath)
+    print("\n§info:", info)
+    print("\n§SUBJECTS:", s_names)
+    for p_id, pgrades in grades.items():
+        print("\n§PID:", p_id, pgrades)
 
     quit(2)
 

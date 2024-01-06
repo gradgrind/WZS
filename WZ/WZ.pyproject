@@ -42,6 +42,7 @@
         "program/ui/modules/grades_manager.py",
         "program/ui/rotated_table_header.py",
         "program/ui/table_support.py",
-        "program/ui/ui_base.py"
+        "program/ui/ui_base.py",
+        "program/tables/ods_support_2.py"
     ]
 }
