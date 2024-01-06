@@ -132,7 +132,11 @@ class RotatedHeaderView(QHeaderView):
         """
         hmax = 0
         for i in range(0, self.model().columnCount()):
-            brect = self._metrics.boundingRect(self._get_data(i))
+#TODO: Is there a better solution for invalid data here?
+            try:
+                brect = self._metrics.boundingRect(self._get_data(i))
+            except TypeError:
+                return QSize(0, 0)
             if i in self._horiz_columns:
                 h = brect.height()
             else:
@@ -142,12 +146,14 @@ class RotatedHeaderView(QHeaderView):
         return QSize(0, hmax + 2 * self._margin)
 
 ## Not used by resizeColumnsToContents?
-#    def sectionSizeHint(self, column):
-#        assert False, "TODO?"
-#        return self._metrics.height()
+    def sectionSizeHint(self, column):
+        assert False, "TODO?"
+        return self._metrics.height()
 
     def _get_data(self, index):
-        return self.model().headerData(index, self.orientation())
+        data = self.model().headerData(index, self.orientation())
+        print("???", index, repr(data))
+        return data
 
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
@@ -169,6 +175,8 @@ if __name__ == "__main__":
     # headers. To support rotated headers properly, a custon column-width
     # function would be needed.
     #tw.resizeColumnsToContents()
+
+    headerView.setMinimumSectionSize(20)
 
     for i in range(len(cols)):
         tw.setColumnWidth(i, 40 if i > 0 else 150)

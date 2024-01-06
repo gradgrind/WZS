@@ -1,7 +1,7 @@
 """
 ui/modules/grades_manager.py
 
-Last updated:  2024-01-01
+Last updated:  2024-01-06
 
 Front-end for managing grade reports.
 
@@ -47,7 +47,10 @@ from ui.ui_base import (
     QWidget,
     QHeaderView,
     QAbstractButton,
+    QTableWidgetItem,
     ### QtGui:
+    QColor,
+    QBrush,
     ### QtCore:
     QObject,
     Qt,
@@ -55,12 +58,17 @@ from ui.ui_base import (
     Slot,
     ### other
     SHOW_CONFIRM,
+    SAVE_FILE,
 )
 from ui.rotated_table_header import RotatedHeaderView
+
+from core.base import REPORT_INFO
 from core.basic_data import get_database, CONFIG
 from core.list_activities import report_data
 from core.classes import class_group_split_with_id
-from grades.grade_tables import subject_map
+#from grades.grade_tables import subject_map
+from grades.grade_tables import grade_table_info
+from grades.ods_template import GradeTable
 
 ### -----
 
@@ -68,12 +76,40 @@ class ManageGradesPage(QObject):
     def __init__(self, parent=None):
         super().__init__()
         self.ui = load_ui("grades.ui", parent, self)
-#        self.ui.grade_table.horizontalHeader().setSectionResizeMode(
-#            QHeaderView.ResizeMode.ResizeToContents
-#        )
+        tw = self.ui.grade_table
+
+
+
+
+        nrows = 10
+        cols = ("Long Column 100", "Column 2", "Col 3", "Col 4a", "Column 5",)
+        cols += ("Column n",) * 20
+        tw.setColumnCount(len(cols))
+        tw.setRowCount(nrows)
+
         headerView = RotatedHeaderView()
-        self.ui.grade_table.setHorizontalHeader(headerView)
-#        tw.setHorizontalHeaderLabels(("Column 100", "Column 2", "Col 3", "Column 4", "Column 5"))
+        tw.setHorizontalHeader(headerView)
+        tw.setHorizontalHeaderLabels(cols)
+
+
+        #headerView.setDefaultSectionSize(30) # what does this do?
+        headerView.setMinimumSectionSize(20)
+        headerView.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        headerView.setSectionResizeMode(
+            0, QHeaderView.ResizeMode.ResizeToContents
+        )
+
+        #for i in range(len(cols)):
+        #    tw.setColumnWidth(i, 40 if i > 0 else 150)
+        #    print("§width:", i, tw.columnWidth(i))
+        #    print("§section-size:", headerView.sectionSizeHint(i))
+
+        headerView.set_horiz_index(0, True)
+
+
+
+
+
 
 
     def enter(self):
@@ -119,16 +155,75 @@ class ManageGradesPage(QObject):
         o = self.ui.combo_occasion.currentIndex()
         i = self.ui.combo_group.currentIndex()
         o_item = self.occasions[o]
-        cg = o_item[1][i]
-        print("§on_combo_group_currentIndexChanged:", repr(o_item[0]), cg)
+        self.class_group = o_item[1][i]
+        self.occasion = o_item[0]
+        print("§on_combo_group_currentIndexChanged:",
+            repr(self.occasion), self.class_group
+        )
 
 #TODO: Get subjects, students and extra info ...
-        cid, g = class_group_split_with_id(cg)
-        smap, s_info = subject_map(cid, g, self.report_info)
-        print("\n§§smap:", smap)
-        print("\n§§s_info:", s_info)
+#        cid, g = class_group_split_with_id(self.class_group)
+#        smap = subject_map(cid, g, self.report_info)
+#        print("\n§§smap:", smap)
+
+###################################
 
 
+        self.info, self.subject_list, self.student_list = grade_table_info(
+            occasion = self.occasion,
+            class_group = self.class_group,
+            report_info = self.report_info,
+#            grades = grades,
+        )
+
+        # s_id, sid, sname = self.subject_list[i]
+        ncols = len(self.subject_list) + 2
+        headers = [s[2] for s in self.subject_list]
+
+        tw = self.ui.grade_table
+
+#TODO: Would it be possible to use my table-widget with automatic item
+# handling?
+        tw.setColumnCount(ncols)
+        nrows = len(self.student_list)
+        tw.setRowCount(nrows)
+
+        tw.setHorizontalHeaderLabels(["Schülerin", "Maßstab"] + headers)
+
+#TODO: Are the stdata keys not a bit strange?
+
+        for i, stdata in enumerate(self.student_list):
+            print("???", stdata)
+            pname = stdata['§N']
+            plevel = stdata.get('§M') or ""
+            grades = stdata["GRADES"]
+            item = QTableWidgetItem(pname)
+            item.setBackground(QColor("#FFFA3C"))
+            tw.setItem(i, 0, item)
+            item = QTableWidgetItem(plevel)
+            item.setBackground(QColor("#FFFA3C"))
+            item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            tw.setItem(i, 1, item)
+            j = 2
+            for g in grades:
+                item = QTableWidgetItem(g or "?")
+#TODO ...
+                item.setBackground(QColor("#FABBFF"))
+                if j & 1:
+                    item.setBackground(QColor("#FAFFBB"))
+                elif j & 2:
+                    item.setBackground(QBrush())
+
+                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                tw.setItem(i, j, item)
+                j += 1
+
+
+
+
+
+
+###################################
 
 
     ### slots ###
@@ -146,6 +241,21 @@ class ManageGradesPage(QObject):
     def on_combo_group_currentIndexChanged(self, i):
         if self.suppress_handlers: return
         self.set_group()
+
+    @Slot()
+    def on_pb_grade_input_table_clicked(self):
+        print("§MAKE GRADE TABLE")
+        gt = GradeTable(self.occasion, self.class_group)
+        fpath = SAVE_FILE(
+            f'{T("ods_file")} (*.ods)',
+            start = gt.output_file_name
+        )#, title=)
+        if not fpath:
+            return
+        if not fpath.endswith(".ods"):
+            fpath += ".ods"
+        gt.save(fpath)
+        REPORT_INFO(T("SAVED_GRADE_TABLE", path = fpath))
 
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
