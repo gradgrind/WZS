@@ -1,11 +1,11 @@
 """
-core/dates.py - last updated 2023-12-25
+core/dates.py - last updated 2024-01-06
 
 Manage date-related information.
 
 
 ==============================
-Copyright 2023 Michael Towers
+Copyright 2024 Michael Towers
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -20,9 +20,10 @@ Copyright 2023 Michael Towers
    limitations under the License.
 """
 
+import os
 if __name__ == "__main__":
     # Enable package import if running as module
-    import sys, os
+    import sys
 
     this = sys.path[0]
     appdir = os.path.dirname(this)

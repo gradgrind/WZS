@@ -1,13 +1,13 @@
 """
 ui/dialogs/dialog_room_choice.py
 
-Last updated:  2023-12-20
+Last updated:  2024-01-06
 
 Supporting "dialog" for the course editor – select room(s).
 
 
 =+LICENCE=============================
-Copyright 2023 Michael Towers
+Copyright 2024 Michael Towers
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -34,8 +34,8 @@ if __name__ == "__main__":
     from core.base import setup
     setup(os.path.join(basedir, 'TESTDATA'))
 
-from core.base import TRANSLATIONS
-T = TRANSLATIONS("ui.dialogs.dialog_room_choice")
+from core.base import Tr
+T = Tr("ui.dialogs.dialog_room_choice")
 
 ### +++++
 
@@ -211,22 +211,22 @@ def roomChoiceDialog(
         """
         if room_id == 0:
             if not classroom:
-                REPORT_ERROR(T["NO_CLASSROOM_DEFINED"])
+                REPORT_ERROR(T("NO_CLASSROOM_DEFINED"))
                 return
             if classroom in choices or 0 in choices:
                 rid = room_list[classroom][1]
                 cid = room_list[0][1]
-                REPORT_ERROR(f'{T["CLASSROOM_ALREADY_CHOSEN"]}: {cid}/{rid}')
+                REPORT_ERROR(f'{T("CLASSROOM_ALREADY_CHOSEN")}: {cid}/{rid}')
                 return
         elif room_id == classroom:
             if classroom in choices or 0 in choices:
                 rid = room_list[room_id][1]
                 cid = room_list[0][1]
-                REPORT_ERROR(f'{T["CLASSROOM_ALREADY_CHOSEN"]}: {cid}/{rid}')
+                REPORT_ERROR(f'{T("CLASSROOM_ALREADY_CHOSEN")}: {cid}/{rid}')
                 return
         elif room_id in choices:
             rid = room_list[room_id][1]
-            REPORT_ERROR(f'{T["ROOM_ALREADY_CHOSEN"]}: {rid}')
+            REPORT_ERROR(f'{T("ROOM_ALREADY_CHOSEN")}: {rid}')
             return
         choices.append(room_id)
         # Get row in full room table
@@ -272,7 +272,7 @@ def roomChoiceDialog(
         #print("§rdata:", rdata)
         if id == classroom:
             rid = f"{rid} ***"
-            ui.home.setText(T["CLASSROOM"].format(room = rid))
+            ui.home.setText(T("CLASSROOM", room = rid))
         room2line[id] = i
         item = QTableWidgetItem(rid)
         ui.roomlist.setItem(i, 0, item)

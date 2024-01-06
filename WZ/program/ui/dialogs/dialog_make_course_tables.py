@@ -140,7 +140,7 @@ def exportTable(
         """
         cdb = make_class_table_xlsx(self.activities)
         filepath = SAVE_FILE(
-            "Excel™-Datei (*.xlsx)", T["class_lessons"]
+            "Excel™-Datei (*.xlsx)", T("class_lessons")
         )
         if filepath and os.path.isabs(filepath):
             if not filepath.endswith(".xlsx"):
@@ -218,7 +218,7 @@ class ExportTable:#(QDialog):
         the lessons, etc.
         """
         pdfbytes = make_teacher_table_room(self.activities)
-        filepath = SAVE_FILE("pdf-Datei (*.pdf)", T["teacher_activities"])
+        filepath = SAVE_FILE("pdf-Datei (*.pdf)", T("teacher_activities"))
         if filepath and os.path.isabs(filepath):
             if not filepath.endswith(".pdf"):
                 filepath += ".pdf"
@@ -235,7 +235,7 @@ class ExportTable:#(QDialog):
         """
         tdb = make_teacher_table_xlsx(self.activities)
         filepath = SAVE_FILE(
-            "Excel-Datei (*.xlsx)", T["teacher_workload_pay"]
+            "Excel-Datei (*.xlsx)", T("teacher_workload_pay")
         )
         if filepath and os.path.isabs(filepath):
             if not filepath.endswith(".xlsx"):

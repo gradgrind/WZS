@@ -1,12 +1,12 @@
 """
 core/base.py
 
-Last updated:  2023-12-31
+Last updated:  2024-01-06
 
 Basic configuration and structural stuff.
 
 =+LICENCE=================================
-Copyright 2023 Michael Towers
+Copyright 2024 Michael Towers
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -48,37 +48,21 @@ def APPDATAPATH(path):
 
 ### +++++
 
-#deprecated???
-from minion2 import Minion
-
-_Minion = Minion()
-MINION = _Minion.parse_file
-
-__TRANSLATIONS = MINION(APPDATAPATH("Translations.minion"))
-def Tr0(module_key):
-    tk = __TRANSLATIONS[module_key]
-    def __translator(key, **kargs):
-        return tk[key].format(**kargs)
-    return __translator
-#TODO: deprecated (use <Tr>)
-def TRANSLATIONS(module):
-    return __TRANSLATIONS[module]
-
-# new version?
 from configparser import ConfigParser
-__TRANSLATIONS2 = ConfigParser()
-__TRANSLATIONS2.read(APPDATAPATH("Translations.ini"), encoding = "utf-8")
+
+### -----
+
+__TRANSLATIONS = ConfigParser()
+__TRANSLATIONS.read(APPDATAPATH("Translations.ini"), encoding = "utf-8")
 def Tr(module_key):
-    tk = __TRANSLATIONS2[module_key]
+    tk = __TRANSLATIONS[module_key]
     def __translator(key, **kargs):
         return tk[key].replace("¶", "\n").format(**kargs)
     return __translator
-
+#+
 T = Tr("core.base")
 
-#TODO: replace by dedicated calls to ERROR, WARNING, etc.
-__REPORT = None
-#+
+
 def set_reporter(function):
     global __REPORT
     __REPORT = function
@@ -104,6 +88,10 @@ def REPORT_WARNING(text):
 #+
 def REPORT_INFO(text):
     __report("INFO", text)
+#+
+def REPORT_DEBUG(text):
+    if DEBUG:
+        __report("DEBUG", text)
 
 # TODO: configuration/settings file?
 # posix: os.path.expanduser('~/.config/WZ')
@@ -115,17 +103,15 @@ def REPORT_INFO(text):
 
 __DATA = None  # Base folder for school data
 #+
-def setup(datadir):
+def setup(datadir, debug = False):
     """Initialize data paths, etc.
     <datadir> is the full path to the folder containing the
     application data (i.e. the school data).
     """
-    global __DATA, CONFIG, CALENDAR, SCHOOLYEAR
+    global __DATA, CALENDAR, SCHOOLYEAR, DEBUG
+    DEBUG = debug
     __DATA = datadir
-#TODO: CONFIG is now a db table! Remove the version here ...
-#    CONFIG = MINION(DATAPATH("CONFIG/BASE"))
-#    CALENDAR = Dates.get_calendar(DATAPATH("CONFIG/Calendar"))
-#    SCHOOLYEAR = Dates.calendar_year(CALENDAR)
+
 
 def DATAPATH(path, base=""):
     """Return a path within the school-data folder.
@@ -135,13 +121,12 @@ def DATAPATH(path, base=""):
     """
     return os.path.join(__DATA, *base.split("/"), *path.split("/"))
 
+
 def RESOURCEPATH(path):
     """Return a path within the resources folder.
     <path> is a '/'-separated path relative to this folder.
     """
     return os.path.join(__DATA, "RESOURCES", *path.split("/"))
-
-### -----
 
 
 def year_data_path(year, path=""):
@@ -151,7 +136,8 @@ def year_data_path(year, path=""):
     return os.path.join(basedir, f"DATA-{year}", *path.split("/"))
 
 
-# TODO:
+# TODO?:
+'''
 import tarfile
 
 # tarfile doesn't have the encoding problems some
@@ -179,25 +165,4 @@ def archive_testdata():
 # To read just one file
 # tx = tf.extractfile('TESTDATA/CONFIG')
 # tx.read() -> <bytes>
-
-
-# --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
-
-if __name__ == "__main__":
-    from configparser import ConfigParser
-    cfg = ConfigParser()
-    cfg.optionxform = lambda option: option
-    # This more or less works, but I should probably substitute something else
-    # for \n as INI-format doesn't handle this well.
-#    cfg.read_dict(__TRANSLATIONS)
-#    with open(
-#        APPDATAPATH("Translations.ini"), "w", encoding = "utf-8"
-#    ) as fh:
-#        cfg.write(fh)
-#    cfg.read(APPDATAPATH("Translations.ini"), encoding = "utf-8")
-#    for sec in cfg.sections():
-#        print("\n ***", sec)
-#        print("  --", cfg.items(sec))
-
-    T = Tr("ui.dialogs.dialog_class_groups")
-    print("§Message:", T("EMPTY_GROUPS_ERROR", e = "** error **"))
+'''

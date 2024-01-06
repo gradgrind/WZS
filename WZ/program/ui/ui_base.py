@@ -1,13 +1,13 @@
 """
 ui/ui_base.py
 
-Last updated:  2023-12-01
+Last updated:  2024-01-06
 
 Support stuff for the GUI: application initialization, dialogs, etc.
 
 
 =+LICENCE=============================
-Copyright 2023 Michael Towers
+Copyright 2024 Michael Towers
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -88,8 +88,8 @@ class GuiError(Exception):
     pass
 
 
-from core.base import TRANSLATIONS, set_reporter
-T = TRANSLATIONS("ui.ui_base")
+from core.base import Tr, set_reporter
+T = Tr("ui.ui_base")
 
 LOAD_UI_MARGIN = 0
 
@@ -322,7 +322,7 @@ class KeySelector(QComboBox):
             i += 1
         else:
             self.changed_callback = self._cb  # reenable callback
-            raise GuiError(T["UNKNOWN_KEY"].format(key=key))
+            raise GuiError(T("UNKNOWN_KEY", key = key))
         self.changed_callback = self._cb  # reenable callback
 
     def trigger(self):
@@ -352,10 +352,10 @@ def YesOrNoDialog(message, title=None):
     bbox = QHBoxLayout()
     vbox.addLayout(bbox)
     bbox.addStretch(1)
-    cancel = QPushButton(T["CANCEL"])
+    cancel = QPushButton(T("CANCEL"))
     cancel.clicked.connect(qd.reject)
     bbox.addWidget(cancel)
-    ok = QPushButton(T["OK"])
+    ok = QPushButton(T("OK"))
     ok.clicked.connect(qd.accept)
     bbox.addWidget(ok)
     cancel.setDefault(True)
@@ -363,12 +363,12 @@ def YesOrNoDialog(message, title=None):
 
 
 def LoseChangesDialog():
-    return YesOrNoDialog(T["LOSE_CHANGES"], T["LOSE_CHANGES_TITLE"])
+    return YesOrNoDialog(T("LOSE_CHANGES"), T("LOSE_CHANGES_TITLE"))
 
 
 def LineDialog(message, text=None, title=None):
     td = QDialog()
-    td.setWindowTitle(title or T["INPUT_TITLE"])
+    td.setWindowTitle(title or T("INPUT_TITLE"))
     vbox = QVBoxLayout(td)
     vbox.addWidget(QLabel(message))
     lineedit = QLineEdit(text or "")
@@ -377,10 +377,10 @@ def LineDialog(message, text=None, title=None):
     bbox = QHBoxLayout()
     vbox.addLayout(bbox)
     bbox.addStretch(1)
-    cancel = QPushButton(T["CANCEL"])
+    cancel = QPushButton(T("CANCEL"))
     cancel.clicked.connect(td.reject)
     bbox.addWidget(cancel)
-    ok = QPushButton(T["OK"])
+    ok = QPushButton(T("OK"))
     ok.clicked.connect(td.accept)
     bbox.addWidget(ok)
     cancel.setDefault(True)
@@ -391,7 +391,7 @@ def LineDialog(message, text=None, title=None):
 
 def TextAreaDialog(message=None, text=None, title=None):
     td = QDialog()
-    td.setWindowTitle(title or T["TEXTAREA_TITLE"])
+    td.setWindowTitle(title or T("TEXTAREA_TITLE"))
     vbox = QVBoxLayout(td)
     if message:
         msg = QTextEdit(message)
@@ -403,10 +403,10 @@ def TextAreaDialog(message=None, text=None, title=None):
     bbox = QHBoxLayout()
     vbox.addLayout(bbox)
     bbox.addStretch(1)
-    cancel = QPushButton(T["CANCEL"])
+    cancel = QPushButton(T("CANCEL"))
     cancel.clicked.connect(td.reject)
     bbox.addWidget(cancel)
-    ok = QPushButton(T["OK"])
+    ok = QPushButton(T("OK"))
     ok.clicked.connect(td.accept)
     bbox.addWidget(ok)
     cancel.setDefault(True)
@@ -449,7 +449,7 @@ def ListSelect(title, message, data, button=None):
     bbox = QHBoxLayout()
     layout.addLayout(bbox)
     bbox.addStretch(1)
-    cancel = QPushButton(T["CANCEL"])
+    cancel = QPushButton(T("CANCEL"))
     cancel.setDefault(True)
     cancel.clicked.connect(select.reject)
     bbox.addWidget(cancel)
@@ -500,7 +500,7 @@ def TreeDialog(title, message, data, button=None):
     bbox = QHBoxLayout()
     layout.addLayout(bbox)
     bbox.addStretch(1)
-    cancel = QPushButton(T["CANCEL"])
+    cancel = QPushButton(T("CANCEL"))
     cancel.setDefault(True)
     cancel.clicked.connect(select.reject)
     bbox.addWidget(cancel)
@@ -552,10 +552,10 @@ def TreeMultiSelect(title, message, data, checked=False):
     bbox = QHBoxLayout()
     layout.addLayout(bbox)
     bbox.addStretch(1)
-    cancel = QPushButton(T["CANCEL"])
+    cancel = QPushButton(T("CANCEL"))
     cancel.clicked.connect(select.reject)
     bbox.addWidget(cancel)
-    ok = QPushButton(T["OK"])
+    ok = QPushButton(T("OK"))
     ok.setDefault(True)
     ok.clicked.connect(select.accept)
     bbox.addWidget(ok)
@@ -574,24 +574,24 @@ def TreeMultiSelect(title, message, data, checked=False):
 
 def SHOW_INFO(message):
     QMessageBox.information(
-        None, T["INFO"], " " * 100 + "\n" + message.rstrip() + "\n"
+        None, T("INFO"), " " * 100 + "\n" + message.rstrip() + "\n"
     )
 
 
 def SHOW_WARNING(message):
     QMessageBox.warning(
-        None, T["WARNING"], " " * 100 + "\n" + message.rstrip() + "\n"
+        None, T("WARNING"), " " * 100 + "\n" + message.rstrip() + "\n"
     )
 
 
 def SHOW_ERROR(message):
     QMessageBox.critical(
-        None, T["ERROR"], " " * 100 + "\n" + message.rstrip() + "\n"
+        None, T("ERROR"), " " * 100 + "\n" + message.rstrip() + "\n"
     )
 
 def SHOW_CRITICAL(message):
     QMessageBox.critical(
-        None, T["CRITICAL"], " " * 100 + "\n" + message.rstrip() + "\n"
+        None, T("CRITICAL"), " " * 100 + "\n" + message.rstrip() + "\n"
     )
     quit(1)
 
@@ -599,7 +599,7 @@ def SHOW_CONFIRM(question):
     return (
         QMessageBox.question(
             None,
-            T["CONFIRMATION"],
+            T("CONFIRMATION"),
             " " * 100 + "\n" + question.rstrip() + "\n",
             buttons=(
                 QMessageBox.StandardButton.Ok
@@ -625,7 +625,7 @@ def OPEN_FILE(filetype, start="", title=None):
         if start:
             dir0 = os.path.join(dir0, start)
     fpath = QFileDialog.getOpenFileName(
-        None, title or T["FILEOPEN"], dir0, filetype
+        None, title or T("FILEOPEN"), dir0, filetype
     )[0]
     if fpath:
         SETTINGS.setValue("LAST_LOAD_DIR", os.path.dirname(fpath))
@@ -642,7 +642,7 @@ def GET_FOLDER(start=None, title=None):
         dir0 = SETTINGS.value("LAST_DIR") or os.path.expanduser("~")
     dpath = QFileDialog.getExistingDirectory(
         None,
-        title or T["DIROPEN"],
+        title or T("DIROPEN"),
         dir0,
         QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks,
     )
@@ -663,7 +663,7 @@ def SAVE_FILE(filetype, start=None, title=None):
         if start:
             dir0 = os.path.join(dir0, start)
     fpath = QFileDialog.getSaveFileName(
-        None, title or T["FILESAVE"], dir0, filetype
+        None, title or T("FILESAVE"), dir0, filetype
     )[0]
     if fpath:
         SETTINGS.setValue("LAST_SAVE_DIR", os.path.dirname(fpath))
@@ -879,8 +879,9 @@ class __Reporter(QDialog):
         "INFO":     "#00a000",
         "WARNING":  "#eb8900",
         "ERROR":    "#d00000",
-        "CRITICAL": "#8900ae",  # unused?
+        "CRITICAL": "#8900ae",
         "OUT":      "#ee00ee",
+        "DEBUG":    "#00a4cc",
     }
 
     def __init__(self, parent=None):
@@ -916,14 +917,14 @@ class __Reporter(QDialog):
             super().keyPressEvent(e)
 
     def start(self, task, title=None, **kargs):
-        self.setWindowTitle(title or T["Reporter"])
+        self.setWindowTitle(title or T("Reporter"))
         self.setModal(True)
         QApplication.setOverrideCursor(QCursor(Qt.WaitCursor))
         self.bt_done.setEnabled(False)
         self.show()
         self.__active = True
         self.reportview.clear()
-        txt = f'+++ {T["PROCESSING"]} ...'
+        txt = f'+++ {T("PROCESSING")} ...'
         self.reportview.append(f'<span style="color:#d406e3;">{txt}</span>')
         self.reportview.append('')
         self.errorcount = 0
@@ -932,15 +933,15 @@ class __Reporter(QDialog):
         time.sleep(0.01)
         QCoreApplication.processEvents()
         result = task(**kargs)
-        txt = f'+++ ... {T["DONE"]}'
+        txt = f'+++ ... {T("DONE")}'
         self.reportview.append(f'<span style="color:#d406e3;">{txt}</span>')
         if self.errorcount:
             clr = self.colours["ERROR"]
-            txt = T["ERRORS"].format(n=self.errorcount)
+            txt = T("ERRORS", n = self.errorcount)
             self.reportview.append(f'<span style="color:{clr};">{txt}</span>')
         if self.warningcount:
             clr = self.colours["WARNING"]
-            txt = T["WARNINGS"].format(n=self.warningcount)
+            txt = T("WARNINGS", n = self.warningcount)
             self.reportview.append(f'<span style="color:{clr};">{txt}</span>')
         self.__active = False
         self.bt_done.setEnabled(True)
@@ -953,7 +954,7 @@ class __Reporter(QDialog):
 
     def newtext(self, mtype, text):
         try:
-            ttype = T[mtype]
+            ttype = T(mtype)
         except:
             ttype = mtype or ""
         text = text or ""
@@ -978,6 +979,8 @@ class __Reporter(QDialog):
                 SHOW_WARNING(text)
             elif mtype == "INFO":
                 SHOW_INFO(text)
+            elif mtype == "DEBUG":
+                SHOW_INFO(f"*** DEBUG ***\n{text}")
             else:
                 raise Bug(f"Bad REPORT type: '{ttype}'\n ... {text}")
 

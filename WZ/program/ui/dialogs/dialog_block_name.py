@@ -1,14 +1,14 @@
 """
 ui/dialogs/dialog_block_name.py
 
-Last updated:  2023-12-30
+Last updated:  2024-01-06
 
 Supporting "dialog" for the course editor – choose or edit the name tag
 for a lesson block.
 
 
 =+LICENCE=============================
-Copyright 2023 Michael Towers
+Copyright 2024 Michael Towers
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -35,8 +35,8 @@ if __name__ == "__main__":
     from core.base import setup
     setup(os.path.join(basedir, 'TESTDATA'))
 
-from core.base import TRANSLATIONS
-T = TRANSLATIONS("ui.dialogs.dialog_block_name")
+from core.base import Tr
+T = Tr("ui.dialogs.dialog_block_name")
 
 ### +++++
 
@@ -163,11 +163,11 @@ def blockNameDialog(
         new_block = None
         if s:
             if not re.match(f"^{BLOCK_short}$", bs):
-                status = T["BAD_SHORT"]
+                status = T("BAD_SHORT")
             elif not re.match(f"^{BLOCK_subject}$", s):
-                status = T["BAD_SUBJECT"]
+                status = T("BAD_SUBJECT")
             elif bt and not re.match(f"^{BLOCK_tag}$", bt):
-                status = T["BAD_TAG"]
+                status = T("BAD_TAG")
             else:
                 block = BLOCK(
                     subject = s,
@@ -190,23 +190,23 @@ def blockNameDialog(
                             lbx.short != block.short
                             or lbx.notes != block.notes
                         ):
-                            status = T["KEY_FOUND_MISMATCH"].format(key = key)
+                            status = T("KEY_FOUND_MISMATCH", key = key)
                         else:
                             new_block = lbx
                             show_course_info(lbx.id)
                     else:
-                        status = T["BLOCK_EXISTS"].format(key = key)
+                        status = T("BLOCK_EXISTS", key = key)
         elif bt or bs or c:
-            status = T["NO_SUBJECT"]
+            status = T("NO_SUBJECT")
         elif start_value is None:
             show_course_info(0)
             new_block = BLOCK()
         else:
             # No subject, i.e. not a block, but more than one course
             if key0:
-                status = T["EMPTY_NOT_POSSIBLE"]
+                status = T("EMPTY_NOT_POSSIBLE")
             else:
-                status = T["ALREADY_EMPTY"]
+                status = T("ALREADY_EMPTY")
         if status:
             ui.status.setStyleSheet(
                 "background-color: rgb(249, 240, 180); "

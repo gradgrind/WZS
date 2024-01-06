@@ -1,14 +1,14 @@
 """
 ui/dialogs/dialog_change_teacher_class.py
 
-Last updated:  2023-12-30
+Last updated:  2024-01-06
 
 Supporting "dialog", for the course editor – change all occurrences of
 a class or teacher in a courses display page.
 
 
 =+LICENCE=============================
-Copyright 2023 Michael Towers
+Copyright 2024 Michael Towers
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -35,8 +35,8 @@ if __name__ == "__main__":
     from core.base import setup
     setup(os.path.join(basedir, 'TESTDATA'))
 
-from core.base import TRANSLATIONS
-T = TRANSLATIONS("ui.dialogs.dialog_change_teacher_class")
+from core.base import Tr
+T = Tr("ui.dialogs.dialog_change_teacher_class")
 
 ### +++++
 
@@ -168,7 +168,7 @@ def newTeacherClassDialog(
         set_teacher = True
         ui.rb_teacher.setDisabled(True)
     else:
-        REPORT_INFO(T["NO_TEACHER_OR_GROUP"])
+        REPORT_INFO(T("NO_TEACHER_OR_GROUP"))
         return None
     chosen = None
     result = None

@@ -201,6 +201,10 @@ grades.makereports: {
     UNDEFINED_FUNCTION: "Auswerten des Symbols „{symbol}“: Funktion „{fn}“ ist unbekannt"
 }
 
+grades.ods_template: {
+
+}
+
 local.grade_functions: {
 #TODO ... not yet implemented/adapted
 #TODO: to be replaced by grade_processing?

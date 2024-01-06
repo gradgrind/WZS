@@ -1,13 +1,13 @@
 """
 ui/dialogs/dialog_course_teachers.py
 
-Last updated:  2023-12-24
+Last updated:  2024-01-06
 
 Supporting "dialog" for the course editor – edit the teachers of a course.
 
 
 =+LICENCE=============================
-Copyright 2023 Michael Towers
+Copyright 2024 Michael Towers
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -34,8 +34,8 @@ if __name__ == "__main__":
     from core.base import setup
     setup(os.path.join(basedir, 'TESTDATA'))
 
-#from core.base import TRANSLATIONS, REPORT_ERROR
-#T = TRANSLATIONS("ui.dialogs.dialog_course_teachers")
+#from core.base import Tr
+#T = Tr("ui.dialogs.dialog_course_teachers")
 
 ### +++++
 

@@ -1,10 +1,10 @@
 """
-core/subjects.py - last updated 2023-11-18
+core/subjects.py - last updated 2024-01-06
 
 Manage subjects data.
 
 =+LICENCE=================================
-Copyright 2023 Michael Towers
+Copyright 2024 Michael Towers
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -30,8 +30,8 @@ if __name__ == "__main__":
     from core.base import setup
     setup(os.path.join(basedir, 'TESTDATA'))
 
-#from core.base import TRANSLATIONS
-#T = TRANSLATIONS("core.subjects")
+#from core.base import Tr
+#T = Tr("core.subjects")
 
 ### +++++
 

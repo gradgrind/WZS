@@ -1,7 +1,7 @@
 """
 core/db_access.py
 
-Last updated:  2023-12-27
+Last updated:  2024-01-06
 
 Helper functions for accessing the database.
 
@@ -13,7 +13,7 @@ design choice, but it seems to be convenient) I use a 0-key and a
 corresponding entry in the target table.
 
 =+LICENCE=============================
-Copyright 2023 Michael Towers
+Copyright 2024 Michael Towers
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -30,7 +30,7 @@ Copyright 2023 Michael Towers
 =-LICENCE========================================
 """
 
-DATABASE = "wzx_2.sqlite"
+DATABASE = "wz.sqlite"
 
 ########################################################################
 
@@ -46,8 +46,8 @@ if __name__ == "__main__":
     from core.base import setup
     setup(os.path.join(basedir, 'TESTDATA'))
 
-from core.base import TRANSLATIONS
-T = TRANSLATIONS("core.db_access")
+from core.base import Tr
+T = Tr("core.db_access")
 
 ### +++++
 
@@ -332,7 +332,7 @@ class db_Table:
         # Check validity of value
         v, e = ftype.validate(self.db, value)
         if e:
-            REPORT_ERROR(T["UPDATE_VALIDATION_FAILED"].format(
+            REPORT_ERROR(T("UPDATE_VALIDATION_FAILED",
                 table = self.table, field = field, rowid = rowid, e = e
             ))
             return False
@@ -400,7 +400,7 @@ class db_Table:
             # Check validity of value
             v, e = ftype.validate(self.db, value)
             if e:
-                REPORT_ERROR(T["UPDATE_VALIDATION_FAILED"].format(
+                REPORT_ERROR(T("UPDATE_VALIDATION_FAILED",
                     table = self.table, field = field, rowid = rowid, e = e
                 ))
                 return False
@@ -439,7 +439,7 @@ class db_Table:
                 # Check validity of value
                 v, e = ftype.validate(self.db, value)
                 if e:
-                    REPORT_ERROR(T["INSERT_VALIDATION_FAILED"].format(
+                    REPORT_ERROR(T("INSERT_VALIDATION_FAILED",
                         table = self.table, field = field, e = e
                     ))
                     break

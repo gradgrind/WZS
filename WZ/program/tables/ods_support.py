@@ -1,5 +1,5 @@
 """
-tables/ods_support.py - last updated 2024-01-05
+tables/ods_support.py - last updated 2024-01-06
 
 Support reading and simple editing of ods-tables (for LibreOffice).
 
@@ -29,7 +29,7 @@ if __name__ == "__main__":
     sys.path[0] = appdir
     basedir = os.path.dirname(appdir)
     from core.base import setup
-    setup(os.path.join(basedir, 'TESTDATA'))
+    setup(os.path.join(basedir, 'TESTDATA'), debug = True)
 
 #from core.base import Tr
 #T = Tr("tables.ods_support")
@@ -44,7 +44,7 @@ import io
 from xml.sax import parse, parseString
 from xml.sax.handler import ContentHandler
 
-from core.base import REPORT_WARNING
+from core.base import REPORT_WARNING, REPORT_ERROR, REPORT_DEBUG
 
 trtable = str.maketrans({
     "<": "&lt;",
@@ -264,15 +264,24 @@ class ODS_Handler:
                 ll = []
                 for cc in c["children"]:
                     # Assume all children are cells or covered cells
-                    cn = cc["name"]
-                    assert cn in (self.TABLE_CELL, self.COVERED_TABLE_CELL)
+                    ccn = cc["name"]
                     ccattrs = cc["attributes"]
-                    v = self.VALUE_TYPE in ccattrs
+                    if ccn == self.COVERED_TABLE_CELL:
+                        # Count this as "used" even if empty
+                        used = True
+                    elif ccn == self.TABLE_CELL:
+                        used = self.VALUE_TYPE in ccattrs
+                    else:
+                        REPORT_ERROR(
+                            "Malformed ods-file?:\n"
+                            f"Element '{ccn}' in table row"
+                        )
+                        used = True
                     try:
                         l = int(ccattrs[self.REPEAT_COL])
                     except:
                         l = 1
-                    ll.append((v, l))
+                    ll.append((used, l))
                 # Count row length, not including empty trailing cells
                 length = 0
                 j = len(ll)
@@ -305,7 +314,7 @@ class ODS_Handler:
             if etype == self.TABLE_COL:
                 if _col >= max_length:
                     # Lose this column descriptor
-                    print(f"*** Debug, dropping column: {el}")
+                    REPORT_DEBUG(f"Dropping column: {el}")
                     continue
                 try:
                     rpt = int(attrs[self.REPEAT_COL])
@@ -397,13 +406,13 @@ class ODS_Handler:
                     try:
                         text += t["value"]
                     except KeyError:
-                        REPORT_WARNING(
-                            "Debug: ODS_Row_Handler\n"
+                        REPORT_DEBUG(
+                            "ODS_Row_Handler\n"
                             f"Unhandled item in <{cls.TEXT}>: {t}"
                         )
             else:
-                REPORT_WARNING(
-                    "Debug: ODS_Row_Handler\n"
+                REPORT_DEBUG(
+                    "ODS_Row_Handler\n"
                     f"Unhandled item in cell: {c}"
                 )
         #print("§cell_text:", cell_node, "->", text)

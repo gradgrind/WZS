@@ -1,13 +1,13 @@
 """
 core/course_base.py
 
-Last updated:  2023-12-29
+Last updated:  2024-01-06
 
 Support functions dealing with courses, lessons, etc.
 
 
 =+LICENCE=============================
-Copyright 2023 Michael Towers
+Copyright 2024 Michael Towers
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -34,8 +34,8 @@ if __name__ == "__main__":
     from core.base import setup
     setup(os.path.join(basedir, 'TESTDATA'))
 
-from core.base import TRANSLATIONS
-T = TRANSLATIONS("core.course_base")
+from core.base import Tr
+T = Tr("core.course_base")
 
 ### +++++
 
@@ -114,7 +114,7 @@ class COURSE_LINE(NamedTuple):
             return ", ".join(
                 f"{t.Teacher.TID}" for t in self.teacher_list
             )
-        REPORT_CRITICAL(f"TODO: Unknown COURSE_LINE field: {repr(field)}")
+        REPORT_CRITICAL(f"Bug: Unknown COURSE_LINE field: {repr(field)}")
 
     def info(self):
         g = ", ".join(
@@ -153,7 +153,7 @@ class BLOCK(NamedTuple):
         if value:
             m = re.match(BLOCK_PATTERN, value)
             if not m:
-                REPORT_ERROR(T["BAD_BLOCK_NAME"].format(block = value))
+                REPORT_ERROR(T("BAD_BLOCK_NAME", block = value))
                 return None
             return cls(id, *m.groups())
         else:
@@ -203,7 +203,7 @@ def blocks_info():
             if block:
                 key = block.key()
                 if key in block_map:
-                    REPORT_ERROR(T["BLOCK_KEY_REPEATED"].format(key = key))
+                    REPORT_ERROR(T("BLOCK_KEY_REPEATED", key = key))
                     continue
                 block_map[key] = block
     return block_map
@@ -458,14 +458,14 @@ class CourseGroups(db_Table):
                     cg = cglist[0]
                     if not cg.GROUP_TAG:
                         block = c.Lesson_block.BLOCK
-                        REPORT_WARNING(T["COURSE_WITHOUT_PUPILS"].format(
+                        REPORT_WARNING(T("COURSE_WITHOUT_PUPILS",
                             klass = cg.Class.CLASS,
                             sbj = c.Subject.NAME,
                             block = f"({block})" if block else ""
                         ))
                 if not rec.GROUP_TAG:
                     block = c.Lesson_block.BLOCK
-                    REPORT_WARNING(T["COURSE_WITHOUT_PUPILS"].format(
+                    REPORT_WARNING(T("COURSE_WITHOUT_PUPILS",
                         klass = rec.Class.CLASS,
                         sbj = c.Subject.NAME,
                         block = f"({block})" if block else ""
@@ -638,12 +638,12 @@ def grade_report_field(course_data: COURSE_LINE, on: bool = None) -> bool:
                 okg = True
                 break
         if not okg:
-            REPORT_ERROR(T["GRADES_BUT_NO_PUPILS"].format(
+            REPORT_ERROR(T("GRADES_BUT_NO_PUPILS",
                 course = str(course_data)
             ))
             on = False
         elif not course_data.teacher_list:
-            REPORT_ERROR(T["GRADES_BUT_NO_TEACHER"].format(
+            REPORT_ERROR(T("GRADES_BUT_NO_TEACHER",
                 course = str(course_data)
             ))
             on = False
@@ -674,7 +674,7 @@ def text_report_field(course_data: COURSE_LINE, text: str = None
     except ValueError:
         with_report = bool(text)    # when non-empty assume "on"
         if with_report:
-            REPORT_ERROR(T["BAD_REPORT_FIELD"].format(
+            REPORT_ERROR(T("BAD_REPORT_FIELD",
                 course = str(course_data)
             ))
         t1, t2 = "", ""
@@ -687,12 +687,12 @@ def text_report_field(course_data: COURSE_LINE, text: str = None
                 okg = True
                 break
         if not okg:
-            REPORT_ERROR(T["REPORT_BUT_NO_PUPILS"].format(
+            REPORT_ERROR(T("REPORT_BUT_NO_PUPILS",
                 course = str(course_data)
             ))
             with_report, t1, t2 = False, "", ""
         elif not teacher_names:
-            REPORT_ERROR(T["REPORT_BUT_NO_TEACHER"].format(
+            REPORT_ERROR(T("REPORT_BUT_NO_TEACHER",
                 course = str(course_data)
             ))
             with_report, t1, t2 = False, "", ""

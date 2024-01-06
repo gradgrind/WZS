@@ -1,3 +1,4 @@
+#deprecated ...
 """
 grades/gradetable.py
 

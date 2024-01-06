@@ -35,8 +35,8 @@ if __name__ == "__main__":
     from core.base import setup
     setup(os.path.join(basedir, 'TESTDATA'))
 
-from core.base import TRANSLATIONS
-T = TRANSLATIONS("ui.dialogs.dialog_parallel_lessons")
+#from core.base import Tr
+#T = Tr("ui.dialogs.dialog_parallel_lessons")
 
 ### +++++
 

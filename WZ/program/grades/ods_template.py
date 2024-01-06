@@ -1,8 +1,7 @@
 """
-tables/ods_template.py - last updated 2024-01-05
+grades/ods_template.py - last updated 2024-01-06
 
-Use ods-tables (ODF / LibreOffice) as templates.
-Can be used to produce grade tables.
+Use ods-tables (ODF / LibreOffice) as templates for grade tables.
 
 
 =+LICENCE=============================
@@ -32,15 +31,16 @@ if __name__ == "__main__":
     from core.base import setup
     setup(os.path.join(basedir, 'TESTDATA'))
 
-#from core.base import Tr
-#T = Tr("tables.ods_template")
+from core.base import Tr
+T = Tr("grades.ods_template")
 
 ### +++++
 
 import json
 
-from core.base import DATAPATH, REPORT_ERROR
+from core.base import DATAPATH, REPORT_ERROR, REPORT_WARNING
 from core.basic_data import CONFIG
+from core.dates import today
 from tables.ods_support import (
     substitute_zip_content,
     XML_Reader,
@@ -55,7 +55,7 @@ from grades.grade_tables_2 import grade_table_info
 
 # Process table rows
 
-class ODS_GradeTable:
+class GradeTable:
     def __init__(self):#, filepath: str):
         pass
 
@@ -117,14 +117,15 @@ class ODS_GradeTable:
         result = True    # retain row
         cells = element["children"]
         if self.row_count == 0:
+            last = None
             for i, c in enumerate(cells):
                 #print("  --", c)
-                #atr = c["attributes"]
-                if ODS_Handler.cell_text(c) == "$":
-                    print("$-index = ", i)
+                if c["children"]:
+                    last = c
                     self.min_cols = i + 1
-#??? Maybe rather cover the cell?
-                    ODS_Handler.set_cell_text(c, None)
+                elif c["name"] == ODS_Handler.COVERED_TABLE_CELL:
+                    self.min_cols = i + 1
+            ODS_Handler.set_cell_text(last, today())
 
 #--
         elif self.row_count > 20:
@@ -132,43 +133,68 @@ class ODS_GradeTable:
 #TODO: Be careful when deleting rows – consider what effect this has
 # on <self.row_count>.
 
+        elif not self.subject_keys:
+            ### Head/Info part
+            c0 = ODS_Handler.cell_text(cells[0])
+            if c0 == '§':
+                ## Add the subject keys
+                i = 0
+                j = 1
+                for cell in cells[1:]:
+                    ci = ODS_Handler.cell_text(cell)
+                    if ci.startswith('§'):
+                        try:
+                            s_id, sid, sname = self.subject_list[i]
+                        except IndexError:
+                            # No subjects left
+                            self.max_col = j
+                            break
+                        else:
+                            key = sid
+#TODO: Rather <key = str(s_id)>?
+                            self.subject_keys[ci] = key
+                            ODS_Handler.set_cell_text(cell, key)
+                        i += 1
+                    j += 1
+                else:
+                    if len(self.subject_list) > i:
+                        REPORT_ERROR(T("TOO_FEW_COLUMNS",
+                            n = len(self.subject_list) - i
+                        ))
+                while j < self.min_cols:
+                    ODS_Handler.set_cell_text(cells[j], None)
+                    j += 1
+                self.max_col = j
+                print("§max_col:", self.max_col)
+
+            else:
+                for i, c in enumerate(cells):
+                    if (
+                        c["children"]
+                        or c["name"] == ODS_Handler.COVERED_TABLE_CELL
+                    ):
+                        if (i + 1) > self.min_cols:
+                            self.min_cols = i + 1
+                if c0:
+                    try:
+                        text = self.info[c0]
+                    except KeyError:
+                        text = None
+                        REPORT_WARNING(T("MISSING_INFO", key = c0))
+                    ODS_Handler.set_cell_text(cells[2], text)
+
+
+
+
         else:
             c0 = ODS_Handler.cell_text(cells[0])
             if c0 == '§':
-                if self.subject_keys:
-                    # Add a student line
-                    pass
-
-                else:
-                    # Add the subject keys
-                    i = 0
-                    j = 1
-                    for cell in cells[1:]:
-                        ci = ODS_Handler.cell_text(cell)
-                        if ci.startswith('§'):
-                            try:
-                                s_id, sid, sname = self.subject_list[i]
-                            except IndexError:
-                                # No subjects left
-                                self.max_col = j
-                                print("§max_col:", self.max_col)
-                                break
-                            else:
-                                key = sid
-#TODO: Rather <key = str(s_id)>?
-                                self.subject_keys[ci] = key
-                                ODS_Handler.set_cell_text(cell, key)
-                            i += 1
-                        j += 1
-                    else:
-                        if len(self.subject_list) > i:
-                            REPORT_ERROR("TODO: not enough columns")
-                    while j < self.min_cols:
-                        ODS_Handler.set_cell_text(cells[j], None)
-                        j += 1
-                    self.max_col = j
+                # Add a student line
+                pass
 
 
+            elif c0 == '*':
+                pass
 
         self.row_count += 1
         return result
@@ -218,7 +244,7 @@ class ODS_GradeTable:
 if __name__ == "__main__":
     from core.basic_data import get_database
     db = get_database()
-    gt = ODS_GradeTable()
+    gt = GradeTable()
     gt.make_grade_table("1. Halbjahr", "12G.R",
         grades = {434: {6: "1+", 12: "4"}}
     )
