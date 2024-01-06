@@ -473,19 +473,19 @@ class ODS_Handler:
                     del cells[col0]
 
 
-# --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
-
-if __name__ == "__main__":
-    from core.base import DATAPATH
-
+def ODS_reader(filepath: str) -> list[list[str]]:
+    """Read the contents of the table (a single-sheet ods file),
+    returning a list of rows, each row is a list of column values.
+    All values are strings.
+    """
     def read_only(element: dict) -> bool:
         """A row handler for <ODS_Handler>, which just reads the data.
         """
-        line = [
+        rows.append([
             ODS_Handler.cell_text(c)
             for c in element["children"]
-        ]
-        print(" --", line)
+        ])
+        #print(" --", rows[-1])
         return False
 
     def read_xml(xml: str) -> None:
@@ -499,6 +499,19 @@ if __name__ == "__main__":
         )
         xml_handler.parse_string(xml)
         return None
+
+    rows = []
+    substitute_zip_content(
+        filepath,
+        process = read_xml
+    )
+    return rows
+
+
+# --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
+
+if __name__ == "__main__":
+    from core.base import DATAPATH
 
     def remove_column(elements):
         ODS_Handler.delete_column(elements, -22)
@@ -524,10 +537,8 @@ if __name__ == "__main__":
     filepath = DATAPATH("GRADES_SEK_II.ods", "TEMPLATES/GRADE_TABLES")
     #filepath = DATAPATH("test2.ods", "TEMPLATES/GRADE_TABLES")
 
-    ods = substitute_zip_content(
-        filepath,
-        process = read_xml
-    )
+    for i, row in enumerate(ODS_reader(filepath)):
+        print(f"{i:03d}:", row)
 
     ods = substitute_zip_content(
         filepath,

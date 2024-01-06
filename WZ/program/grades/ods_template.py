@@ -46,15 +46,67 @@ from tables.ods_support import (
     XML_Reader,
     XML_writer,
     ODS_Handler,
+    ODS_reader,
 )
 from grades.grade_tables import grade_table_info
 
 ### -----
 
+
+def readGradeTable(filepath: str):
+    """Read the grade information from the given ods file.
+    """
+    info = {}
+    grades = {}
+    s_names = {}
+    s_col = []
+    for i, row in enumerate(ODS_reader(filepath)):
+        #print(f"{i:03d}:", row)
+        id = row[0]
+        if not id:
+            continue
+        if id == '§':
+            # Read the subject keys, associate them with columns
+            if s_col:
+                REPORT_ERROR(T("REPEATED_SID_LINE", line = i + 1))
+                continue
+            for j in range(1, len(row)):
+                stag = row[j]
+                if stag:
+                    s_col.append((int(stag), j))
+
+        elif id == '*':
+            # Subject line
+            for stag, j in s_col:
+                s_names[stag] = row[j]
+            print("§SUBJECTS:", s_names)
+
+        else:
+            if s_col:
+                # Student grades
+                try:
+                    p_id = int(id)
+                except ValueError:
+                    REPORT_ERROR(T("BAD_PID", line = i + 1, pid = id))
+                    continue
+                pgrades = {}
+                grades[p_id] = pgrades
+                pgrades["__NAME__"] = row[1]
+                for stag, j in s_col:
+                    pgrades[stag] = row[j]
+                print("§PID:", p_id, pgrades)
+
+            else:
+                # Info tag
+                info[id] = row[1:3]
+
+    print("§info:", info)
+
+
 #TODO: Consider the possibility of adding rows and columns – it might
 # simplify template construction.
 
-class GradeTable:
+class BuildGradeTable:
     def __init__(self,
         occasion: str,
         class_group: str,
@@ -257,7 +309,13 @@ if __name__ == "__main__":
     from core.basic_data import get_database
     db = get_database()
 
-    gt = GradeTable("1. Halbjahr", "12G.R",
+    #TODO:
+    filepath = DATAPATH("test_read_grades.ods", "working_data")
+    readGradeTable(filepath)
+
+    quit(2)
+
+    gt = BuildGradeTable("1. Halbjahr", "12G.R",
 #        grades = {434: {6: "1+", 12: "4"}}
     )
     filepath = os.path.join(
@@ -267,7 +325,7 @@ if __name__ == "__main__":
     gt.save(filepath)
     print(" -->", filepath)
 
-    gt = GradeTable("1. Halbjahr", "12G.G")
+    gt = BuildGradeTable("1. Halbjahr", "12G.G")
     filepath = os.path.join(
         os.path.dirname(gt.template_file),
         gt.output_file_name
@@ -275,7 +333,7 @@ if __name__ == "__main__":
     gt.save(filepath)
     print(" -->", filepath)
 
-    gt = GradeTable("1. Halbjahr", "11G")
+    gt = BuildGradeTable("1. Halbjahr", "11G")
     filepath = os.path.join(
         os.path.dirname(gt.template_file),
         gt.output_file_name
