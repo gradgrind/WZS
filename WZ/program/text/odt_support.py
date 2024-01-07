@@ -36,6 +36,9 @@ if __name__ == "__main__":
 
 ### +++++
 
+import re
+
+from core.base import REPORT_DEBUG
 from tables.ods_support import (
     substitute_zip_content,
     XML_Reader,
@@ -43,6 +46,77 @@ from tables.ods_support import (
 )
 
 ### -----
+
+ODT_TEXT = "text:p"
+ODT_SPAN = "text:span"
+
+def ODT_get_text(cell_node) -> str:
+    text = ""
+    for c in cell_node["children"]:
+        #print("???", c)
+        try:
+            text += c["value"]
+        except KeyError:
+            if c["name"] in (ODT_TEXT, ODT_SPAN):
+                for t in c["children"]:
+                    try:
+                        text += t["value"]
+                    except KeyError:
+                        REPORT_DEBUG(
+                            "ODT_get_text\n"
+                            f"Unhandled item in <{ODT_TEXT}>: {t}"
+                        )
+            else:
+                REPORT_DEBUG(
+                    "ODT_get_text\n"
+                    f"Unhandled item in cell: {c}"
+                )
+    #if text: print("§ODT_get_text:", cell_node, "->", text)
+    return text
+
+
+def read_ODT_template(filepath: str) -> dict[str, int]:
+    """Read the contents of the document seeking special text fields.
+    These are delimited by [[ and ]].
+    Return a mapping, delimiter-stripped key -> number of occurrences.
+    """
+    def fsub(m):
+        k = m.group(1)
+        print("$$$", k)
+        try:
+            keys[k] += 1
+        except KeyError:
+            keys[k] = 1
+        return "?"
+
+    def read_only(element: dict) -> bool:
+        """A text-element handler for <ODT_Handler>, which just reads
+        specially delimited text snippets.
+        """
+        if element["name"] in (ODT_SPAN, ODT_TEXT):
+            text0 = ODT_get_text(element)
+            text = regex.sub(fsub, text0)
+            if text != text0:
+                element["children"] = []
+        return [element]
+
+    def read_xml(xml: str) -> None:
+        """A read-only handler for ods tables.
+        """
+        xml_handler = XML_Reader(
+            process_element = read_only,
+        )
+        xml_handler.parse_string(xml)
+        return None
+
+    regex = re.compile(r"\[\[(.*?)\]\]")
+    keys = {}
+    substitute_zip_content(
+        filepath,
+        process = read_xml
+    )
+    return keys
+
 
 #TODO
 class ODT_Template:
@@ -302,6 +376,35 @@ class ODT_Template:
 if __name__ == "__main__":
     from core.base import DATAPATH
 
+    filepath = DATAPATH("testA.odt", "working_data")
+    print("§KEYS in", filepath)
+    keys = read_ODT_template(filepath)
+    print("\n  ================================")
+    print("\n -->", keys)
+
+    quit(2)
+
+    def read_xml(xml: str) -> str:
+        handler = ODS_Handler(
+            table_handler = extend,
+        )
+        xml_handler = XML_Reader(
+            process_element = handler.process_element,
+            report_clean = True
+        )
+        root = xml_handler.parse_string(xml)
+        return '<?xml version="1.0" encoding="UTF-8"?>\n' + XML_writer(root)
+
+    filepath = DATAPATH("testA.odt", "working_data")
+    ods = substitute_zip_content(
+        filepath,
+        process = extend_xml
+    )
+    filepath = filepath.rsplit('.', 1)[0] + '_X.odt'
+    with open(filepath, 'bw') as fh:
+        fh.write(ods)
+    print(" -->", filepath)
+
     def extend(elements):
         ODS_Handler.append_columns(elements, 3)
         ODS_Handler.add_rows(elements, 3, 1)
@@ -321,12 +424,12 @@ if __name__ == "__main__":
         root = xml_handler.parse_string(xml)
         return '<?xml version="1.0" encoding="UTF-8"?>\n' + XML_writer(root)
 
-    filepath = DATAPATH("test_extend1.ods", "working_data")
+    filepath = DATAPATH("testA.odt", "working_data")
     ods = substitute_zip_content(
         filepath,
         process = extend_xml
     )
-    filepath = filepath.rsplit('.', 1)[0] + '_X.ods'
+    filepath = filepath.rsplit('.', 1)[0] + '_X.odt'
     with open(filepath, 'bw') as fh:
         fh.write(ods)
     print(" -->", filepath)
