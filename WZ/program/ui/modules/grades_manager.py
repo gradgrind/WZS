@@ -1,7 +1,7 @@
 """
 ui/modules/grades_manager.py
 
-Last updated:  2024-01-06
+Last updated:  2024-01-07
 
 Front-end for managing grade reports.
 
@@ -68,7 +68,7 @@ from core.list_activities import report_data
 from core.classes import class_group_split_with_id
 #from grades.grade_tables import subject_map
 from grades.grade_tables import grade_table_info
-from grades.ods_template import GradeTable
+from grades.ods_template import BuildGradeTable
 
 ### -----
 
@@ -245,7 +245,7 @@ class ManageGradesPage(QObject):
     @Slot()
     def on_pb_grade_input_table_clicked(self):
         print("§MAKE GRADE TABLE")
-        gt = GradeTable(self.occasion, self.class_group)
+        gt = BuildGradeTable(self.occasion, self.class_group)
         fpath = SAVE_FILE(
             f'{T("ods_file")} (*.ods)',
             start = gt.output_file_name

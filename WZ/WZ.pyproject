@@ -21,7 +21,6 @@
         "program/grades/make_grade_reports.py",
         "program/grades/ods_template.py",
         "program/tables/matrix.py",
-        "program/tables/ods_support.py",
         "program/ui/README_icons",
         "program/ui/course_table.py",
         "program/ui/dialogs/dialog_block_name.py",
@@ -43,6 +42,7 @@
         "program/ui/rotated_table_header.py",
         "program/ui/table_support.py",
         "program/ui/ui_base.py",
-        "program/tables/ods_support_2.py"
+        "program/tables/ods_support.py",
+        "program/text/odt_support.py"
     ]
 }

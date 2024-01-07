@@ -1,11 +1,11 @@
 """
-tables/ods_support.py - last updated 2024-01-06
+tables/ods_support.py - last updated 2024-01-07
 
 Support reading and simple editing of ods-tables (for LibreOffice).
 
 
 =+LICENCE=============================
-Copyright 2023 Michael Towers
+Copyright 2024 Michael Towers
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -224,8 +224,11 @@ class ODS_Handler:
     TABLE_COL = "table:table-column"
     TABLE_CELL = "table:table-cell"
     COVERED_TABLE_CELL = "table:covered-table-cell"
+    TABLE_STYLE = "table:style-name"
     REPEAT_ROW = "table:number-rows-repeated"
     REPEAT_COL = "table:number-columns-repeated"
+    ROW_SPAN = "table:number-rows-spanned"
+    COL_SPAN = "table:number-columns-spanned"
     VISIBLE = "table:visibility"
     HIDDEN = "collapse"
     VALUE_TYPE = "office:value-type"
@@ -246,6 +249,13 @@ class ODS_Handler:
         row_handler = None,     # function(row-element) -> bool
         table_handler = None,   # function(table-elements: list) -> dict
     ):
+        """The table handler is called after the whole table has been
+        read and is normally the function that is used for modifying the
+        table.
+        The row handler is called earlier and is convenient for reading
+        the data on a row-by-row basis.
+        It may also be used as a sort of pre-processor for rows.
+        """
         self.row_handler = row_handler
         self.table_handler = table_handler
 
@@ -451,6 +461,8 @@ class ODS_Handler:
     def delete_column(cls, elements: list[dict], col: int):
         """Remove the given column (0-indexed).
         If the value is negative, delete all columns starting at <- col>.
+        WARNING: This will not handle deleting from a column-spanned
+        area correctly.
         """
         if col < 0:
             col0 = -col
@@ -471,6 +483,111 @@ class ODS_Handler:
                     del cells[col0:]
                 else:
                     del cells[col0]
+
+    @classmethod
+    def append_columns(cls, elements: list[dict], n: int):
+        """Append n empty columns, using the style attributes of the
+        last column.
+        """
+        cols = []
+        i = 0
+        # Assume column elements precede row elements.
+        for element in elements:
+            if element["name"] == cls.TABLE_COL:
+                cols.append((element, i))
+            elif cols:
+                break
+            i += 1
+        el0, index = cols[-1]
+        attr = el0["attributes"]
+        elements[index+1:index+1] = [
+            {   "name": cls.TABLE_COL,
+                "attributes": attr.copy(),
+                "children": []
+            }
+            for j in range(n)
+        ]
+        i += n
+        rows = []
+        rs_active = 0
+        while True:
+            if element["name"] == cls.TABLE_ROW:
+                rows.append((element, i))
+                clist = element["children"]
+                attr = clist[-1]["attributes"]
+                tag = cls.TABLE_CELL
+                rs = attr.get(cls.ROW_SPAN)
+                if rs:
+                    rs_active = int(rs)
+                elif rs_active:
+                    rs_active -= 1
+                    if rs_active:
+                        tag = cls.COVERED_TABLE_CELL
+                for j in range(n):
+                    clist.append({
+                        "name": tag,
+                        "attributes": attr.copy(),
+                        "children": []
+                    })
+            i += 1
+            try:
+                element = elements[i]
+            except IndexError:
+                break
+
+    @classmethod
+    def add_rows(cls, elements: list[dict], row: int, n: int
+    ) -> list[dict]:
+        """Append <n> empty rows to the row at (0-based) index <row>,
+        using the style attributes of that row.
+        <row> may also be negative (-1 => last row).
+        WARNING: This will not handle inserting in a row-spanned
+        area correctly.
+        Return a list of all rows.
+        """
+        # Get a list of row elements, with each row's index in the
+        # table list.
+        rows = [
+            (element, i)
+            for i, element in enumerate(elements)
+            if element["name"] == cls.TABLE_ROW
+        ]
+        if row < 0:
+            row = len(rows) + row
+        element, i = rows[row]
+        elattr = element["attributes"]
+        new = []
+        for j in range(n):
+            clist = []
+            # Cells covered because of column spanning should remain so
+            cs_active = 0
+            for cell in element["children"]:
+                attr = cell["attributes"]
+                tag = cls.TABLE_CELL
+                cs = attr.get(cls.COL_SPAN)
+                if cs:
+                    cs_active = int(cs)
+                elif cs_active:
+                    cs_active -= 1
+                    if cs_active:
+                        tag = cls.COVERED_TABLE_CELL
+                clist.append({
+                    "name": tag,
+                    "attributes": attr.copy(),
+                    "children": []
+                })
+            new.append({
+                "name": cls.TABLE_ROW,
+                "attributes": elattr.copy(),
+                "children": clist,
+            })
+        elements[i+1:i+1] = new
+        new_rows = []
+        for el, i in rows:
+            new_rows.append(el)
+            if len(new_rows) == (row + 1):
+                new_rows += new
+        return new_rows
 
 
 def ODS_reader(filepath: str) -> list[list[str]]:
@@ -512,6 +629,37 @@ def ODS_reader(filepath: str) -> list[list[str]]:
 
 if __name__ == "__main__":
     from core.base import DATAPATH
+
+    def extend(elements):
+        ODS_Handler.append_columns(elements, 3)
+        ODS_Handler.add_rows(elements, 3, 1)
+        rows = ODS_Handler.add_rows(elements, -1, 4)
+        ODS_Handler.set_cell_text(rows[10]["children"][4], "nb")
+        ODS_Handler.set_cell_text(rows[13]["children"][5], "3-")
+        return {}
+
+    def extend_xml(xml: str) -> str:
+        handler = ODS_Handler(
+            table_handler = extend,
+        )
+        xml_handler = XML_Reader(
+            process_element = handler.process_element,
+            report_clean = True
+        )
+        root = xml_handler.parse_string(xml)
+        return '<?xml version="1.0" encoding="UTF-8"?>\n' + XML_writer(root)
+
+    filepath = DATAPATH("test_extend1.ods", "working_data")
+    ods = substitute_zip_content(
+        filepath,
+        process = extend_xml
+    )
+    filepath = filepath.rsplit('.', 1)[0] + '_X.ods'
+    with open(filepath, 'bw') as fh:
+        fh.write(ods)
+    print(" -->", filepath)
+
+#    quit(2)
 
     def remove_column(elements):
         ODS_Handler.delete_column(elements, -22)
