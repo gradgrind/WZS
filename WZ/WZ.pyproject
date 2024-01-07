@@ -43,6 +43,7 @@
         "program/ui/table_support.py",
         "program/ui/ui_base.py",
         "program/tables/ods_support.py",
-        "program/text/odt_support.py"
+        "program/text/odt_support.py",
+        "program/grades/odt_grade_reports.py"
     ]
 }
