@@ -1,5 +1,5 @@
 """
-grades/ods_template.py - last updated 2024-01-06
+grades/ods_template.py - last updated 2024-01-08
 
 Use ods-tables (ODF / LibreOffice) as templates for grade tables.
 
@@ -142,15 +142,6 @@ class BuildGradeTable:
             grades = grades,
         )
 
-#Testing ...
-#        self.subject_list += [
-#            (101, "XA", "AAAAAAAAAAAAAAAAAAAA"),
-#            (102, "XB", "BBBBBBBBBBBBBBBBBBBB"),
-#            (103, "XC", "CCCCCCCCCCCCCCCCCCCC"),
-#            (104, "XD", "DDDDDDDDDDDDDDDDDDDD"),
-#            (105, "XE", "EEEEEEEEEEEEEEEEEEEE"),
-#        ]
-
         self.ods = substitute_zip_content(
             self.template_file,
             process = self.process_xml
@@ -186,14 +177,14 @@ class BuildGradeTable:
                     ci = ODS_Handler.cell_text(cell)
                     if ci.startswith('§'):
                         try:
-                            s_id, sid, sname = self.subject_list[i]
+                            sbj = self.subject_list[i]
                         except IndexError:
                             # No subjects left
                             self.max_col = j
                             break
                         else:
-                            self.subject_keys[ci] = (s_id, sname)
-                            ODS_Handler.set_cell_text(cell, str(s_id))
+                            self.subject_keys[ci] = (sbj.id, sbj.NAME)
+                            ODS_Handler.set_cell_text(cell, str(sbj.id))
                         i += 1
                     j += 1
                 else:

@@ -153,7 +153,7 @@ class _CALENDAR:
             else:
                 self._map[key] = val
         d1, d2 = self._map["ACCOUNTING_YEAR"]
-        print("\nCALENDAR:", self._map)
+        #print("§CALENDAR:", self._map)
 
     def __getattr__(self, key) -> Any:
         return self._map[key]

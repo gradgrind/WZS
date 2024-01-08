@@ -1,5 +1,5 @@
 """
-core/subjects.py - last updated 2024-01-06
+core/subjects.py - last updated 2024-01-08
 
 Manage subjects data.
 
@@ -42,6 +42,8 @@ from core.db_access import (
     DB_FIELD_TEXT,
 )
 
+SUBJECT_SEP = '*'   # separator in subject name, before extra tag
+
 ### -----
 
 
@@ -75,7 +77,12 @@ class Subjects(db_Table):
                 subjects.append((s, data.SID, data.NAME))
         return subjects
 
-
+    @staticmethod
+    def clip_name(name: str) -> str:
+        """Return the given subject name without the optional extra suffix.
+        """
+        return name.rsplit(SUBJECT_SEP, 1)[0]
+#+
 DB_TABLES[Subjects.table] = Subjects
 
 

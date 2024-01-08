@@ -118,11 +118,16 @@ def read_ODT_template(filepath: str) -> dict[str, int]:
     return keys
 
 
-def write_ODT_template(filepath: str, fields: dict[str, str]
+def write_ODT_template(
+    filepath: str,
+    fields: dict[str, str],
+    special = None,
 ) -> tuple[bytes, dict[str, int], dict[str, str]]:
     """Read the contents of the document seeking special text fields.
     These are delimited by [[ and ]].
     Substitute these by the values supplied in <fields>.
+    <special> is an optional function for replacing keys which are not
+    in <fields>. It returns <None> if it receives a key it cannot handle.
     Return three items:
         - The modified file (bytes),
         - non-substituted fields in the document:
@@ -138,10 +143,15 @@ def write_ODT_template(filepath: str, fields: dict[str, str]
             used.add(k)
         except KeyError:
             try:
-                missing[k] += 1
-            except KeyError:
-                missing[k] = 1
-            text = "???"
+                text = special(k)
+            except TypeError:
+                text = None
+            if text is None:
+                try:
+                    missing[k] += 1
+                except KeyError:
+                    missing[k] = 1
+                text = "???"
         return text
 
     def replace(element: dict) -> bool:

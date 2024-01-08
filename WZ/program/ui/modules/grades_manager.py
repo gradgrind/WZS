@@ -178,7 +178,7 @@ class ManageGradesPage(QObject):
 
         # s_id, sid, sname = self.subject_list[i]
         ncols = len(self.subject_list) + 2
-        headers = [s[2] for s in self.subject_list]
+        headers = [s.NAME for s in self.subject_list]
 
         tw = self.ui.grade_table
 

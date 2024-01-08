@@ -1,5 +1,5 @@
 """
-grades/grade_tables.py - last updated 2024-01-06
+grades/grade_tables.py - last updated 2024-01-08
 
 Manage grade tables.
 
@@ -45,15 +45,67 @@ from core.base import (
     REPORT_WARNING,
     REPORT_CRITICAL
 )
-#from core.db_access import db_TableRow
+from core.db_access import (
+    DB_TABLES,
+    db_Table,
+    DB_PK,
+    DB_FIELD_TEXT,
+    DB_FIELD_JSON,
+    DB_FIELD_REFERENCE,
+)
 from core.basic_data import CALENDAR, get_database, CONFIG
 from core.classes import GROUP_ALL, class_group_split_with_id
-import core.students    # needed to initialize STUDENTS table
+from core.students import Students
 from core.list_activities import report_data
 
 NO_GRADE = '/'
 
 ### -----
+
+class Grades(db_Table):
+    table = "GRADES"
+
+    @classmethod
+    def init(cls) -> bool:
+        if cls.fields is None:
+            cls.init_fields(
+                DB_PK(),
+                DB_FIELD_TEXT("OCCASION"),
+                DB_FIELD_TEXT("CLASS_GROUP"),
+                DB_FIELD_TEXT("TAG"),
+                DB_FIELD_REFERENCE("Student", target = Students.table),
+                DB_FIELD_TEXT("LEVEL"),
+                DB_FIELD_JSON("GRADE_MAP"),
+            )
+            return True
+        return False
+
+    def grades_occasion_group(self,
+        occasion: str,
+        class_group: str,
+        tag: str = "",
+    ) -> dict[int, tuple[str, dict[int, str]]]:
+        """Return a mapping with an entry for each student in the group
+        who has an entry for the given occasion.
+        The values are a pair:
+            - LEVEL   (Use this level rather than that of the student,
+                      which might have changed after this set of reports)
+            - grade mapping: subject-id -> grade
+        """
+        # NOTE: The grades are stored as a list of pairs because
+        # subject-ids are integers, which can't be keys in json.
+        return {
+            rec.Student.id: (rec.LEVEL, dict(rec.GRADE_MAP))
+            for rec in self.records
+            if (
+                rec.OCCASION == occasion
+                and rec.CLASS_GROUP == class_group
+                and rec.TAG == tag
+            )
+        }
+#+
+DB_TABLES[Grades.table] = Grades
+
 
 def subject_map(
     class_id: int,
@@ -182,11 +234,9 @@ def grade_table_info(
     ## Get the subject data for this group
     smap = subject_map(class_id, group, report_info)
     ## ... and the student data
-    slist, plist, p_subjects = students_grade_info(class_id, group, smap)
-    subject_list = [
-        (sbj.id, sbj.SID, sbj.NAME)
-        for sbj in slist
-    ]
+    subject_list, plist, p_subjects = students_grade_info(
+        class_id, group, smap
+    )
 
     ## Collect students
     student_list = []
@@ -214,9 +264,9 @@ def grade_table_info(
         pmap["GRADES"] = glist
         tlist = []
         pmap["TEACHERS"] = tlist
-        for s_id, sid, sname in subject_list:
-            gr = pgrades.get(s_id) or ""
-            tset = sbjdata[s_id]
+        for sbj in subject_list:
+            gr = pgrades.get(sbj.id) or ""
+            tset = sbjdata[sbj.id]
             tlist.append(tset)
             if tset:
                 # There is a set of teachers
@@ -226,7 +276,7 @@ def grade_table_info(
                 if gr and gr != NO_GRADE:
                     REPORT_WARNING(T("UNEXPECTED_GRADE",
                         grade = gr,
-                        subject = sname,
+                        subject = sbj.NAME,
                         student = pname,
                     ))
                 glist.append(NO_GRADE)
