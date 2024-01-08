@@ -1,5 +1,5 @@
 """
-text/odt_support.py - last updated 2024-01-07
+text/odt_support.py - last updated 2024-01-08
 
 Support simple editing of odt-files (for LibreOffice) as templates.
 
@@ -82,7 +82,7 @@ def read_ODT_template(filepath: str) -> dict[str, int]:
     """
     def fsub(m):
         k = m.group(1)
-        print("$$$", k)
+        #print("$$$", k)
         try:
             keys[k] += 1
         except KeyError:
@@ -132,7 +132,7 @@ def write_ODT_template(filepath: str, fields: dict[str, str]
     """
     def fsub(m):
         k = m.group(1)
-        print("$$$", k)
+        #print("$$$", k)
         try:
             text = fields[k]
             used.add(k)

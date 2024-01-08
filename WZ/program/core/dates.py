@@ -166,6 +166,7 @@ def migrate_calendar(new_year: str = None
 
 
 #################################################################
+'''
 #TODO ...
 def save_calendar(cls, text, fpath=None):
     """Save the given text as a calendar file to the given path.
@@ -236,6 +237,8 @@ def calendar_year(calendar):
         return calendar["LAST_DAY"].split("-", 1)[0]
     except KeyError:
         raise DataError(T("MISSING_LAST_DAY"))
+'''
+
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
 

@@ -1,7 +1,7 @@
 """
 core/base.py
 
-Last updated:  2024-01-06
+Last updated:  2024-01-08
 
 Basic configuration and structural stuff.
 
@@ -22,12 +22,6 @@ Copyright 2024 Michael Towers
 
 =-LICENCE=================================
 """
-
-#TODO: Needs a lot of cleaning and updating
-
-NO_DATE = "*"  # an unspecified date
-
-########################################################################
 
 import sys, os
 
@@ -52,6 +46,8 @@ from configparser import ConfigParser
 
 __REPORT = None
 
+#NO_DATE = "*"  # an unspecified date
+
 ### -----
 
 __TRANSLATIONS = ConfigParser()
@@ -61,8 +57,8 @@ def Tr(module_key):
     def __translator(key, **kargs):
         return tk[key].replace("¶", "\n").format(**kargs)
     return __translator
-#+
-T = Tr("core.base")
+
+#T = Tr("core.base")
 
 
 def set_reporter(function):
@@ -110,7 +106,7 @@ def setup(datadir, debug = False):
     <datadir> is the full path to the folder containing the
     application data (i.e. the school data).
     """
-    global __DATA, CALENDAR, SCHOOLYEAR, DEBUG
+    global __DATA, CALENDAR, DEBUG
     DEBUG = debug
     __DATA = datadir
 

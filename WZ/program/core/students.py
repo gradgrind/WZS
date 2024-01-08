@@ -1,5 +1,5 @@
 """
-core/students.py - last updated 2024-01-01
+core/students.py - last updated 2024-01-08
 
 Manage students data.
 
@@ -85,11 +85,34 @@ class Students(db_Table):
 #        self.init()
 #        super().__init__(db)
 
+    def all_string_fields(self, id: int) -> dict[str, str|int]:
+        """Return a mapping containing all pupil fields with string values,
+        including a single name field for general usage (short form) as well
+        as the full name.
+        """
+        data = self[id]
+        d = {}
+        for f in self.fields:
+            fname = f.field
+            v = getattr(data, fname)
+            if isinstance(v, str):
+                d[fname] = v
+        d.update(data.EXTRA)
+        d["NAME"] = self.get_name(data)
+        d["FULLNAME"] = self.get_fullname(data)
+        return d
+
     @staticmethod
     def get_name(data):
         """Return the short form of the name from the given record.
         """
         return f"{data.FIRSTNAME} {data.LASTNAME}"
+
+    @staticmethod
+    def get_fullname(data):
+        """Return the full name from the given record.
+        """
+        return f"{data.FIRSTNAMES} {data.LASTNAME}"
 
     def name(self, id):
         """Return the short form of the name from the given db-id.

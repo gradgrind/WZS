@@ -1,11 +1,11 @@
 """
-core/basic_data.py - last updated 2023-12-27
+core/basic_data.py - last updated 2024-01-08
 
 Configuration and other basic data dependent on the database.
 
 
 ==============================
-Copyright 2023 Michael Towers
+Copyright 2024 Michael Towers
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -153,12 +153,17 @@ class _CALENDAR:
             else:
                 self._map[key] = val
         d1, d2 = self._map["ACCOUNTING_YEAR"]
-        self._map["SCHOOL_YEAR"] = (
-            CONFIG.SCHOOL_YEAR_FROM.format(d1, d2).split('-', 1)[0]
-        )
+        print("\nCALENDAR:", self._map)
 
     def __getattr__(self, key) -> Any:
         return self._map[key]
+
+    def all_string_fields(self):
+        return {
+            f: val
+            for f, val in self._map.items()
+            if isinstance(val, str)
+        }
 #+
 CALENDAR = _CALENDAR()
 

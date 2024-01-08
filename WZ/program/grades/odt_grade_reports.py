@@ -1,5 +1,5 @@
 """
-grades/odt_grade_reports.py - last updated 2024-01-07
+grades/odt_grade_reports.py - last updated 2024-01-08
 
 Use odt-documents (ODF / LibreOffice) as templates for grade reports.
 
@@ -39,8 +39,8 @@ T = Tr("grades.odt_grade_reports")
 import json
 
 from core.base import DATAPATH, REPORT_ERROR, REPORT_WARNING
-from core.basic_data import CONFIG
-from core.dates import today
+from core.basic_data import get_database, CONFIG, CALENDAR
+from core.dates import today, print_date
 from text.odt_support import write_ODT_template
 from grades.grade_tables import grade_table_info
 
@@ -83,6 +83,11 @@ def get_template(occasion: str, class_group: str,) -> str:
 #    )
 
 
+FIELD_MAPPING = {
+    "LEVEL": {"HS": "Hauptschule", "RS": "Realschule", "Gym": "Gymnasium"},
+    "SEX": {"m": "Herr", "w": "Frau"},
+}
+
 def make_grade_reports(
     occasion: str,
     class_group: str,
@@ -96,6 +101,7 @@ def make_grade_reports(
 #?
     grades: dict = None
 ):
+    db = get_database()
     ## Get template
     template_file = get_template(occasion, class_group)
     if not template_file:
@@ -111,14 +117,53 @@ def make_grade_reports(
         grades = grades,
     )
 
+    students = db.table("STUDENTS")
+
+    print("$", student_list[0])
+    stdata = students.all_string_fields(student_list[0]["§"])
+
+    stdata.update(CALENDAR.all_string_fields())
+#TODO: add other fields
+
+    fields = {}
+    for f, val in stdata.items():
+        if f.startswith("DATE_"):
+            if val:
+                try:
+                    val = print_date(val, CONFIG.GRADE_DATE_FORMAT)
+                except KeyError:
+                    val = print_date(val)
+            fields[f] = val
+        else:
+            try:
+                fmap = FIELD_MAPPING[f]
+            except KeyError:
+                fields[f] = val
+            else:
+                try:
+                    fields[f] = fmap[val]
+                except:
+                    REPORT_ERROR(T("NO_FIELD_MAPPING",
+                        field = f, value = val
+                    ))
+
+    print("\n$$$", fields)
+
+    odt, m, u = write_ODT_template(template_file, fields)
+
+    print("\n§MISSING:", m)
+    print("\n§UNUSED:", u)
+
+# Just for testing!
+    outpath = template_file.rsplit('.', 1)[0] + '_X.odt'
+    with open(outpath, 'bw') as fh:
+        fh.write(odt)
+    print(" -->", outpath)
 
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
 
 if __name__ == "__main__":
-    from core.basic_data import get_database
-    db = get_database()
-
 
     make_grade_reports("1. Halbjahr", "12G.R")
 
