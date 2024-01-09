@@ -1,5 +1,5 @@
 """
-grades/odt_grade_reports.py - last updated 2024-01-08
+grades/odt_grade_reports.py - last updated 2024-01-09
 
 Use odt-documents (ODF / LibreOffice) as templates for grade reports.
 
@@ -42,8 +42,9 @@ from core.base import DATAPATH, REPORT_ERROR, REPORT_WARNING
 from core.basic_data import get_database, CONFIG, CALENDAR
 from core.dates import today, print_date
 from core.classes import class_group_split
+from core.subjects import Subjects
 from text.odt_support import write_ODT_template
-from grades.grade_tables import grade_table_info
+from grades.grade_tables import grade_table_info, grade_scale
 
 ### -----
 
@@ -110,35 +111,42 @@ def make_grade_reports(
     def special(key):
         """Enter the subjects and grades in the template.
         """
+#TODO: Handle subject keys ...
         nonlocal g_pending
         #print("§SPECIAL:", key)
         if key == "$":
-            g = "!!!" if g_pending is None else g_pending
+            if g_pending is None:
+                g = "!!!"
+            elif g_pending == CONFIG.NO_GRADE_DOC:
+                g = g_pending
+            else:
+                g = grade_map[g_pending][0]
             g_pending = None
             return g
-#TODO: I have a problem here detecting which keys are valid subject-keys
-        for k in key:
-            try:
-                s, g_pending = subject_map[k].pop()
-                return s
-            except KeyError:
-                return None
-            except IndexError:
-                pass
-                #del subject_map[k]
-        # No subjects left, add a null entry
-        g_pending = "NULL_G"
-        return "NULL_S"
-
-#TODO: If there are still entries in subject_map at the end of
-# the processing, these are unplaced values – report them.
-
+        if key.startswith("."):
+            for k in key[1:].split("."):
+                try:
+                    s, g_pending = subject_map[k].pop()
+                    return s
+                except KeyError:
+                    continue
+                except IndexError:
+                    del subject_map[k]
+            # No subjects left, add a null entry
+            g_pending = CONFIG.NO_GRADE_DOC
+            return CONFIG.NO_GRADE_DOC
+        return None
 
     db = get_database()
     ## Get template
     template_file = get_template(occasion, class_group)
     if not template_file:
         return
+
+    gscale = grade_scale(class_group)
+    glist = json.loads(getattr(CONFIG, f"GRADE_TABLE_{gscale}"))
+    grade_map = { g0: (g1, g2) for g0, g1, g2 in glist }
+    print("§grade_map:", grade_map)
 
     ## Get grades
     gtable = db.table("GRADES")
@@ -154,7 +162,6 @@ def make_grade_reports(
     )
 
     students = db.table("STUDENTS")
-    subjects = db.table("SUBJECTS")
 
     print("\nSUBJECTS:", subject_list)
 
@@ -175,7 +182,7 @@ def make_grade_reports(
     subject_map = {}
     for i, sbj in enumerate(subject_list):
         s = sbj.SORTING
-        val = (subjects.clip_name(sbj.NAME), grade_list[i])
+        val = (Subjects.clip_name(sbj.NAME), grade_list[i])
         try:
             subject_map[s].append(val)
         except KeyError:
@@ -188,13 +195,22 @@ def make_grade_reports(
     stdata.update(CALENDAR.all_string_fields())
 #TODO: add other fields
 
-    c, g = class_group_split(class_group)
+#TODO
+    stdata["REMARKS"] = (
+        "A comment.\n"
+        "A further comment.\n"
+        "Something to sum the whole thing up without going into too much"
+        " depth, but still saying something new.\n"
+        "More? You must be kidding!"
+    )
 
+    c, g = class_group_split(class_group)
     fields = {
         "SCHOOL": CONFIG.SCHOOL,
         "SCHOOLBIG": CONFIG.SCHOOL.upper(),
         "OCCASION": occasion,
         "CLASS": c,
+        "-REMARKS": "––––––––––––",
     }
     for f, val in stdata.items():
         if f.startswith("DATE_"):
@@ -222,9 +238,16 @@ def make_grade_reports(
 
     g_pending = None
     odt, m, u = write_ODT_template(template_file, fields, special)
+    # If there are still entries in <subject_map> at the end of
+    # the processing, these are unplaced values – report them.
+    xs_subjects = []
+    for sg in subject_map.values():
+        xs_subjects += [ f"  -- {s}: {g}" for s, g in sg ]
+    if xs_subjects:
+        REPORT_ERROR(T("EXCESS_SUBJECTS", slist = "\n".join(xs_subjects)))
 
     print("\n§MISSING:", m)
-    print("\n§UNUSED:", u)
+    print("\n§USED:", u)
 
 # Just for testing!
     outpath = template_file.rsplit('.', 1)[0] + '_X.odt'
@@ -252,7 +275,7 @@ if __name__ == "__main__":
     odt, m, u = write_ODT_template(filepath, fields)
 
     print("\n§MISSING:", m)
-    print("\n§UNUSED:", u)
+    print("\n§USED:", u)
 
     outpath = filepath.rsplit('.', 1)[0] + '_X.odt'
     with open(outpath, 'bw') as fh:

@@ -1,5 +1,5 @@
 """
-grades/grade_tables.py - last updated 2024-01-08
+grades/grade_tables.py - last updated 2024-01-09
 
 Manage grade tables.
 
@@ -285,13 +285,16 @@ def grade_table_info(
     return (info, subject_list, student_list)
 
 
+def grade_scale(class_group: str) -> str:
+    gscale = json.loads(CONFIG.GRADE_SCALE)
+    return gscale.get(class_group) or gscale.get('*')
+
+
 def make_grade_table_ods(class_group, info, subject_list, student_list):
     ## Get template
-    gscale = json.loads(CONFIG.GRADE_SCALE)
-    grade_scale = (gscale.get(class_group) or gscale.get('*')
-    )
+    gscale = grade_scale(class_group)
     templates = json.loads(CONFIG.GRADE_TABLE_TEMPLATE)
-    template_file = DATAPATH(templates[grade_scale], "TEMPLATES")
+    template_file = DATAPATH(templates[gscale], "TEMPLATES")
     print("§template:", template_file)
 #TODO
 

@@ -1,5 +1,5 @@
 """
-text/odt_support.py - last updated 2024-01-08
+text/odt_support.py - last updated 2024-01-09
 
 Support simple editing of odt-files (for LibreOffice) as templates.
 
@@ -31,14 +31,14 @@ if __name__ == "__main__":
     from core.base import setup
     setup(os.path.join(basedir, 'TESTDATA'), debug = True)
 
-#from core.base import Tr
-#T = Tr("text.odt_support")
+from core.base import Tr
+T = Tr("text.odt_support")
 
 ### +++++
 
 import re
 
-from core.base import REPORT_DEBUG
+from core.base import REPORT_DEBUG, REPORT_ERROR
 from tables.ods_support import (
     substitute_zip_content,
     XML_Reader,
@@ -132,15 +132,19 @@ def write_ODT_template(
         - The modified file (bytes),
         - non-substituted fields in the document:
             mapping, field -> number of occurrences,
-        - unused entries in <fields>:
-            mapping, field -> value.
+        - used entries in <fields>:
+            mapping, field -> number of replacements.
     """
     def fsub(m):
         k = m.group(1)
         #print("$$$", k)
+        if k.startswith("-"):
+            # A field which is shown only if the key without '-'
+            # is empty
+            if fields.get(k[1:]):
+                return ""
         try:
             text = fields[k]
-            used.add(k)
         except KeyError:
             try:
                 text = special(k)
@@ -152,6 +156,11 @@ def write_ODT_template(
                 except KeyError:
                     missing[k] = 1
                 text = "???"
+        else:
+            try:
+                used[k] += 1
+            except KeyError:
+                used[k] = 1
         return text
 
     def replace(element: dict) -> bool:
@@ -162,7 +171,25 @@ def write_ODT_template(
             text0 = ODT_get_text(element)
             text = regex.sub(fsub, text0)
             if text != text0:
-                element["children"] = [{"value": text}]
+                paras = text.splitlines()
+                if len(paras) > 1:
+                    if text0.startswith("[[") and text0.endswith("]]"):
+                        # Only in this case are paragraphs possible
+                        if element["name"] == ODT_TEXT:
+                            # Return multiple paragraphs
+                            attrs = element["attributes"]
+                            return [
+                                {   "name": ODT_TEXT,
+                                    "attributes": attrs.copy(),
+                                    "children": [{"value": line}]
+                                }
+                                for line in paras
+                            ]
+                    REPORT_ERROR(T("INVALID_MULTILINE",
+                        key = text0, val = "¶\n".join(paras)
+                    ))
+                else:
+                    element["children"] = [{"value": text}]
         return [element]
 
     def replace_xml(xml: str) -> None:
@@ -176,17 +203,12 @@ def write_ODT_template(
 
     regex = re.compile(r"\[\[(.*?)\]\]")
     missing = {}
-    used = set()
+    used = {}
     odt = substitute_zip_content(
         filepath,
         process = replace_xml
     )
-    unused = {
-        k: v
-        for k, v in fields.items()
-        if k not in used
-    }
-    return odt, missing, unused
+    return odt, missing, used
 
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
@@ -211,7 +233,7 @@ if __name__ == "__main__":
     odt, m, u = write_ODT_template(filepath, fields)
 
     print("\n§MISSING:", m)
-    print("\n§UNUSED:", u)
+    print("\n§USED:", u)
 
     outpath = filepath.rsplit('.', 1)[0] + '_X.odt'
     with open(outpath, 'bw') as fh:
