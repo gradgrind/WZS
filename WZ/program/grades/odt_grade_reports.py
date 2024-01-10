@@ -44,7 +44,7 @@ from core.dates import today, print_date
 from core.classes import class_group_split
 from core.subjects import Subjects
 from text.odt_support import write_ODT_template
-from grades.grade_tables import grade_table_data, grade_scale
+from grades.grade_tables import grade_table_data, grade_scale, grades_key
 
 ### -----
 
@@ -258,6 +258,7 @@ def make_grade_reports(
     info, subject_list, student_list = grade_table_data(
         occasion = occasion,
         class_group = class_group,
+        tag = tag,
         report_info = report_info,
         grades = gtable.grades_occasion_group(occasion, class_group, tag),
     )
@@ -277,8 +278,19 @@ def make_grade_reports(
     print("§GRADES:", gmap)
     # Use LEVEL from grade table, as set up by <grade_table_data>
     stdata["LEVEL"] = gmap["LEVEL"]
-#TODO: date of issue in CONFIG
-    stdata["DATE_ISSUE"] = gmap.get("DATE_ISSUE") or "2525-04-01"
+    try:
+        stdata["DATE_ISSUE"] = gmap["DATE_ISSUE"]
+    except KeyError:
+        # Get date-of-issue from CONFIG
+        rdates = json.loads(CONFIG.REPORT_DATES)
+        occ_dates = rdates.get(grades_key(occasion, tag))
+        if occ_dates:
+            d = occ_dates.get(class_group) or occ_dates.get("*")
+            if d:
+                if d.startswith("#"):
+#TODO: catch look-up error
+                    d = getattr(CALENDAR, d[1:])
+                stdata["DATE_ISSUE"] = d
     subject_map = {}
     for sbj in subject_list:
         s = sbj.SORTING

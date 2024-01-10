@@ -61,6 +61,9 @@ from core.list_activities import report_data
 
 NO_GRADE = '/'
 
+def grades_key(occasion: str, tag: str):
+    return occasion.replace("$", tag)
+
 ### -----
 
 class Grades(db_Table):
@@ -207,6 +210,7 @@ def students_grade_info(
 def grade_table_data(
     occasion: str,
     class_group: str,
+    tag: str = "",
     report_info = None,     # class-info from <report_data()[0]>
     grades = None
 ) -> tuple[
@@ -227,8 +231,7 @@ def grade_table_data(
     info = {
         "+1": CALENDAR.SCHOOL_YEAR, # e.g. "2024"
         "+2": class_group,          # e.g. "12G.R"
-#TODO: tag!?
-        "+3": occasion,             # e.g. "2. Halbjahr", "Abitur", etc.
+        "+3": grades_key(occasion, tag) # e.g. "2. Halbjahr", "Abitur", etc.
     }
     #print("§info:", info)
 
