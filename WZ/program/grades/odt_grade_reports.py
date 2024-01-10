@@ -1,5 +1,5 @@
 """
-grades/odt_grade_reports.py - last updated 2024-01-09
+grades/odt_grade_reports.py - last updated 2024-01-10
 
 Use odt-documents (ODF / LibreOffice) as templates for grade reports.
 
@@ -44,11 +44,112 @@ from core.dates import today, print_date
 from core.classes import class_group_split
 from core.subjects import Subjects
 from text.odt_support import write_ODT_template
-from grades.grade_tables import grade_table_info, grade_scale
+from grades.grade_tables import grade_table_data, grade_scale
 
 ### -----
 
 #TODO ...
+_GRADE_REPORT_TEMPLATE = {
+    "SEK_I": {
+        "PATH": "GRADE_REPORTS/SekI",
+        "FIELDS": [
+            ["DATE_ISSUE", "Ausstellungsdatum"],
+        ]
+    },
+    "SEK_I_ABGANG": {
+        "PATH": "GRADE_REPORTS/SekI-Abgang",
+        "FIELDS": [
+            ["DATE_ISSUE", "Ausstellungsdatum"],
+        ]
+    },
+    "SEK_I_ABSCHLUSS": {
+        "PATH": "GRADE_REPORTS/SekI-Abschluss",
+        "FIELDS": [
+            ["DATE_ISSUE", "Ausstellungsdatum"],
+        ]
+    },
+    "SEK_I_ZWISCHEN": {
+        "PATH": "GRADE_REPORTS/SekI-Zwischenzeugnis",
+        "FIELDS": [
+            ["DATE_ISSUE", "Ausstellungsdatum"],
+        ]
+    },
+    "SEK_II_ABGANG_12": {
+        "PATH": "GRADE_REPORTS/SekII-12-Abgang",
+        "FIELDS": [
+            ["DATE_ISSUE", "Ausstellungsdatum"],
+        ]
+    },
+    "SEK_II_ABGANG_13": {
+        "PATH": "GRADE_REPORTS/SekII-13-Abgang",
+        "FIELDS": [
+            ["DATE_ISSUE", "Ausstellungsdatum"],
+        ]
+    },
+    "SEK_II": {
+        "PATH": "GRADE_REPORTS/SekII-12",
+        "FIELDS": [
+            ["DATE_ISSUE", "Ausstellungsdatum"],
+        ]
+    },
+    "SEK_II_13": {
+        "PATH": "GRADE_REPORTS/SekII-13_1",
+        "FIELDS": [
+            ["DATE_ISSUE", "Ausstellungsdatum"],
+        ]
+    },
+    "Orientierung": {
+        "PATH": "GRADE_REPORTS/Orientierung",
+        "FIELDS": [
+            ["DATE_ISSUE", "Ausstellungsdatum"],
+        ]
+    },
+    "Abitur": {
+        "PATH": "GRADE_REPORTS/Abitur",
+        "FIELDS": [
+            ["DATE_ISSUE", "Ausstellungsdatum"],
+        ]
+    },
+    "Fachhochschulreife": {
+        "PATH": "GRADE_REPORTS/Fachhochschulreife",
+        "FIELDS": [
+            ["DATE_ISSUE", "Ausstellungsdatum"],
+        ]
+    },
+    "Kein_Abitur": {
+        "PATH": "GRADE_REPORTS/Abitur_nicht_bestanden",
+        "FIELDS": [
+            ["DATE_ISSUE", "Ausstellungsdatum"],
+        ]
+    },
+}
+print("§_GRADE_REPORT_TEMPLATE:", json.dumps(_GRADE_REPORT_TEMPLATE,
+    ensure_ascii = False, separators = (',', ':')))
+
+#####++++++++++++++++++++++++++++++++++++++++
+
+_GRADE_REPORT_CHOICE = {
+    "1. Halbjahr": {
+        "12G.R": {
+            "DATE_ISSUE": ["DATE_Halbjahr_1", "student>group"]
+# Alternatives to "student>group": "student", "group"
+        }
+    },
+
+}
+
+# Actually, all reports have DATE_ISSUE, so it wouldn't need to be
+# declared anywhere else. There is only the question of where the
+# value comes from.
+
+# I possibly also need the class's year part (for "Jahrgang" slots).
+
+# In Sek II the students need to have an entry date for the
+# "Qualifikationsphase". Although this is a group thing, it might be
+# sensible to allow an override, just in case ... (it's one of those
+# unclearly defined things in the "Verordnung").
+
+#####++++++++++++++++++++++++++++++++++++++++
 
 
 def get_template(occasion: str, class_group: str) -> str:
@@ -69,8 +170,12 @@ def get_template(occasion: str, class_group: str) -> str:
                 group = class_group
             ))
             return ""
-    gtemplates = json.loads(CONFIG.GRADE_REPORT_TEMPLATE)
-    tpath = gtemplates[tkey]
+#TODO--
+    gtemplates = _GRADE_REPORT_TEMPLATE
+    tpath = gtemplates[tkey]["PATH"]
+#TODO++
+    #gtemplates = json.loads(CONFIG.GRADE_REPORT_TEMPLATE)
+    #tpath = gtemplates[tkey]["PATH"]
     template_file = DATAPATH(tpath, "TEMPLATES")
     if not template_file.endswith(".odt"):
         template_file = f"{template_file}.odt"
@@ -150,15 +255,11 @@ def make_grade_reports(
 
     ## Get grades
     gtable = db.table("GRADES")
-    gmap = gtable.grades_occasion_group(occasion, class_group, tag)
-    info, subject_list, student_list = grade_table_info(
+    info, subject_list, student_list = grade_table_data(
         occasion = occasion,
         class_group = class_group,
         report_info = report_info,
-        grades = {
-            k: v[1]
-            for k, v in gmap.items()
-        },
+        grades = gtable.grades_occasion_group(occasion, class_group, tag),
     )
 
     students = db.table("STUDENTS")
@@ -172,17 +273,16 @@ def make_grade_reports(
     st_n = student_list[n]
     st_id = st_n["§"]
     stdata = students.all_string_fields(st_id)
-    # Use LEVEL from grade table, if there is an entry for this student
-    try:
-        stdata["LEVEL"] = gmap[st_id][0]
-    except KeyError:
-        pass
-    grade_list = st_n["GRADES"]
-    print("§GRADES:", grade_list)
+    gmap = st_n["GRADES"]
+    print("§GRADES:", gmap)
+    # Use LEVEL from grade table, as set up by <grade_table_data>
+    stdata["LEVEL"] = gmap["LEVEL"]
+#TODO: date of issue in CONFIG
+    stdata["DATE_ISSUE"] = gmap.get("DATE_ISSUE") or "2525-04-01"
     subject_map = {}
-    for i, sbj in enumerate(subject_list):
+    for sbj in subject_list:
         s = sbj.SORTING
-        val = (Subjects.clip_name(sbj.NAME), grade_list[i])
+        val = (Subjects.clip_name(sbj.NAME), gmap[str(sbj.id)])
         try:
             subject_map[s].append(val)
         except KeyError:

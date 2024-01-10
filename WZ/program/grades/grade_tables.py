@@ -1,5 +1,5 @@
 """
-grades/grade_tables.py - last updated 2024-01-09
+grades/grade_tables.py - last updated 2024-01-10
 
 Manage grade tables.
 
@@ -48,6 +48,7 @@ from core.base import (
 from core.db_access import (
     DB_TABLES,
     db_Table,
+    db_TableRow,
     DB_PK,
     DB_FIELD_TEXT,
     DB_FIELD_JSON,
@@ -84,18 +85,17 @@ class Grades(db_Table):
         occasion: str,
         class_group: str,
         tag: str = "",
-    ) -> dict[int, tuple[str, dict[int, str]]]:
+    ) -> dict[int, dict[int, str]]:
         """Return a mapping with an entry for each student in the group
         who has an entry for the given occasion.
-        The values are a pair:
-            - LEVEL   (Use this level rather than that of the student,
-                      which might have changed after this set of reports)
-            - grade mapping: subject-id -> grade
+        The values are mappings: str(subject-id) -> grade
+        NOTE that the grade mapping can include also non-grade elements,
+        like DATE_ISSUE and LEVEL (this LEVEL should be used rather than
+        that of the student as the latter might have changed after this
+        set of reports).
         """
-        # NOTE: The grades are stored as a list of pairs because
-        # subject-ids are integers, which can't be keys in json.
         return {
-            rec.Student.id: (rec.LEVEL, dict(rec.GRADE_MAP))
+            rec.Student.id: rec.GRADE_MAP
             for rec in self.records
             if (
                 rec.OCCASION == occasion
@@ -204,6 +204,106 @@ def students_grade_info(
     return (slist, plist, p_subjects)
 
 
+def grade_table_data(
+    occasion: str,
+    class_group: str,
+    report_info = None,     # class-info from <report_data()[0]>
+    grades = None
+) -> tuple[
+    dict[str, str],
+    list[db_TableRow], # list of "SUBJECTS" entries
+    list[dict[str, Any]]
+]:
+    """Collect the information necessary for grade input for the given group.
+    If grades are supplied, include these.
+    Return the general information fields, the subject list and the
+    pupil list (with grade information).
+    """
+    class_id, group = class_group_split_with_id(class_group)
+    if not group:
+        REPORT_CRITICAL(
+            "Bug: Null group passed to grade_tables::grade_table_info"
+        )
+    info = {
+        "+1": CALENDAR.SCHOOL_YEAR, # e.g. "2024"
+        "+2": class_group,          # e.g. "12G.R"
+#TODO: tag!?
+        "+3": occasion,             # e.g. "2. Halbjahr", "Abitur", etc.
+    }
+    #print("§info:", info)
+
+    ## Get the subject data for this group
+    smap = subject_map(class_id, group, report_info)
+    ## ... and the student data
+    subject_list, plist, p_subjects = students_grade_info(
+        class_id, group, smap
+    )
+
+    ## Collect students
+    student_list = []
+    for pdata in plist:
+        #print("§pdata:", pdata)
+        pmap = {}
+        student_list.append(pmap)
+        pmap["§"] = pdata.id
+        pname = pdata._table.get_name(pdata)
+        pmap["§NAME"] = pname
+        pmap["§SORTNAME"] = pdata.SORTNAME
+        ## Write NO_GRADE where no teachers are available (based on group).
+        ## Otherwise write grades, if supplied.
+        if grades:
+            try:
+                pgrades = grades[pdata.id]
+            except KeyError:
+                pgrades = {}
+        else:
+            pgrades = {}
+        sbjdata = p_subjects[pdata.id]
+        #print("\n§1:", subject_list)
+        #print("\n:§2:", sbjdata)
+        gmap = {}
+        pmap["GRADES"] = gmap
+        tlist = []
+        pmap["TEACHERS"] = tlist
+        for sbj in subject_list:
+            s_id = str(sbj.id)
+            gr = pgrades.get(s_id) or ""
+            tset = sbjdata[sbj.id]
+            tlist.append(tset)
+            if tset:
+                # There is a set of teachers
+                gmap[s_id] = gr
+            else:
+                # No teachers
+                if gr and gr != NO_GRADE:
+                    REPORT_WARNING(T("UNEXPECTED_GRADE",
+                        grade = gr,
+                        subject = sbj.NAME,
+                        student = pname,
+                    ))
+                gmap[s_id] = NO_GRADE
+        if "LEVEL" not in pgrades:
+            gmap["LEVEL"] = pdata.EXTRA.get("LEVEL") or ""
+        # Fetch non-grade items from <pgrades>
+        for k, v in pgrades.items():
+            try:
+                # Test for subject key
+                id = int(k)
+                if k not in gmap:
+                    REPORT_WARNING(T("UNEXPECTED_SUBJECT",
+                        grade = gr,
+                        subject = get_database().table["SUBJECTS"][id].NAME,
+                        student = pname,
+                    ))
+            except ValueError:
+                gmap[k] = v
+    #for s in student_list:
+    #    print("\n %%%", s)
+    return (info, subject_list, student_list)
+
+
+#TODO: deprecated, use <grade_table_data> instead (with grade mapping
+# instead of list).
 def grade_table_info(
     occasion: str,
     class_group: str,
@@ -211,7 +311,7 @@ def grade_table_info(
     grades = None
 ) -> tuple[
     dict[str, str],
-    list[tuple[int, str, str]], # [(subject-id, sid, subject-name), ... ]
+    list[db_TableRow], # list of "SUBJECTS" entries
     list[dict[str, Any]]
 ]:
     """Collect the information necessary for grade input for the given group.
@@ -265,7 +365,7 @@ def grade_table_info(
         tlist = []
         pmap["TEACHERS"] = tlist
         for sbj in subject_list:
-            gr = pgrades.get(sbj.id) or ""
+            gr = pgrades.get(str(sbj.id)) or ""
             tset = sbjdata[sbj.id]
             tlist.append(tset)
             if tset:
