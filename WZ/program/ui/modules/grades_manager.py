@@ -48,9 +48,13 @@ from ui.ui_base import (
     QHeaderView,
     QAbstractButton,
     QTableWidgetItem,
+    QStyledItemDelegate,
+    QLineEdit,
+    #QCompleter,
     ### QtGui:
     QColor,
     QBrush,
+    QValidator,
     ### QtCore:
     QObject,
     Qt,
@@ -73,12 +77,40 @@ from grades.ods_template import BuildGradeTable
 
 ### -----
 
+class ListDelegate(QStyledItemDelegate):
+    def __init__(self, validation_list, parent = None):
+        super().__init__(parent)
+        self._validator = ListValidator(validation_list)
+        #self._completer = QCompleter(validation_list)
+
+    def createEditor(self, parent, option, index):
+        w = QLineEdit(parent)
+        w.setValidator(self._validator)
+        #w.setCompleter(self._completer)
+        return w
+#+
+class ListValidator(QValidator):
+    def __init__(self, values: list[str], parent = None):
+        super().__init__(parent)
+        self._values = set(values)
+
+    def validate(self, text: str, pos: int):
+        #QValidator.State.Acceptable
+        #QValidator.State.Invalid
+        #QValidator.State.Intermediate
+        if text in self._values:
+            return (QValidator.State.Acceptable, text, pos)
+        else:
+            return (QValidator.State.Intermediate, text, pos)
+
+
 class ManageGradesPage(QObject):
     def __init__(self, parent=None):
         super().__init__()
         self.ui = load_ui("grades.ui", parent, self)
         tw = self.ui.grade_table
-
+        #tw.setItemDelegate(
+        #    ListDelegate(["1", "1+", "1-", "2", "3", "4", "5", "nb"]))
 
 
 
@@ -103,7 +135,16 @@ class ManageGradesPage(QObject):
         pItem = tw.horizontalHeaderItem(0)
         pItem.setTextAlignment(Qt.AlignHCenter | Qt.AlignBottom)
         m = headerView._margin
-        tw.setStyleSheet(f"QHeaderView::section {{padding: {m}px;}}")
+        tw.setStyleSheet(
+            "QTableView {"
+                "selection-background-color: #f0e0ff;"
+                "selection-color: black;"
+            "}"
+            "QTableView::item:focus {"
+                "background-color: #e0a0ff;"
+            "}"
+            f"QHeaderView::section {{padding: {m}px;}}"
+        )
         #for i in range(len(cols)):
         #    tw.setColumnWidth(i, 40 if i > 0 else 150)
         #    print("§width:", i, tw.columnWidth(i))
@@ -117,8 +158,10 @@ class ManageGradesPage(QObject):
 
 
     def enter(self):
+#TODO: This comment is probably inaccurate! I certainly intend to permit
+# some changes (grades, maybe configuration, ...)
         ## The database tables that are loaded here are expected not to
-        ## change during the activity of this course-editor object.
+        ## change during the activity of this grade-editor object.
         # Set up lists of classes, teachers and subjects for the course
         # filter. These are lists of tuples:
         #    (db-primary-key, short form, full name)
@@ -185,17 +228,11 @@ class ManageGradesPage(QObject):
         headers = [s.NAME for s in self.subject_list]
 
         tw = self.ui.grade_table
-
-#TODO: Would it be possible to use my table-widget with automatic item
-# handling?
         tw.setColumnCount(ncols)
         nrows = len(self.student_list)
         tw.setRowCount(nrows)
-
+#TODO: T()
         tw.setHorizontalHeaderLabels(["Maßstab"] + headers)
-
-        #vh = tw.verticalHeader()
-        #vh.setVisible(True)
 
         vheaders = []
         for i, stdata in enumerate(self.student_list):
@@ -271,6 +308,14 @@ class ManageGradesPage(QObject):
         gt.save(fpath)
         REPORT_INFO(T("SAVED_GRADE_TABLE", path = fpath))
 
+
+#    @Slot(int,int)
+#    def on_grade_table_cellActivated(self, row, col):
+#        print("§on_grade_table_cellActivated:", row, col)
+
+    @Slot(QTableWidgetItem)
+    def on_grade_table_itemChanged(self, item):
+        print("§CHANGED:", item.row(), item.column(), item.text())
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
 
