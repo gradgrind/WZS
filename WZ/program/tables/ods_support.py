@@ -1,5 +1,5 @@
 """
-tables/ods_support.py - last updated 2024-01-07
+tables/ods_support.py - last updated 2024-01-11
 
 Support reading and simple editing of ods-tables (for LibreOffice).
 
@@ -540,7 +540,7 @@ class ODS_Handler:
     ) -> list[dict]:
         """Append <n> empty rows to the row at (0-based) index <row>,
         using the style attributes of that row.
-        <row> may also be negative (-1 => last row).
+        <row> may also be negative (-1 => last row) or 0 (add nothing).
         WARNING: This will not handle inserting in a row-spanned
         area correctly.
         Return a list of all rows.

@@ -1,7 +1,7 @@
 """
 ui/modules/grades_manager.py
 
-Last updated:  2024-01-01
+Last updated:  2024-01-11
 
 An alternative HeaderView for QTableView – the headers are rotated by 90°.
 
@@ -59,7 +59,7 @@ class RotatedHeaderView(QHeaderView):
         #self._metrics = QtGui.QFontMetrics(self._font)
         self._metrics = self.fontMetrics()
         self._descent = self._metrics.descent()
-        self._margin = 10
+        self._margin = 5
 
     def set_horiz_index(self, index, on = True):
         if on:

@@ -1,7 +1,7 @@
 """
 ui/modules/grades_manager.py
 
-Last updated:  2024-01-07
+Last updated:  2024-01-11
 
 Front-end for managing grade reports.
 
@@ -57,6 +57,7 @@ from ui.ui_base import (
     QEvent,
     Slot,
     ### other
+    APP,
     SHOW_CONFIRM,
     SAVE_FILE,
 )
@@ -67,7 +68,7 @@ from core.basic_data import get_database, CONFIG
 from core.list_activities import report_data
 from core.classes import class_group_split_with_id
 #from grades.grade_tables import subject_map
-from grades.grade_tables import grade_table_info
+from grades.grade_tables import grade_table_data
 from grades.ods_template import BuildGradeTable
 
 ### -----
@@ -98,13 +99,16 @@ class ManageGradesPage(QObject):
         headerView.setSectionResizeMode(
             0, QHeaderView.ResizeMode.ResizeToContents
         )
-
+        headerView.set_horiz_index(0, True)
+        pItem = tw.horizontalHeaderItem(0)
+        pItem.setTextAlignment(Qt.AlignHCenter | Qt.AlignBottom)
+        m = headerView._margin
+        tw.setStyleSheet(f"QHeaderView::section {{padding: {m}px;}}")
         #for i in range(len(cols)):
         #    tw.setColumnWidth(i, 40 if i > 0 else 150)
         #    print("§width:", i, tw.columnWidth(i))
         #    print("§section-size:", headerView.sectionSizeHint(i))
 
-        headerView.set_horiz_index(0, True)
 
 
 
@@ -169,7 +173,7 @@ class ManageGradesPage(QObject):
 ###################################
 
 
-        self.info, self.subject_list, self.student_list = grade_table_info(
+        self.info, self.subject_list, self.student_list = grade_table_data(
             occasion = self.occasion,
             class_group = self.class_group,
             report_info = self.report_info,
@@ -177,7 +181,7 @@ class ManageGradesPage(QObject):
         )
 
         # s_id, sid, sname = self.subject_list[i]
-        ncols = len(self.subject_list) + 2
+        ncols = len(self.subject_list) + 1
         headers = [s.NAME for s in self.subject_list]
 
         tw = self.ui.grade_table
@@ -188,23 +192,27 @@ class ManageGradesPage(QObject):
         nrows = len(self.student_list)
         tw.setRowCount(nrows)
 
-        tw.setHorizontalHeaderLabels(["Schülerin", "Maßstab"] + headers)
+        tw.setHorizontalHeaderLabels(["Maßstab"] + headers)
 
-#TODO: Are the stdata keys not a bit strange?
+        #vh = tw.verticalHeader()
+        #vh.setVisible(True)
 
+        vheaders = []
         for i, stdata in enumerate(self.student_list):
             #print("%stadata:", stdata)
-            pname = stdata['§N']
-            plevel = stdata.get('§M') or ""
+            pname = stdata["NAME"]
+            vheaders.append(pname)
             grades = stdata["GRADES"]
-            item = QTableWidgetItem(pname)
-            item.setBackground(QColor("#FFFA3C"))
-            tw.setItem(i, 0, item)
+            plevel = grades.get("LEVEL") or ""
+            #item = QTableWidgetItem(pname)
+            #item.setBackground(QColor("#FFFF80"))
+            #tw.setItem(i, 0, item)
             item = QTableWidgetItem(plevel)
-            item.setBackground(QColor("#FFFA3C"))
+            item.setBackground(QColor("#FFFF80"))
             item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            tw.setItem(i, 1, item)
-            j = 2
+            tw.setItem(i, 0, item)
+#TODO: new grade structure (dict)
+            j = 1
             for g in grades:
                 item = QTableWidgetItem(g or "?")
 #TODO ...
@@ -219,6 +227,12 @@ class ManageGradesPage(QObject):
                 j += 1
 
 
+        tw.setVerticalHeaderLabels(vheaders)
+
+#TODO: This is a fix for a visibility problem
+        for w in APP.topLevelWindows():
+            if w.isVisible():
+                w.show()
 
 
 

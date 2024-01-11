@@ -1,5 +1,5 @@
 """
-grades/ods_template.py - last updated 2024-01-11
+grades/ods_template.py - last updated 2024-01-08
 
 Use ods-tables (ODF / LibreOffice) as templates for grade tables.
 
@@ -48,7 +48,7 @@ from tables.ods_support import (
     ODS_Handler,
     ODS_reader,
 )
-from grades.grade_tables import grade_table_data
+from grades.grade_tables import grade_table_info
 
 ### -----
 
@@ -65,20 +65,17 @@ def readGradeTable(filepath: str):
         id = row[0]
         if not id:
             continue
-        if id == '§0':
+        if id == '§':
             # Read the subject keys, associate them with columns
             if s_col:
-                REPORT_ERROR(T("REPEATED_LINE", tag = id, line = i + 1))
+                REPORT_ERROR(T("REPEATED_SID_LINE", line = i + 1))
                 continue
             for j in range(1, len(row)):
                 stag = row[j]
                 if stag:
                     s_col.append((int(stag), j))
-        elif id == '§+':
+        elif id == '*':
             # Subject line
-            if s_names:
-                REPORT_ERROR(T("REPEATED_LINE", tag = id, line = i + 1))
-                continue
             for stag, j in s_col:
                 s_names[stag] = row[j]
         elif s_col:
@@ -99,6 +96,9 @@ def readGradeTable(filepath: str):
     return (info, s_names, grades)
 
 
+#TODO: Consider the possibility of adding rows and columns – it might
+# simplify template construction.
+
 class BuildGradeTable:
     def __init__(self,
         occasion: str,
@@ -113,16 +113,12 @@ class BuildGradeTable:
         grades: dict = None
     ):
         self.row_count = 0
-#        self.min_cols = 0   # will be set to the index of the last cell, + 1
+        self.min_cols = 0
         self.hidden_rows = []
         self.hidden_columns = [0]
         self.subject_keys = {}
-#        self.max_col = 0
-#        self.student_index = 0
-        self.subject_id_row = 0
-        self.subject_name_row = 0
-        self.start_col = 0
-        self.start_row = 0
+        self.max_col = 0
+        self.student_index = 0
 
         ## Get template
         gscale = json.loads(CONFIG.GRADE_SCALE)
@@ -139,7 +135,7 @@ class BuildGradeTable:
             group = class_group
         )
 
-        self.info, self.subject_list, self.student_list = grade_table_data(
+        self.info, self.subject_list, self.student_list = grade_table_info(
             occasion = occasion,
             class_group = class_group,
             report_info = report_info,
@@ -156,109 +152,121 @@ class BuildGradeTable:
             fh.write(self.ods)
 
     def process_row(self, element):
+        result = True    # retain row
         cells = element["children"]
-        c0 = ODS_Handler.cell_text(cells[0])
-        if c0 == "§0":
-            ## The line for subject keys, seek first subject column
-            if self.subject_id_row:
-                REPORT_ERROR(T("REPEATED_LINE",
-                    tag = id, line = self.row_count + 1
-                ))
-                return False
-            self.subject_id_row = self.row_count
-            self.hidden_rows.append(self.row_count)
-            i = 1
-            for cell in cells[1:]:
-                ci = ODS_Handler.cell_text(cell)
-                if ci == "§1":
-                    # First subject column
-                    self.start_col = i
-                    break
-                elif ci:
-                    self.subject_keys[ci] = i
-                i += 1
-        elif c0 == '§+':
-            ## The line for the subject names
-            if self.subject_name_row:
-                REPORT_ERROR(T("REPEATED_LINE",
-                    tag = id, line = self.row_count + 1
-                ))
-                return False
-            self.subject_name_row = self.row_count
-        elif c0 == "§":
-            ## The first student line
-            if self.start_row:
-                REPORT_ERROR(T("REPEATED_LINE",
-                    tag = id, line = self.row_count + 1
-                ))
-                return False
-            self.start_row = self.row_count
-        elif c0:
-            ## Should be an info line
-            try:
-                text = self.info[c0]
-            except KeyError:
-                text = None
-                REPORT_WARNING(T("MISSING_INFO", key = c0))
-            ODS_Handler.set_cell_text(cells[2], text)
-        self.row_count += 1
-        return True
+        if self.row_count == 0:
+            last = None
+            for i, c in enumerate(cells):
+                #print("  --", c)
+                if c["children"]:
+                    last = c
+                    self.min_cols = i + 1
+                elif c["name"] == ODS_Handler.COVERED_TABLE_CELL:
+                    self.min_cols = i + 1
+            ODS_Handler.set_cell_text(last, today())
 
-    def process_table(self, elements):
-        if not self.subject_id_row:
-            REPORT_ERROR(T("NO_SUBJECT_ID_ROW"))
-            return {}
-        if not self.subject_name_row:
-            REPORT_ERROR(T("NO_SUBJECT_NAME_ROW"))
-            return {}
-        if not self.start_col:
-            REPORT_ERROR(T("NO_START_TAG"))
-            return {}
-        if not self.start_row:
-            REPORT_ERROR(T("NO_STUDENT_ROW"))
-            return {}
-        # Add rows for students, get row list
-        needed = len(self.student_list) - 1
-        rows = ODS_Handler.add_rows(elements, self.start_row, needed)
-        # Add columns for subjects
-        cells = rows[self.subject_id_row]["children"]
-        needed = self.start_col + len(self.subject_list) - len(cells)
-        if needed > 0:
-            ODS_Handler.append_columns(elements, needed)
-        # Enter subject data
-        cells1 = rows[self.subject_name_row]["children"]
-        i = self.start_col
-        for sbj in self.subject_list:
-            s_id = str(sbj.id)
-            self.subject_keys[s_id] = i
-            ODS_Handler.set_cell_text(cells[i], s_id)
-            ODS_Handler.set_cell_text(cells1[i], sbj.NAME)
-            i += 1
-        # Set the date
-        cells = rows[0]["children"]
-        i = len(cells)
-        while i > 1:
-            i -= 1
-            if ODS_Handler.cell_text(cells[i]):
-                ODS_Handler.set_cell_text(cells[i], today())
-                break
-        # Enter student data
-        if self.student_list:
-            i = self.start_row
-            for stdata in self.student_list:
-                cells = rows[i]["children"]
-                ODS_Handler.set_cell_text(cells[0], str(stdata['id']))
-                ODS_Handler.set_cell_text(cells[1], stdata['NAME'])
-                for s, g in stdata["GRADES"].items():
-                    gi = self.subject_keys.get(s)
-                    if gi:
-                        ODS_Handler.set_cell_text(cells[gi], g)
-                i += 1
-        return {
-            "hidden_rows": self.hidden_rows,
-            "hidden_columns": self.hidden_columns,
-            "protected": True,
-        }
+        elif not self.subject_keys:
+            ### Head/Info part
+            c0 = ODS_Handler.cell_text(cells[0])
+            if c0 == '§':
+                self.hidden_rows.append(self.row_count)
+                ## Add the subject keys
+                i = 0
+                j = 1
+                for cell in cells[1:]:
+                    ci = ODS_Handler.cell_text(cell)
+                    if ci.startswith('§'):
+                        try:
+                            sbj = self.subject_list[i]
+                        except IndexError:
+                            # No subjects left
+                            self.max_col = j
+                            break
+                        else:
+                            self.subject_keys[ci] = (sbj.id, sbj.NAME)
+                            ODS_Handler.set_cell_text(cell, str(sbj.id))
+                        i += 1
+                    j += 1
+                else:
+                    if len(self.subject_list) > i:
+                        REPORT_ERROR(T("TOO_FEW_COLUMNS",
+                            n = len(self.subject_list) - i
+                        ))
+                while j < self.min_cols:
+                    cell = cells[j]
+                    ci = ODS_Handler.cell_text(cell)
+                    self.subject_keys[ci] = (None, None)
+                    ODS_Handler.set_cell_text(cell, None)
+                    j += 1
+                self.max_col = j
+                #print("§max_col:", self.max_col)
+
+            else:
+                for i, c in enumerate(cells):
+                    if (
+                        c["children"]
+                        or c["name"] == ODS_Handler.COVERED_TABLE_CELL
+                    ):
+                        if (i + 1) > self.min_cols:
+                            self.min_cols = i + 1
+                if c0:
+                    try:
+                        text = self.info[c0]
+                    except KeyError:
+                        text = None
+                        REPORT_WARNING(T("MISSING_INFO", key = c0))
+                    ODS_Handler.set_cell_text(cells[2], text)
+
+        else:
+            cell0 = cells[0]
+            c0 = ODS_Handler.cell_text(cell0)
+            if c0 == '§':
+                # Add a student line
+                try:
+                    stdata = self.student_list[self.student_index]
+                except IndexError:
+                    # No students left, lose the row
+                    return False
+                #print("§stdata", stdata)
+                self.student_index += 1
+                ODS_Handler.set_cell_text(cell0, str(stdata['§']))
+                grades = stdata["GRADES"]
+                gi = 0
+                for cell in cells[1:]:
+                    ci = ODS_Handler.cell_text(cell)
+                    if ci.startswith('§'):
+                        try:
+                            text = stdata[ci]
+                        except KeyError:
+                            try:
+                                s_id, _ = self.subject_keys[ci]
+                            except KeyError:
+                                # No subjects left
+                                break
+                            else:
+                                try:
+                                    text = grades[gi]
+                                except IndexError:
+                                    text = None
+                                gi += 1
+                                ODS_Handler.set_cell_text(cell, text)
+                        else:
+                            ODS_Handler.set_cell_text(cell, text)
+
+            elif c0 == '*':
+                # Add the subject names
+                for cell in cells[1:]:
+                    ci = ODS_Handler.cell_text(cell)
+                    if ci.startswith('§'):
+                        try:
+                            s_id, sname = self.subject_keys[ci]
+                        except KeyError:
+                            # No subjects left
+                            break
+                        else:
+                            ODS_Handler.set_cell_text(cell, sname)
+        self.row_count += 1
+        return result
 
     def process_xml(self, xml: str) -> str:
         handler = ODS_Handler(
@@ -268,6 +276,15 @@ class BuildGradeTable:
         xml_reader = XML_Reader(process_element = handler.process_element)
         root = xml_reader.parse_string(xml)
         return '<?xml version="1.0" encoding="UTF-8"?>\n' + XML_writer(root)
+
+    def process_table(self, elements):
+        if self.max_col:
+            ODS_Handler.delete_column(elements, -self.max_col)
+        return {
+            "hidden_rows": self.hidden_rows,
+            "hidden_columns": self.hidden_columns,
+            "protected": True,
+        }
 
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
@@ -285,7 +302,7 @@ if __name__ == "__main__":
     for p_id, pgrades in grades.items():
         print("\n§PID:", p_id, pgrades)
 
-#    quit(2)
+    quit(2)
 
     gt = BuildGradeTable("1. Halbjahr", "12G.R",
 #        grades = {434: {6: "1+", 12: "4"}}

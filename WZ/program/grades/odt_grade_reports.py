@@ -1,5 +1,5 @@
 """
-grades/odt_grade_reports.py - last updated 2024-01-10
+grades/odt_grade_reports.py - last updated 2024-01-11
 
 Use odt-documents (ODF / LibreOffice) as templates for grade reports.
 
@@ -272,7 +272,7 @@ def make_grade_reports(
     n = 0
     print("\n$", student_list[n])
     st_n = student_list[n]
-    st_id = st_n["§"]
+    st_id = st_n["id"]
     stdata = students.all_string_fields(st_id)
     gmap = st_n["GRADES"]
     print("§GRADES:", gmap)

@@ -1,5 +1,5 @@
 """
-grades/grade_tables.py - last updated 2024-01-10
+grades/grade_tables.py - last updated 2024-01-11
 
 Manage grade tables.
 
@@ -248,10 +248,10 @@ def grade_table_data(
         #print("§pdata:", pdata)
         pmap = {}
         student_list.append(pmap)
-        pmap["§"] = pdata.id
+        pmap["id"] = pdata.id
         pname = pdata._table.get_name(pdata)
-        pmap["§NAME"] = pname
-        pmap["§SORTNAME"] = pdata.SORTNAME
+        pmap["NAME"] = pname
+        pmap["SORTNAME"] = pdata.SORTNAME
         ## Write NO_GRADE where no teachers are available (based on group).
         ## Otherwise write grades, if supplied.
         if grades:
@@ -305,101 +305,9 @@ def grade_table_data(
     return (info, subject_list, student_list)
 
 
-#TODO: deprecated, use <grade_table_data> instead (with grade mapping
-# instead of list).
-def grade_table_info(
-    occasion: str,
-    class_group: str,
-    report_info = None,     # class-info from <report_data()[0]>
-    grades = None
-) -> tuple[
-    dict[str, str],
-    list[db_TableRow], # list of "SUBJECTS" entries
-    list[dict[str, Any]]
-]:
-    """Collect the information necessary for grade input for the given group.
-    If grades are supplied, include these.
-    Return the general information fields, the subject list and the
-    pupil list (with grade information).
-    """
-    class_id, group = class_group_split_with_id(class_group)
-    if not group:
-        REPORT_CRITICAL(
-            "Bug: Null group passed to grade_tables::grade_table_info"
-        )
-    info = {
-        "+1": CALENDAR.SCHOOL_YEAR, # e.g. "2024"
-        "+2": class_group,          # e.g. "12G.R"
-        "+3": occasion,             # e.g. "2. Halbjahr", "Abitur", etc.
-    }
-    #print("§info:", info)
-
-    ## Get the subject data for this group
-    smap = subject_map(class_id, group, report_info)
-    ## ... and the student data
-    subject_list, plist, p_subjects = students_grade_info(
-        class_id, group, smap
-    )
-
-    ## Collect students
-    student_list = []
-    for pdata in plist:
-        #print("§pdata:", pdata)
-        pmap = {}
-        student_list.append(pmap)
-        pmap["§"] = pdata.id
-        pname = pdata._table.get_name(pdata)
-        pmap["§N"] = pname
-        pmap["§M"] = pdata.EXTRA.get("LEVEL") or ""
-        ## Write NO_GRADE where no teachers are available (based on group).
-        ## Otherwise write grades, if supplied.
-        if grades:
-            try:
-                pgrades = grades[pdata.id]
-            except KeyError:
-                pgrades = {}
-        else:
-            pgrades = {}
-        sbjdata = p_subjects[pdata.id]
-        #print("\n§1:", subject_list)
-        #print("\n:§2:", sbjdata)
-        glist = []
-        pmap["GRADES"] = glist
-        tlist = []
-        pmap["TEACHERS"] = tlist
-        for sbj in subject_list:
-            gr = pgrades.get(str(sbj.id)) or ""
-            tset = sbjdata[sbj.id]
-            tlist.append(tset)
-            if tset:
-                # There is a set of teachers
-                glist.append(gr)
-            else:
-                # No teachers
-                if gr and gr != NO_GRADE:
-                    REPORT_WARNING(T("UNEXPECTED_GRADE",
-                        grade = gr,
-                        subject = sbj.NAME,
-                        student = pname,
-                    ))
-                glist.append(NO_GRADE)
-    #for s in student_list:
-    #    print("\n %%%", s)
-    return (info, subject_list, student_list)
-
-
 def grade_scale(class_group: str) -> str:
     gscale = json.loads(CONFIG.GRADE_SCALE)
     return gscale.get(class_group) or gscale.get('*')
-
-
-def make_grade_table_ods(class_group, info, subject_list, student_list):
-    ## Get template
-    gscale = grade_scale(class_group)
-    templates = json.loads(CONFIG.GRADE_TABLE_TEMPLATE)
-    template_file = DATAPATH(templates[gscale], "TEMPLATES")
-    print("§template:", template_file)
-#TODO
 
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
@@ -419,16 +327,3 @@ if __name__ == "__main__":
                 item[2],
                 ", ".join(t.Teacher.TID for t in item[3])
             )
-
-    grades = {434: {6: "1+", 12: "4"}}
-    cg = "12G.R"
-#    cg = "13"
-    occasion = "1. Halbjahr"
-
-    info, subject_list, student_list = grade_table_info(
-        occasion = occasion,
-        class_group = cg,
-        grades = grades,
-    )
-
-    make_grade_table_ods(cg, info, subject_list, student_list)
