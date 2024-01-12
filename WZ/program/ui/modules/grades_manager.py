@@ -70,6 +70,7 @@ from ui.table_support import CopyPasteEventFilter
 
 from core.base import REPORT_INFO, REPORT_ERROR
 from core.basic_data import get_database, CONFIG
+from core.dates import print_date
 from core.list_activities import report_data
 from core.classes import class_group_split_with_id
 from grades.grade_tables import (
@@ -109,6 +110,24 @@ class ListValidator(QValidator):
             return (QValidator.State.Intermediate, text, pos)
 
 
+#TODO
+class DateDelegate(QStyledItemDelegate):
+    """An "item delegate" for displaying and editing date fields.
+    """
+
+#    def __init__(self, key_value, parent=None):
+#        super().__init__(parent)
+#        self.key2value = dict(key_value)
+
+    def displayText(self, key, locale):
+        try:
+            return print_date(key)
+#TODO
+        except:
+            return key
+
+
+
 class ManageGradesPage(QObject):
     def __init__(self, parent=None):
         super().__init__()
@@ -118,7 +137,7 @@ class ManageGradesPage(QObject):
         #    ListDelegate(["1", "1+", "1-", "2", "3", "4", "5", "nb"]))
         self.event_filter = CopyPasteEventFilter(tw)
 
-
+        self.date_delegate = DateDelegate()
 
         nrows = 10
         cols = ("Long Column 100", "Column 2", "Col 3", "Col 4a", "Column 5",)
@@ -133,7 +152,7 @@ class ManageGradesPage(QObject):
 
         #headerView.setDefaultSectionSize(30) # what does this do?
         headerView.setMinimumSectionSize(20)
-        headerView.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+#        headerView.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         headerView.setSectionResizeMode(
             0, QHeaderView.ResizeMode.ResizeToContents
         )
@@ -142,23 +161,19 @@ class ManageGradesPage(QObject):
         pItem.setTextAlignment(Qt.AlignHCenter | Qt.AlignBottom)
         m = headerView._margin
         tw.setStyleSheet(
-            "QTableView {"
-                "selection-background-color: #f0e0ff;"
-                "selection-color: black;"
-            "}"
+#            "QTableView {"
+#                "selection-background-color: #f0e0ff;"
+#                "selection-color: black;"
+#            "}"
             "QTableView::item:focus {"
                 "background-color: #e0a0ff;"
             "}"
             f"QHeaderView::section {{padding: {m}px;}}"
         )
-        #for i in range(len(cols)):
-        #    tw.setColumnWidth(i, 40 if i > 0 else 150)
+        for i in range(len(cols)):
+            tw.setColumnWidth(i, 20 if i > 0 else 150)
         #    print("§width:", i, tw.columnWidth(i))
         #    print("§section-size:", headerView.sectionSizeHint(i))
-
-
-
-
 
 
 
@@ -235,15 +250,36 @@ class ManageGradesPage(QObject):
         grade_map = valid_grade_map(gscale)
         self.grade_delegate = ListDelegate(grade_map)
 
-        ncols = len(self.subject_list) + 1
-        headers = [sbj.NAME for sbj in self.subject_list]
-
+#TODO: Can/should LEVEL be optional? I would also need to look at the
+# grade_tables (?) module
         tw = self.ui.grade_table
-        tw.setColumnCount(ncols)
+        self.col_sid = ["LEVEL"]
+        headers = [T("LEVEL")]
+        for sbj in self.subject_list:
+            i = len(headers)
+            headers.append(sbj.NAME)
+            self.col_sid.append(sbj.id)
+            tw.setItemDelegateForColumn(i, self.grade_delegate)
+
+#TODO: Additional fields
+
+        i = len(headers)
+# DATE_ISSUE as override always present?
+        headers.append(T("DATE_ISSUE"))
+        self.col_sid.append("DATE_ISSUE")
+        tw.setItemDelegateForColumn(
+            i, self.date_delegate
+        )
+        tw.setColumnWidth(i, 100)
+
+        for j in range(i):
+            tw.setColumnWidth(j, 40 if j > 0 else 150)
+
+
+        tw.setColumnCount(len(headers))
         nrows = len(self.student_list)
         tw.setRowCount(nrows)
-#TODO: T()
-        tw.setHorizontalHeaderLabels(["Maßstab"] + headers)
+        tw.setHorizontalHeaderLabels(headers)
 
         vheaders = []
         for i, stdata in enumerate(self.student_list):
@@ -251,31 +287,50 @@ class ManageGradesPage(QObject):
             pname = stdata["NAME"]
             vheaders.append(pname)
             grades = stdata["GRADES"]
-            plevel = grades.get("LEVEL") or ""
+#            plevel = grades.get("LEVEL") or ""
             #item = QTableWidgetItem(pname)
             #item.setBackground(QColor("#FFFF80"))
             #tw.setItem(i, 0, item)
-            item = QTableWidgetItem(plevel)
-            item.setBackground(QColor("#FFFF80"))
-            item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            tw.setItem(i, 0, item)            
-            # Add grades
-            j = 1
-            for sbj in self.subject_list:
-                tw.setItemDelegateForColumn(j, self.grade_delegate)
-#            for g in grades:
-                g = grades[str(sbj.id)]
-                item = QTableWidgetItem(g or "?")
+#            item = QTableWidgetItem(plevel)
+#            item.setBackground(QColor("#FFFF80"))
+#            item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+#            tw.setItem(i, 0, item)
+            # Add grades, etc.
+            for j, s_id in enumerate(self.col_sid):
+                try:
+                    int(s_id)
+                except ValueError:
+                    # A non-grade entry
+                    try:
+                        val = grades[s_id]
+                    except KeyError:
+                        print("§s_id:", repr(s_id))
+                        if s_id.startswith("DATE_"):
+#TODO
+                            val = "2024-01-12"
+                        else:
+                            val = "??"
+                    item = QTableWidgetItem(val)
+                    item.setBackground(QColor("#FFFFA0"))
+
+#TODO: I would need configuration involving translations for those
+# items not in the main translations file, colour, delegate for display and
+# editing, cell width, ...
+#
+# One significant project would be a delegate for dates (display and edit).
+
+                else:
+                    g = grades[str(s_id)]
+                    item = QTableWidgetItem(g or "?")
 #TODO ...
-                item.setBackground(QColor("#FABBFF"))
-                if j & 1:
-                    item.setBackground(QColor("#FAFFBB"))
-                elif j & 2:
-                    item.setBackground(QBrush())
+#                item.setBackground(QColor("#FABBFF"))
+#                if j & 1:
+#                    item.setBackground(QColor("#FAFFBB"))
+#                elif j & 2:
+#                    item.setBackground(QBrush())
 
                 item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 tw.setItem(i, j, item)
-                j += 1
 
 
         tw.setVerticalHeaderLabels(vheaders)
@@ -332,6 +387,7 @@ class ManageGradesPage(QObject):
     def on_grade_table_itemChanged(self, item):
         if self.suppress_handlers: return
         print("§CHANGED:", item.row(), item.column(), item.text())
+
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
 
