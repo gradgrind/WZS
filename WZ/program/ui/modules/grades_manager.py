@@ -1,7 +1,7 @@
 """
 ui/modules/grades_manager.py
 
-Last updated:  2024-01-11
+Last updated:  2024-01-12
 
 Front-end for managing grade reports.
 
@@ -66,12 +66,17 @@ from ui.ui_base import (
     SAVE_FILE,
 )
 from ui.rotated_table_header import RotatedHeaderView
+from ui.table_support import CopyPasteEventFilter
 
-from core.base import REPORT_INFO
+from core.base import REPORT_INFO, REPORT_ERROR
 from core.basic_data import get_database, CONFIG
 from core.list_activities import report_data
 from core.classes import class_group_split_with_id
-#from grades.grade_tables import subject_map
+from grades.grade_tables import (
+    #subject_map,
+    grade_scale,
+    valid_grade_map,
+)
 from grades.grade_tables import grade_table_data
 from grades.ods_template import BuildGradeTable
 
@@ -111,6 +116,7 @@ class ManageGradesPage(QObject):
         tw = self.ui.grade_table
         #tw.setItemDelegate(
         #    ListDelegate(["1", "1+", "1-", "2", "3", "4", "5", "nb"]))
+        self.event_filter = CopyPasteEventFilter(tw)
 
 
 
@@ -199,6 +205,7 @@ class ManageGradesPage(QObject):
             self.ui.combo_group.setCurrentIndex(0)
 
     def set_group(self):
+        self.suppress_handlers = True
         o = self.ui.combo_occasion.currentIndex()
         i = self.ui.combo_group.currentIndex()
         o_item = self.occasions[o]
@@ -207,25 +214,29 @@ class ManageGradesPage(QObject):
         print("§on_combo_group_currentIndexChanged:",
             repr(self.occasion), self.class_group
         )
-
-#TODO: Get subjects, students and extra info ...
-#        cid, g = class_group_split_with_id(self.class_group)
-#        smap = subject_map(cid, g, self.report_info)
-#        print("\n§§smap:", smap)
-
-###################################
-
+        self.occasion_tag = self.ui.occasion_extra.currentText()
+#TODO: Remove or replace this when the occasion-tag handling is implemented:
+        assert self.occasion_tag == ""
+        if '$' in self.occasion:
+            REPORT_ERROR("TODO: '$'-occasions not yet implemented")
+            self.ui.grade_table.clear()
+            return
 
         self.info, self.subject_list, self.student_list = grade_table_data(
             occasion = self.occasion,
             class_group = self.class_group,
             report_info = self.report_info,
-#            grades = grades,
+            grades = self.db.table("GRADES").grades_occasion_group(
+                self.occasion, self.class_group, self.occasion_tag
+            ),
         )
+        # Set validation using column delegates
+        gscale = grade_scale(self.class_group)
+        grade_map = valid_grade_map(gscale)
+        self.grade_delegate = ListDelegate(grade_map)
 
-        # s_id, sid, sname = self.subject_list[i]
         ncols = len(self.subject_list) + 1
-        headers = [s.NAME for s in self.subject_list]
+        headers = [sbj.NAME for sbj in self.subject_list]
 
         tw = self.ui.grade_table
         tw.setColumnCount(ncols)
@@ -247,10 +258,13 @@ class ManageGradesPage(QObject):
             item = QTableWidgetItem(plevel)
             item.setBackground(QColor("#FFFF80"))
             item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            tw.setItem(i, 0, item)
-#TODO: new grade structure (dict)
+            tw.setItem(i, 0, item)            
+            # Add grades
             j = 1
-            for g in grades:
+            for sbj in self.subject_list:
+                tw.setItemDelegateForColumn(j, self.grade_delegate)
+#            for g in grades:
+                g = grades[str(sbj.id)]
                 item = QTableWidgetItem(g or "?")
 #TODO ...
                 item.setBackground(QColor("#FABBFF"))
@@ -265,8 +279,9 @@ class ManageGradesPage(QObject):
 
 
         tw.setVerticalHeaderLabels(vheaders)
+        self.suppress_handlers = False
 
-#TODO: This is a fix for a visibility problem
+#TODO: This is a fix for a visibility problem (gui refresh)
         for w in APP.topLevelWindows():
             if w.isVisible():
                 w.show()
@@ -315,6 +330,7 @@ class ManageGradesPage(QObject):
 
     @Slot(QTableWidgetItem)
     def on_grade_table_itemChanged(self, item):
+        if self.suppress_handlers: return
         print("§CHANGED:", item.row(), item.column(), item.text())
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#

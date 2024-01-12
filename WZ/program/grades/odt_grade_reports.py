@@ -1,5 +1,5 @@
 """
-grades/odt_grade_reports.py - last updated 2024-01-11
+grades/odt_grade_reports.py - last updated 2024-01-12
 
 Use odt-documents (ODF / LibreOffice) as templates for grade reports.
 
@@ -44,7 +44,12 @@ from core.dates import today, print_date
 from core.classes import class_group_split
 from core.subjects import Subjects
 from text.odt_support import write_ODT_template
-from grades.grade_tables import grade_table_data, grade_scale, grades_key
+from grades.grade_tables import (
+    grade_table_data,
+    grade_scale,
+    valid_grade_map,
+    grades_key,
+)
 
 ### -----
 
@@ -249,9 +254,7 @@ def make_grade_reports(
         return
 
     gscale = grade_scale(class_group)
-    glist = json.loads(getattr(CONFIG, f"GRADE_TABLE_{gscale}"))
-    grade_map = { g0: (g1, g2) for g0, g1, g2 in glist }
-    print("§grade_map:", grade_map)
+    grade_map = valid_grade_map(gscale)
 
     ## Get grades
     gtable = db.table("GRADES")

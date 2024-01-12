@@ -140,10 +140,10 @@ QTableView::item:focus {
         <bool>true</bool>
        </property>
        <property name="selectionMode">
-        <enum>QAbstractItemView::SingleSelection</enum>
+        <enum>QAbstractItemView::ContiguousSelection</enum>
        </property>
        <property name="selectionBehavior">
-        <enum>QAbstractItemView::SelectRows</enum>
+        <enum>QAbstractItemView::SelectItems</enum>
        </property>
        <attribute name="horizontalHeaderMinimumSectionSize">
         <number>20</number>

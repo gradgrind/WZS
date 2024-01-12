@@ -1,12 +1,12 @@
 """
 tables/table_utilities.py
 
-Last updated:  2023-01-22
+Last updated:  2024-01-12
 
 Support functions for various table-based operations.
 
 =+LICENCE=============================
-Copyright 2023 Michael Towers
+Copyright 2024 Michael Towers
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -24,25 +24,23 @@ Copyright 2023 Michael Towers
 """
 
 if __name__ == "__main__":
-    import sys, os
+    import os, sys
 
     this = sys.path[0]
     appdir = os.path.dirname(this)
     sys.path[0] = appdir
-    import core.base
-
     basedir = os.path.dirname(appdir)
+    #from core.base import setup
+    #setup(os.path.join(basedir, 'TESTDATA'), debug = True)
 
-#    from core.base import start
-
-    #    start.setup(os.path.join(basedir, 'TESTDATA'))
-#    start.setup(os.path.join(basedir, "DATA-2023"))
-
-#T = TRANSLATIONS("tables.table_utilitites")
+#from core.base import Tr
+#T = Tr("tables.table_utiities")
 
 ### +++++
 
 from html.parser import HTMLParser
+
+from core.base import REPORT_CRITICAL
 
 ### -----
 
@@ -94,15 +92,24 @@ def Table2TSV(table):
     """
     return "\r\n".join(["\t".join(row) for row in table])
 
+def html2Table(html: str) -> list[list[str]]:
+    """Parse html to extract a table. It assumes there is at most one
+    table in the html – multiple tables will be concatenated.
+    Return a list of string lists.
 
-### Parse html to extract a table – this is used to help pasting,
-### especially from LibreOffice, whose clipboard output seems to
-### be difficult to handle for the Qt text reader (missing empty lines).
-
+    This function is useful for pasting tabular data, in particular
+    from LibreOffice, whose clipboard output is primarily HTML.
+    In this case, reading the clipboard as text can lead to data loss.
+    """
+    tp = __TableParser()
+    return tp.parse(html)
+#+
 class __TableParser(HTMLParser):
-    _singleton = None
-
-    def get_table(self, html):
+    """Support class for <html2Table>.
+    Create an instance of this class and then call the <parse>
+    method to read a table as a list of lists from the html input.
+    """
+    def parse(self, html):
         """This is the main function.
         """
         self.table_rows = []
@@ -124,7 +131,10 @@ class __TableParser(HTMLParser):
         elif tag == "td":
             if self.data_tag:
                 if len(self.data_tag) != 1:
-                    raise Bug
+                    REPORT_CRITICAL(
+                        "Bug, unexpected multiple data fields in <td>:\n"
+                        f"  {self.data_tag}"
+                    )
                 self.table_cols.append("".join(self.data_tag))
             else:
                 self.table_cols.append("")
@@ -134,22 +144,7 @@ class __TableParser(HTMLParser):
             self.data_tag.append(data)
 
 
-def TableParser(html:str) -> list[list[str]]:
-    """Parse html to extract a table. It assumes there is at most one
-    table in the html – multiple tables will be concatenated.
-    Return a list of string lists.
-
-    Use a cache for a <__TableParser> instance, so that only one
-    needs to be built per run.
-    """
-    try:
-        return __TableParser._singleton(html)
-    except TypeError:
-        __TableParser._singleton = (x := __TableParser().get_table)
-        return x(html)
-
-
-def PasteFit(
+def pasteFit(
     table_data: list[list[str]],
     nrows: int,
     ncols: int
@@ -170,24 +165,29 @@ def PasteFit(
 
     Perform the operation "in place", return <True> if successful.
     """
+    print("%%% IN:", table_data)
     paste_rows = len(table_data)
     row0 = table_data[0]
     paste_cols = len(row0)
     if paste_rows == 1:     # paste a single row
         if paste_cols == 1: # paste a single cell
+            print("%%% 1 cell")
             row0 *= ncols   # copy value for each column
         elif paste_cols != ncols:
             return False
+        print("%%% 1 row")
         table_data *= nrows
         return True
     if paste_cols == 1:     # paste a single column
         if paste_rows != nrows:
             return False
+        print("%%% 1 column")
         # copy the column
         for r in table_data:
             r *= ncols
         return True
     # paste a block
+    print("%%% test block")
     return paste_rows == nrows and paste_cols == ncols
 
 
@@ -228,7 +228,7 @@ if __name__ == "__main__":
     </body>
     </html>
     """
-    print("Parse paste data (html):\n  ", TableParser(html))
+    print("Parse paste data (html):\n  ", html2Table(html))
     t = []
     print("\n ============================\n")
     print("ToRectangle TABLE:", t)
@@ -240,34 +240,34 @@ if __name__ == "__main__":
     print("  ->", t)
 
     print("\n ============================\n")
-    print("FIT 3x3?", PasteFit(t, 3, 3))
-    print("FIT 2x3?", PasteFit(t, 2, 3))
+    print("FIT 3x3?", pasteFit(t, 3, 3))
+    print("FIT 2x3?", pasteFit(t, 2, 3))
 
     r = 5
     c = 3
     print(f"\nPASTE AREA: {r}x{c}:")
     t = [["A", "B", "C"]]
     print("  TABLE:", t)
-    if PasteFit(t, r, c):
+    if pasteFit(t, r, c):
         print("    -->", t)
     else:
         print("    Fail")
     t = [["A", "B", "C"]]
-    print("  +++ in 5x6?", PasteFit(t, 5, 6))
+    print("  +++ in 5x6?", pasteFit(t, 5, 6))
     t = [["A"], ["B"], ["C"], ["D"], ["E"]]
     print("  TABLE:", t)
-    if PasteFit(t, r, c):
+    if pasteFit(t, r, c):
         print("    -->", t)
     else:
         print("    Fail")
     t = [["A"], ["B"], ["C"], ["D"], ["E"]]
-    print("  +++ in 6x1?", PasteFit(t, 6, 1))
+    print("  +++ in 6x1?", pasteFit(t, 6, 1))
     t = [["A"]]
     print("  TABLE:", t)
-    if PasteFit(t, r, c):
+    if pasteFit(t, r, c):
         print("    -->", t)
     else:
         print("    Fail")
     t = [["A"]]
-    print("  +++ in 1x1?", PasteFit(t, 1, 1))
+    print("  +++ in 1x1?", pasteFit(t, 1, 1))
     print("     -->", t)

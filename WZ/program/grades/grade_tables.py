@@ -1,5 +1,5 @@
 """
-grades/grade_tables.py - last updated 2024-01-11
+grades/grade_tables.py - last updated 2024-01-12
 
 Manage grade tables.
 
@@ -40,8 +40,6 @@ from typing import Any
 import json
 
 from core.base import (
-    DATAPATH,
-#    REPORT_ERROR,
     REPORT_WARNING,
     REPORT_CRITICAL
 )
@@ -308,6 +306,12 @@ def grade_table_data(
 def grade_scale(class_group: str) -> str:
     gscale = json.loads(CONFIG.GRADE_SCALE)
     return gscale.get(class_group) or gscale.get('*')
+#+
+def valid_grade_map(gscale: str) -> dict[str, tuple[str, str]]:
+    glist = json.loads(getattr(CONFIG, f"GRADE_TABLE_{gscale}"))
+    grade_map = { g0: (g1, g2) for g0, g1, g2 in glist }
+    print("§grade_map:", grade_map)
+    return grade_map
 
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#

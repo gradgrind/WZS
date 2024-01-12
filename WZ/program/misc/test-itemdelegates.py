@@ -16,7 +16,12 @@ from ui.ui_base import (
 
     QStyle,
     QStyleOptionHeader,
+    QObject,
+    QWidget,
+    QEvent,
+    APP,
 )
+from tables.table_utilities import TSV2Table, pasteFit, html2Table
 
 
 class RotatedHeaderView(QHeaderView):
@@ -84,11 +89,10 @@ class RotatedHeaderView(QHeaderView):
 
     def paintSection(self, painter, rect, index):
         text = self._get_data(index)
-        print("§§§1", rect)
+        #print("§§§1", rect)
         opt = self.get_style_options(painter, rect, index, text)
 
-        #text = self._get_data(index)
-        print("§text:", text)
+        #print("§text:", text)
 
         painter.save()
         w, h = rect.width(), rect.height()
@@ -174,6 +178,152 @@ class MyItemDelegate(QStyledItemDelegate):
         edit = MyLineEdit(parent)
         edit.myPopup = popup
         return edit
+
+
+class EventFilter(QObject):
+    """Implement an event filter for key presses on the table.
+    """
+    def __init__(self, table):
+        super().__init__()
+        table.installEventFilter(self)
+        self.table = table
+
+    def eventFilter(self, obj: QWidget, event: QEvent) -> bool:
+        if event.type() == QEvent.Type.KeyPress:
+            key = event.key()
+            if (
+                key == Qt.Key.Key_C
+                and (event.modifiers() & Qt.KeyboardModifier.ControlModifier)
+            ):
+                self.copy_selected_cells()
+                return True
+            elif (
+                key == Qt.Key.Key_V
+                and (event.modifiers() & Qt.KeyboardModifier.ControlModifier)
+            ):
+                clip = APP.clipboard()
+                mime_data = clip.mimeData()
+                if mime_data.hasHtml():
+                    html = mime_data.html()
+                    tt = html2Table(html)
+                    #print("Ctl-V (html):", tt)
+                    if tt:
+                        self.paste_to_cells(tt)
+                elif mime_data.hasText():
+                    tt = TSV2Table(mime_data.text())
+                    #print("Ctl-V (text):", tt)
+                    if tt:
+                        self.paste_to_cells(tt)
+                return True
+        # otherwise standard event processing
+        return False
+
+    def copy_selected_cells(self):
+        tw = self.table
+# Rather with selection ranges?
+        selranges = tw.selectedRanges()
+        assert len(selranges) == 1
+        selrange = selranges[0]
+        print("§selrange:", selrange)
+        print("§ranges:",
+            selrange.topRow(),
+            selrange.leftColumn(),
+            selrange.bottomRow(),
+            selrange.rightColumn(),
+        )
+
+        '''
+        copied_cells = sorted(tw.selectedIndexes())
+        assert copied_cells
+        #print("???", copied_cells)
+        copy_rows = []
+        copy_items = []
+        max_column = copied_cells[-1].column()
+        max_row = copied_cells[-1].row()
+        '''
+
+        rrows = []
+        for r in range(selrange.topRow(), selrange.bottomRow() + 1):
+            rcols = []
+            for c in range(selrange.leftColumn(), selrange.rightColumn() + 1):
+                item = tw.item(r, c)
+                rcols.append(item.text() if item else "")
+            rrows.append('\t'.join(rcols))
+        text = '\n'.join(rrows)
+
+
+        '''
+        for c in copied_cells:
+            #print("§§§", c.column(), max_column, copy_items)
+            item = tw.item(c.row(), c.column())
+            copy_items.append(item.text() if item else "")
+            if c.column() == max_column:
+                copy_rows.append('\t'.join(copy_items))
+                copy_items = []
+        text = '\n'.join(copy_rows)
+        '''
+        #print("   -->", repr(text))
+        APP.clipboard().setText(text)
+
+    def paste_to_cells(self, rows: list[list[str]]):
+        tw = self.table
+
+
+# Rather with selection ranges?
+        selranges = tw.selectedRanges()
+        assert len(selranges) == 1
+        selrange = selranges[0]
+        print("§selrange:", selrange)
+        print("§ranges:",
+            selrange.topRow(),
+            selrange.leftColumn(),
+            selrange.bottomRow(),
+            selrange.rightColumn(),
+        )
+
+
+        if pasteFit(rows, selrange.rowCount(), selrange.columnCount()):
+            print("NEW TABLE:", rows)
+        else:
+            h = len(rows)
+            w = len(rows[0])
+#TODO
+            #REPORT_ERROR(f"Bad paste range, clipboard dimensions: {h} x {w}")
+            print(f"!!! Bad paste range, clipboard dimensions: {h} x {w}")
+            return
+
+        '''
+        selection = tw.selectedIndexes()
+        if selection:
+            row_anchor = selection[0].row()
+            column_anchor = selection[0].column()
+            for indx_row, row in enumerate(rows):
+                for indx_col, value in enumerate(row):
+                    r = row_anchor + indx_row
+                    c = column_anchor + indx_col
+                    if r < tw.rowCount() and c < tw.columnCount():
+                        tw.item(r, c).setText(value)
+        '''
+
+        r = selrange.topRow()
+        for row in rows:
+            c = selrange.leftColumn()
+            for value in row:
+                item = tw.item(r, c)
+                if item:
+                    item.setText(value)
+                elif value:
+                    item = QTableWidgetItem(value)
+                    tw.setItem(r, c, item)
+#TODO
+                    #REPORT_WARNING
+                    print(
+                        f"!!! A value ({value}) was set at ({r}, {c}),"
+                        " but the cell was not previously initialized,"
+                        " so the formatting could be wrong."
+                    )
+                c += 1
+            r += 1
 
 
 ####### A styled tableview with delete-cell and activate-on-return handling
@@ -267,21 +417,22 @@ colours = [
     QColor("#eeddff"),
 ]
 for r in range(nrows):
-    for c in range(ncols):
-        twi = QTableWidgetItem()
-        twi.setText(f"({r} | {c})")
+    if r & 2:
+        for c in range(ncols):
+            twi = QTableWidgetItem()
+            twi.setText(f"({r} | {c})")
 #???
-        twi.setBackground(colours[c])
-        tw.setItem(r, c, twi)
+            twi.setBackground(colours[c])
+            tw.setItem(r, c, twi)
 
 #tw.resizeColumnsToContents() # doesn't work – uses header text width?
 # Might need to get width of each cell in column (measure text)
 
-print("???", headerView._descent)
+print("???headerView._descent:", headerView._descent)
 for c in range(ncols):
     print("COL", c, headerView.sectionSizeHint(c))
 
+event_filter = EventFilter(tw)
+
 tw.resize(600,400)
 run(tw)
-
-quit(0)
