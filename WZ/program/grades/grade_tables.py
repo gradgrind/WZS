@@ -1,5 +1,5 @@
 """
-grades/grade_tables.py - last updated 2024-01-12
+grades/grade_tables.py - last updated 2024-01-14
 
 Manage grade tables.
 
@@ -48,6 +48,7 @@ from core.db_access import (
     db_Table,
     db_TableRow,
     DB_PK,
+    DB_FIELD_INTEGER,
     DB_FIELD_TEXT,
     DB_FIELD_JSON,
     DB_FIELD_REFERENCE,
@@ -106,6 +107,30 @@ class Grades(db_Table):
         }
 #+
 DB_TABLES[Grades.table] = Grades
+
+
+class GradeFields(db_Table):
+    table = "GRADE_FIELDS"
+    order = "SORTING"
+
+    @classmethod
+    def init(cls) -> bool:
+        if cls.fields is None:
+            cls.init_fields(
+                DB_PK(),
+                DB_FIELD_INTEGER("SORTING"),
+                DB_FIELD_TEXT("NAME"),
+                DB_FIELD_TEXT("LOCAL"),
+                DB_FIELD_TEXT("TYPE"),
+                DB_FIELD_TEXT("DATA"),
+                DB_FIELD_TEXT("COLOUR"),
+                DB_FIELD_TEXT("FLAGS"),
+                DB_FIELD_TEXT("GROUPS"),
+            )
+            return True
+        return False
+#+
+DB_TABLES[GradeFields.table] = GradeFields
 
 
 def subject_map(
@@ -310,7 +335,7 @@ def grade_scale(class_group: str) -> str:
 def valid_grade_map(gscale: str) -> dict[str, tuple[str, str]]:
     glist = json.loads(getattr(CONFIG, f"GRADE_TABLE_{gscale}"))
     grade_map = { g0: (g1, g2) for g0, g1, g2 in glist }
-    print("§grade_map:", grade_map)
+    #print("§grade_map:", grade_map)
     return grade_map
 
 

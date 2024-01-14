@@ -1,7 +1,7 @@
 """
 ui/modules/grades_manager.py
 
-Last updated:  2024-01-12
+Last updated:  2024-01-14
 
 Front-end for managing grade reports.
 
@@ -50,6 +50,10 @@ from ui.ui_base import (
     QTableWidgetItem,
     QStyledItemDelegate,
     QLineEdit,
+    QComboBox,
+    QDialog,
+    QVBoxLayout,
+    QCalendarWidget,
     #QCompleter,
     ### QtGui:
     QColor,
@@ -59,6 +63,8 @@ from ui.ui_base import (
     QObject,
     Qt,
     QEvent,
+    QTimer,
+    QDate,
     Slot,
     ### other
     APP,
@@ -68,7 +74,7 @@ from ui.ui_base import (
 from ui.rotated_table_header import RotatedHeaderView
 from ui.table_support import CopyPasteEventFilter
 
-from core.base import REPORT_INFO, REPORT_ERROR
+from core.base import REPORT_INFO, REPORT_ERROR, REPORT_WARNING
 from core.basic_data import get_database, CONFIG
 from core.dates import print_date
 from core.list_activities import report_data
@@ -83,18 +89,189 @@ from grades.ods_template import BuildGradeTable
 
 ### -----
 
-class ListDelegate(QStyledItemDelegate):
-    def __init__(self, validation_list, parent = None):
+class EscapeKeyEventFilter(QObject):
+    """Implement an event filter to catch escape-key presses.
+    """
+    def __init__(self, widget, callback):
+        super().__init__()
+        widget.installEventFilter(self)
+        self._widget = widget
+        self._callback = callback
+
+    def eventFilter(self, obj: QWidget, event: QEvent) -> bool:
+        if event.type() == QEvent.Type.KeyPress:
+            key = event.key()
+            if key == Qt.Key.Key_Escape:
+                #print("§escape")
+                self._callback()
+                #return True
+        # otherwise standard event processing
+        return False
+#+
+class TableComboBox(QComboBox):
+    def __init__(self):
+        super().__init__()
+        self.activated.connect(self._activated)
+        #print("§view:", self.view())
+        self.escape_filter = EscapeKeyEventFilter(self.view(), self.esc)
+
+    def esc(self):
+        print("§esc")
+
+    def _activated(self, i):
+# Not called on ESC
+        print("§activated:", i)
+
+    def hidePopup(self):
+        print("§hidePopup")
+        super().hidePopup()
+
+    def keyPressEvent(self, event):
+        print("§key:", event.key())
+        super().keyPressEvent(event)
+        if event.key() == Qt.Key_Escape:
+            #self.clearFocus()
+            self._activated(None)
+
+
+class GradeTableDelegate(QStyledItemDelegate):
+    def __init__(self, parent):
         super().__init__(parent)
-        self._validator = ListValidator(validation_list)
-        #self._completer = QCompleter(validation_list)
+        self._columns = []
+        self._column_data = []
+
+    def set_columns(self, column_types: list[str]):
+        self.column_types = column_types
+
+    def displayText(self, key, locale):
+#        try:
+#            return print_date(key)
+##TODO
+#        except:
+            return key
+
+    def destroyEditor(self, editor,  index):
+        print("§destroyEditor")
+#TODO: temporary ... in the end I expect nothing should be destroyed
+        if self._columns[index.column()] not in ("GRADE", "CHOICE"):
+            super().destroyEditor(editor,  index)
 
     def createEditor(self, parent, option, index):
-        w = QLineEdit(parent)
-        w.setValidator(self._validator)
-        #w.setCompleter(self._completer)
+        col = index.column()
+        ctype = self._columns[col]
+        print("§index:", col)
+        if ctype == "GRADE":
+            self._grade_editor.setParent(parent)
+            return self._grade_editor
+        if ctype == "CHOICE":
+            editor = self._column_data[col]
+            editor.setParent(parent)
+
+            self._primed = False
+
+            return editor
+
+        return super().createEditor(parent, option, index)
+
+    def setEditorData(self, editor, index):
+        col = index.column()
+        ctype = self._columns[col]
+        print("§sed-index:", col, ctype)
+        self._primed = False
+        if ctype == "CHOICE":
+            currentText = index.data(Qt.EditRole)
+            cbIndex = editor.findText(currentText);
+            # if it is valid, adjust the combobox
+            if cbIndex >= 0:
+                editor.setCurrentIndex(cbIndex)
+            editor.showPopup()
+        self._primed = True
+
+        super().setEditorData(editor, index)
+
+    def setModelData(self, editor, model, index):
+        super().setModelData(editor, model, index)
+        #model.setData(index, editor.currentText(), Qt.EditRole)
+
+    def _max_width(self, string_list: list[str]) -> tuple[int, int]:
+        """Return the display width of the widest item in the list
+        and the width of a single "M".
+        """
+        fm = self.parent().fontMetrics()
+        w = 0
+        for s in string_list:
+            _w = fm.boundingRect(s).width()
+            if _w > w:
+                w = _w
+        return w, fm.horizontalAdvance("M")
+
+    def set_grade_map(self, glist: list[str]):
+        """Set up the information for editing grade cells.
+        """
+        w, m = self._max_width(glist)
+        self._min_grade_width = w + m
+        self._grade_editor = QLineEdit()
+        self._grade_validator = ListValidator(glist)
+        self._grade_editor.setValidator(self._grade_validator)
+
+    def clear(self):
+        """Call this when initializing a table for a new group.
+        """
+        self._columns.clear()
+        self._column_data.clear()
+
+    def _done(self, editor):
+        print("§done", self._primed)
+        if self._primed:
+            # Ensure the edited cell regains focus
+            editor.parent().setFocus(Qt.FocusReason.PopupFocusReason)
+            # Finish editing
+#            self.commitData.emit(editor)
+#            self.closeEditor.emit(editor)
+
+    def add_column(self, grade_field) -> int:
+        """Return the minimum width for the new column
+        """
+        if grade_field is None:
+            ctype = "GRADE"
+            w = self._min_grade_width
+            data = None
+
+        else:
+            ctype = grade_field.TYPE
+            if ctype == "CHOICE":
+                items = grade_field.DATA.split()
+                w, m = self._max_width(items)
+                w += m * 2
+                data = TableComboBox()
+                data.addItems(items)
+                data.currentIndexChanged.connect(
+                    lambda x: self._done(data)
+                )
+#TODO: leaving the value unchanged doesn't remove editor overlay,
+# which can lead to errors because the editor is wrong:
+#   QAbstractItemView::commitData called with an editor that does not belong to this view
+#   QAbstractItemView::closeEditor called with an editor that does not belong to this view
+
+# Using "activated" instead of currentIndexChanged also has this problem,
+# which is perhaps a bit surprising ... NO, it's not that, some other change
+# is doing that!
+
+            elif ctype == "DEFAULT":
+                data = None
+                w = 50
+            else:
+#TODO:
+                #REPORT_WARNING(f"TODO:: Unknown column type: '{ctype}'")
+                print(f"§WARNING:: Unknown column type: '{ctype}'")
+                ctype = "DEFAULT"
+                data = None
+                w = 50
+        self._columns.append(ctype)
+        self._column_data.append(data)
         return w
-#+
+
+
 class ListValidator(QValidator):
     def __init__(self, values: list[str], parent = None):
         super().__init__(parent)
@@ -110,14 +287,234 @@ class ListValidator(QValidator):
             return (QValidator.State.Intermediate, text, pos)
 
 
-#TODO
+#deprecated ...
+class ListDelegate(QStyledItemDelegate):
+    def __init__(self, validation_list, table, parent = None):
+        super().__init__(parent)
+        fm = table.fontMetrics()
+        w = 0
+        for s in validation_list:
+            _w = fm.boundingRect(s).width()
+            if _w > w:
+                w = _w
+        self.min_width = w + fm.horizontalAdvance("M")
+        self._validator = ListValidator(validation_list)
+        #self._completer = QCompleter(validation_list)
+
+    def createEditor(self, parent, option, index):
+        w = QLineEdit(parent)
+        w.setValidator(self._validator)
+        #w.setCompleter(self._completer)
+        return w
+
+
+class ComboBoxDelegate(QStyledItemDelegate):
+    def __init__(self, validation_list, table, parent = None):
+        super().__init__(parent)
+        self._items = validation_list
+        fm = table.fontMetrics()
+        w = 0
+        for s in validation_list:
+            _w = fm.boundingRect(s).width()
+            if _w > w:
+                w = _w
+        self.min_width = w + fm.horizontalAdvance("M") * 2
+
+    def _done(self, editor, i):
+        self.commitData.emit(editor)
+        self.closeEditor.emit(editor)
+
+    def createEditor(self, parent, option, index):
+        # Create the combobox and populate it
+        cb = QComboBox(parent)
+        cb.addItems(self._items)
+        return cb
+
+    def setEditorData(self, editor, index):
+        # get the index of the text in the combobox that matches the
+        # current value of the item
+        currentText = index.data(Qt.EditRole)
+        cbIndex = editor.findText(currentText);
+        # if it is valid, adjust the combobox
+        if cbIndex >= 0:
+           editor.setCurrentIndex(cbIndex)
+        editor.currentIndexChanged.connect(
+            lambda x: self._done(editor, x)
+        )
+
+    def setModelData(self, editor, model, index):
+        model.setData(index, editor.currentText(), Qt.EditRole)
+
+
+class Calendar(QDialog):
+    def __init__(self, parent = None):
+        super().__init__(parent = parent)
+        self.cal = QCalendarWidget()
+        vbox = QVBoxLayout(self)
+        vbox.addWidget(self.cal)
+        self.cal.clicked.connect(self._choose1)
+        self.cal.activated.connect(self._choose)
+
+    def _choose1(self, date: QDate):
+        #print("§CLICKED:", date)
+        self.cal.setSelectedDate(date)
+        self.result = date.toString(Qt.DateFormat.ISODate)
+        QTimer.singleShot(200, self.accept)
+
+    def _choose(self, date: QDate):
+        self.result = date.toString(Qt.DateFormat.ISODate)
+        self.accept()
+
+    def open(self, text = None):
+        self.result = None
+        #print("§open:", text)
+        if open:
+            self.cal.setSelectedDate(
+                QDate.fromString(text, Qt.DateFormat.ISODate)
+            )
+        self.exec()
+
+    def text(self):
+        return self.result
+
+
 class DateDelegate(QStyledItemDelegate):
     """An "item delegate" for displaying and editing date fields.
     """
+    def __init__(self, table, parent = None):
+        super().__init__(parent)
+        fm = table.fontMetrics()
+        self.min_width = (
+            fm.boundingRect(print_date("2024-12-30")).width()
+            + fm.horizontalAdvance("M")
+        )
+        # Use a "dummy" line editor (because it seems to work, while
+        # other approaches are a bit difficult to get working ...)
+        self._editor = QLineEdit()
+        self._editor.setReadOnly(True)
 
-#    def __init__(self, key_value, parent=None):
-#        super().__init__(parent)
-#        self.key2value = dict(key_value)
+    def editorEvent(self, event, model, option, index):
+        print("§editorEvent")
+        self._model = model
+        return super().editorEvent(event, model, option, index)
+
+    def destroyEditor(self, editor,  index):
+        print("§destroyEditor")
+        #super().destroyEditor(editor,  index)
+
+    def createEditor(self, parent, option, index):
+        print("§createEditor")
+        self._editor.setParent(parent)
+        #w = QLineEdit(parent)
+        #w.setReadOnly(True)
+        self._primed = None
+        self._text = None
+        return self._editor
+
+    def setEditorData(self, editor, index):
+        # For some reason (!?), this gets called again after the new value
+        # has been set, thus the used of <self._primed>.
+        if self._primed is None:
+            self._primed = index.data(Qt.ItemDataRole.EditRole)
+            #editor.setText(currentText)
+            print("§ACTIVATE")
+            QTimer.singleShot(0, lambda: self.popup(editor))
+        else:
+            print("§REPEATED ACTIVATION")
+
+    def popup(self, editor):
+        cal = Calendar(editor)
+        cal.open(self._primed)
+        self._text = cal.text()
+        print(f"Calendar {self._primed} -> {self._text}")
+        # Ensure the edited cell regains focus
+        editor.parent().setFocus(Qt.FocusReason.PopupFocusReason)
+        # Finish editing
+        self.commitData.emit(editor)
+        self.closeEditor.emit(editor)
+
+    def setModelData(self, editor, model, index):
+        print("§setModelData", self._text)
+        if self._text is not None:
+            model.setData(index, self._text, Qt.ItemDataRole.EditRole)
+
+
+class DateDelegate_0(QStyledItemDelegate):
+    """An "item delegate" for displaying and editing date fields.
+    """
+    def __init__(self, table, parent = None):
+        super().__init__(parent)
+        fm = table.fontMetrics()
+        self.min_width = (
+            fm.boundingRect(print_date("2024-12-30")).width()
+            + fm.horizontalAdvance("M")
+        )
+
+    def editorEvent(self, event, model, option, index):
+        print("§editorEvent")
+        self._model = model
+        return super().editorEvent(event, model, option, index)
+
+    def destroyEditor(self, editor,  index):
+        print("§destroyEditor")
+        super().destroyEditor(editor,  index)
+
+    def createEditor(self, parent, option, index):
+        print("§createEditor")
+        w = QLineEdit(parent)
+        w.setReadOnly(True)
+        #d = Calendar(parent)
+        #d.setModal(True)
+        self._primed = None
+        self._text = None
+        return w
+
+    def setEditorData(self, editor, index):
+        # For some reason, this gets called again after the new value
+        # has been set, thus the used of <self._primed>.
+        if self._primed is None:
+            self._primed = index.data(Qt.ItemDataRole.EditRole)
+            #editor.setText(currentText)
+            print("§ACTIVATE")
+            QTimer.singleShot(0, lambda: self.popup(editor))
+        else:
+            print("§REPEATED ACTIVATION")
+
+    def popup(self, editor):
+        cal = Calendar(editor)
+        cal.set_text(self._primed)
+        self._text = cal.text()
+        print("Calendar ->", self._text)
+        editor.parent().setFocus(Qt.FocusReason.PopupFocusReason)
+        self.commitData.emit(editor)
+        self.closeEditor.emit(editor)
+
+    def setModelData(self, editor, model, index):
+        print("§setModelData", self._text)
+        #val = editor.text()
+        if self._text is not None:
+            model.setData(index, self._text, Qt.ItemDataRole.EditRole)
+
+
+###########################
+# Maybe something based on:
+    '''
+    class MyLineEdit(QLineEdit):
+        def showEvent(self, event):
+            if self.myPopup:
+                QTimer.singleShot(0, self.myPopup.exec)
+            super().showEvent(event)
+
+    class MyItemDelegate(QStyledItemDelegate):
+        def createEditor(self, parent, option, index):
+            popup = QDialog(parent)
+
+            popup.setMinimumSize(500, 200)
+            edit = MyLineEdit(parent)
+            edit.myPopup = popup
+            return edit
+    '''
+############################
 
     def displayText(self, key, locale):
         try:
@@ -133,11 +530,8 @@ class ManageGradesPage(QObject):
         super().__init__()
         self.ui = load_ui("grades.ui", parent, self)
         tw = self.ui.grade_table
-        #tw.setItemDelegate(
-        #    ListDelegate(["1", "1+", "1-", "2", "3", "4", "5", "nb"]))
+        tw.setItemDelegate(GradeTableDelegate(parent = tw))
         self.event_filter = CopyPasteEventFilter(tw)
-
-        self.date_delegate = DateDelegate()
 
         nrows = 10
         cols = ("Long Column 100", "Column 2", "Col 3", "Col 4a", "Column 5",)
@@ -153,21 +547,21 @@ class ManageGradesPage(QObject):
         #headerView.setDefaultSectionSize(30) # what does this do?
         headerView.setMinimumSectionSize(20)
 #        headerView.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        headerView.setSectionResizeMode(
-            0, QHeaderView.ResizeMode.ResizeToContents
-        )
-        headerView.set_horiz_index(0, True)
-        pItem = tw.horizontalHeaderItem(0)
-        pItem.setTextAlignment(Qt.AlignHCenter | Qt.AlignBottom)
+#        headerView.setSectionResizeMode(
+#            0, QHeaderView.ResizeMode.ResizeToContents
+#        )
+#        headerView.set_horiz_index(0, True)
+#        pItem = tw.horizontalHeaderItem(0)
+#        pItem.setTextAlignment(Qt.AlignHCenter | Qt.AlignBottom)
         m = headerView._margin
         tw.setStyleSheet(
 #            "QTableView {"
 #                "selection-background-color: #f0e0ff;"
 #                "selection-color: black;"
 #            "}"
-            "QTableView::item:focus {"
-                "background-color: #e0a0ff;"
-            "}"
+#            "QTableView::item:focus {"
+#                "background-color: #e0a0ff;"
+#            "}"
             f"QHeaderView::section {{padding: {m}px;}}"
         )
         for i in range(len(cols)):
@@ -189,6 +583,10 @@ class ManageGradesPage(QObject):
         db = get_database()
         self.db = db
         self.report_info = report_data(GRADES = True)[0] # only for the classes
+
+#        cal = Calendar()
+#        cal.exec()
+#        print("§DATE:", cal.result)
 
         ## Set up widgets
         self.suppress_handlers = True
@@ -245,42 +643,75 @@ class ManageGradesPage(QObject):
                 self.occasion, self.class_group, self.occasion_tag
             ),
         )
+        tw = self.ui.grade_table
+        tw.clear()
+        #tw.clearSelection()
         # Set validation using column delegates
         gscale = grade_scale(self.class_group)
         grade_map = valid_grade_map(gscale)
-        self.grade_delegate = ListDelegate(grade_map)
-
-#TODO: Can/should LEVEL be optional? I would also need to look at the
-# grade_tables (?) module
-        tw = self.ui.grade_table
-        self.col_sid = ["LEVEL"]
-        headers = [T("LEVEL")]
+        delegate = tw.itemDelegate()
+        delegate.clear()
+        delegate.set_grade_map(list(grade_map))
+        ### Collect the columns
+        self.col_sid = []
+        headers = []
+        handlers = []
+        ## First the "pre-grade" columns
+        gfields = self.db.table("GRADE_FIELDS").records
+        for gf_i, rec in enumerate(gfields):
+            if rec.SORTING >= 0:
+                break
+            gl = rec.GROUPS
+            if gl == '*' or self.class_group in gl.split():
+                self.col_sid.append(rec.NAME)
+                headers.append(rec.LOCAL)
+                handlers.append(rec)
+        ## Now the grade columns
         for sbj in self.subject_list:
-            i = len(headers)
             headers.append(sbj.NAME)
             self.col_sid.append(sbj.id)
-            tw.setItemDelegateForColumn(i, self.grade_delegate)
-
-#TODO: Additional fields
-
-        i = len(headers)
-# DATE_ISSUE as override always present?
-        headers.append(T("DATE_ISSUE"))
-        self.col_sid.append("DATE_ISSUE")
-        tw.setItemDelegateForColumn(
-            i, self.date_delegate
-        )
-        tw.setColumnWidth(i, 100)
-
-        for j in range(i):
-            tw.setColumnWidth(j, 40 if j > 0 else 150)
-
-
+            handlers.append(None)
+        ## Now the remaining extra columns
+        for i in range(gf_i, len(gfields)):
+            rec = gfields[i]
+            gl = rec.GROUPS
+            if gl == '*' or self.class_group in gl.split():
+                self.col_sid.append(rec.NAME)
+                headers.append(rec.LOCAL)
+                handlers.append(rec)
+        ## Set the table size
         tw.setColumnCount(len(headers))
         nrows = len(self.student_list)
         tw.setRowCount(nrows)
         tw.setHorizontalHeaderLabels(headers)
 
+#        print("))) Table size set:", nrows, len(headers))
+
+#TODO: Can/should LEVEL be optional? I would also need to look at the
+# grade_tables (?) module
+        for i, h in enumerate(handlers):
+            tw.setColumnWidth(i, delegate.add_column(h))
+#            if h is None:
+#                # A grade column
+#                tw.setColumnWidth(i, delegate.min_width(i))
+#            elif h.TYPE == "DATE":
+#                tw.setItemDelegateForColumn(i, self.date_delegate)
+#                tw.setColumnWidth(i, self.date_delegate.min_width)
+#            elif h.TYPE == "CHOICE":
+#                #xdel = ListDelegate(h.DATA.split(), tw)
+#                xdel = ComboBoxDelegate(h.DATA.split(), tw)
+#                self.xdelegates.append(xdel)
+#                tw.setItemDelegateForColumn(i, xdel)
+#                tw.setColumnWidth(i, xdel.min_width)
+#            else:
+##TODO: other fields ...
+#                tw.setColumnWidth(i, delegate.min_width())
+
+#        print("))) Add students")
+#        self.suppress_handlers = False
+#        return
+
+        ### Add students
         vheaders = []
         for i, stdata in enumerate(self.student_list):
             #print("%stadata:", stdata)
@@ -304,7 +735,7 @@ class ManageGradesPage(QObject):
                     try:
                         val = grades[s_id]
                     except KeyError:
-                        print("§s_id:", repr(s_id))
+                        #print("§s_id:", repr(s_id))
                         if s_id.startswith("DATE_"):
 #TODO
                             val = "2024-01-12"

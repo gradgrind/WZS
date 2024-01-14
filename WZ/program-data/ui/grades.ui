@@ -124,15 +124,6 @@
          <height>0</height>
         </size>
        </property>
-       <property name="styleSheet">
-        <string notr="true">QTableView {
-  selection-background-color: #f0e0ff;
-  selection-color: black;
-}
-QTableView::item:focus {
-	background-color: #e0a0ff;
-}</string>
-       </property>
        <property name="editTriggers">
         <set>QAbstractItemView::AnyKeyPressed|QAbstractItemView::DoubleClicked|QAbstractItemView::EditKeyPressed</set>
        </property>
