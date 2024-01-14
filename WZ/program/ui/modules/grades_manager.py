@@ -137,8 +137,17 @@ class TableComboBox(QComboBox):
 class GradeTableDelegate(QStyledItemDelegate):
     def __init__(self, parent):
         super().__init__(parent)
-        self._columns = []
-        self._column_data = []
+        ## Lists for column handling
+        self._columns = []      # type tags
+        self._column_data = []  # type-dependent data
+        ## Date field delegate
+        print("?????CONFIG:", CONFIG._map)
+        w, m = self._max_width([print_date("2024-12-30")])
+        self._min_date_width = w + m
+        # Use a "dummy" line editor (because it seems to work, while
+        # other approaches are a bit difficult to get working ...)
+        self._date_editor = QLineEdit()
+        self._date_editor.setReadOnly(True)
 
     def set_columns(self, column_types: list[str]):
         self.column_types = column_types
@@ -160,6 +169,9 @@ class GradeTableDelegate(QStyledItemDelegate):
         col = index.column()
         ctype = self._columns[col]
         print("§index:", col)
+#???
+#        self._primed = None
+
         if ctype == "GRADE":
             self._grade_editor.setParent(parent)
             return self._grade_editor
@@ -167,9 +179,13 @@ class GradeTableDelegate(QStyledItemDelegate):
             editor = self._column_data[col]
             editor.setParent(parent)
 
-            self._primed = False
+
 
             return editor
+        if ctype == "DATE":
+            self._date_editor.setParent(parent)
+#?
+            return self._date_editor
 
         return super().createEditor(parent, option, index)
 
@@ -177,17 +193,47 @@ class GradeTableDelegate(QStyledItemDelegate):
         col = index.column()
         ctype = self._columns[col]
         print("§sed-index:", col, ctype)
-        self._primed = False
+#        self._primed = False
         if ctype == "CHOICE":
             currentText = index.data(Qt.EditRole)
             cbIndex = editor.findText(currentText);
-            # if it is valid, adjust the combobox
+            # If the text is in the combobox list, select it
+            self._primed = None
             if cbIndex >= 0:
                 editor.setCurrentIndex(cbIndex)
+            self._primed = currentText
             editor.showPopup()
-        self._primed = True
+        elif ctype == "DATE":
+            # For some reason (!?), this gets called again after the new
+            # value has been set, thus the used of <self._primed>.
+            if self._primed is None:
+                self._primed = index.data(Qt.ItemDataRole.EditRole)
+                #editor.setText(currentText)
+                print("§ACTIVATE")
+                QTimer.singleShot(0, lambda: self.popup(editor))
+            else:
+                print("§REPEATED ACTIVATION")
+
+
 
         super().setEditorData(editor, index)
+
+
+
+    def popup(self, editor):
+        """Calendar popup.
+        """
+        cal = Calendar(editor)
+        cal.open(self._primed)
+        self._text = cal.text()
+        print(f"Calendar {self._primed} -> {self._text}")
+        # Ensure the edited cell regains focus
+        editor.parent().setFocus(Qt.FocusReason.PopupFocusReason)
+        # Finish editing
+        self.commitData.emit(editor)
+        self.closeEditor.emit(editor)
+
+
 
     def setModelData(self, editor, model, index):
         super().setModelData(editor, model, index)
@@ -222,7 +268,7 @@ class GradeTableDelegate(QStyledItemDelegate):
 
     def _done(self, editor):
         print("§done", self._primed)
-        if self._primed:
+        if self._primed is not None:
             # Ensure the edited cell regains focus
             editor.parent().setFocus(Qt.FocusReason.PopupFocusReason)
             # Finish editing
@@ -257,6 +303,12 @@ class GradeTableDelegate(QStyledItemDelegate):
 # which is perhaps a bit surprising ... NO, it's not that, some other change
 # is doing that!
 
+
+            elif ctype == "DATE":
+                w = self._min_date_width
+                data = None
+
+
             elif ctype == "DEFAULT":
                 data = None
                 w = 50
@@ -270,6 +322,9 @@ class GradeTableDelegate(QStyledItemDelegate):
         self._columns.append(ctype)
         self._column_data.append(data)
         return w
+
+
+
 
 
 class ListValidator(QValidator):
@@ -286,6 +341,40 @@ class ListValidator(QValidator):
         else:
             return (QValidator.State.Intermediate, text, pos)
 
+
+class Calendar(QDialog):
+    def __init__(self, parent = None):
+        super().__init__(parent = parent)
+        self.cal = QCalendarWidget()
+        vbox = QVBoxLayout(self)
+        vbox.addWidget(self.cal)
+        self.cal.clicked.connect(self._choose1)
+        self.cal.activated.connect(self._choose)
+
+    def _choose1(self, date: QDate):
+        #print("§CLICKED:", date)
+        self.cal.setSelectedDate(date)
+        self.result = date.toString(Qt.DateFormat.ISODate)
+        QTimer.singleShot(200, self.accept)
+
+    def _choose(self, date: QDate):
+        self.result = date.toString(Qt.DateFormat.ISODate)
+        self.accept()
+
+    def open(self, text = None):
+        self.result = None
+        #print("§open:", text)
+        if open:
+            self.cal.setSelectedDate(
+                QDate.fromString(text, Qt.DateFormat.ISODate)
+            )
+        self.exec()
+
+    def text(self):
+        return self.result
+
+
+###########################################################################
 
 #deprecated ...
 class ListDelegate(QStyledItemDelegate):
@@ -344,38 +433,6 @@ class ComboBoxDelegate(QStyledItemDelegate):
 
     def setModelData(self, editor, model, index):
         model.setData(index, editor.currentText(), Qt.EditRole)
-
-
-class Calendar(QDialog):
-    def __init__(self, parent = None):
-        super().__init__(parent = parent)
-        self.cal = QCalendarWidget()
-        vbox = QVBoxLayout(self)
-        vbox.addWidget(self.cal)
-        self.cal.clicked.connect(self._choose1)
-        self.cal.activated.connect(self._choose)
-
-    def _choose1(self, date: QDate):
-        #print("§CLICKED:", date)
-        self.cal.setSelectedDate(date)
-        self.result = date.toString(Qt.DateFormat.ISODate)
-        QTimer.singleShot(200, self.accept)
-
-    def _choose(self, date: QDate):
-        self.result = date.toString(Qt.DateFormat.ISODate)
-        self.accept()
-
-    def open(self, text = None):
-        self.result = None
-        #print("§open:", text)
-        if open:
-            self.cal.setSelectedDate(
-                QDate.fromString(text, Qt.DateFormat.ISODate)
-            )
-        self.exec()
-
-    def text(self):
-        return self.result
 
 
 class DateDelegate(QStyledItemDelegate):
@@ -824,6 +881,7 @@ class ManageGradesPage(QObject):
 
 if __name__ == "__main__":
     from ui.ui_base import run
+    _db = get_database()
 
     widget = ManageGradesPage()
     widget.enter()
