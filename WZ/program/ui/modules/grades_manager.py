@@ -109,29 +109,25 @@ class EscapeKeyEventFilter(QObject):
         return False
 #+
 class TableComboBox(QComboBox):
-    def __init__(self):
+    """A QComboBox adapted for use as a table delegate.
+    The main point is that the "closed" box is never shown.
+    """
+    def __init__(self, callback):
         super().__init__()
+        self._callback = callback
         self.activated.connect(self._activated)
         #print("§view:", self.view())
         self.escape_filter = EscapeKeyEventFilter(self.view(), self.esc)
 
     def esc(self):
-        print("§esc")
+        #print("§esc")
+        self.hidePopup()
+        self._callback(self)
 
     def _activated(self, i):
-# Not called on ESC
-        print("§activated:", i)
-
-    def hidePopup(self):
-        print("§hidePopup")
-        super().hidePopup()
-
-    def keyPressEvent(self, event):
-        print("§key:", event.key())
-        super().keyPressEvent(event)
-        if event.key() == Qt.Key_Escape:
-            #self.clearFocus()
-            self._activated(None)
+        # Not called on ESC
+        #print("§activated:", i)
+        self._callback(self)
 
 
 class GradeTableDelegate(QStyledItemDelegate):
@@ -153,6 +149,7 @@ class GradeTableDelegate(QStyledItemDelegate):
         self.column_types = column_types
 
     def displayText(self, key, locale):
+#TODO: How to make this depend on the column ???!!!
 #        try:
 #            return print_date(key)
 ##TODO
@@ -162,7 +159,7 @@ class GradeTableDelegate(QStyledItemDelegate):
     def destroyEditor(self, editor,  index):
         print("§destroyEditor")
 #TODO: temporary ... in the end I expect nothing should be destroyed
-        if self._columns[index.column()] not in ("GRADE", "CHOICE"):
+        if self._columns[index.column()] not in ("GRADE", "CHOICE", "DATE"):
             super().destroyEditor(editor,  index)
 
     def createEditor(self, parent, option, index):
@@ -170,7 +167,7 @@ class GradeTableDelegate(QStyledItemDelegate):
         ctype = self._columns[col]
         print("§index:", col)
 #???
-#        self._primed = None
+        self._primed = None
 
         if ctype == "GRADE":
             self._grade_editor.setParent(parent)
@@ -198,7 +195,7 @@ class GradeTableDelegate(QStyledItemDelegate):
             currentText = index.data(Qt.EditRole)
             cbIndex = editor.findText(currentText);
             # If the text is in the combobox list, select it
-            self._primed = None
+#            self._primed = None
             if cbIndex >= 0:
                 editor.setCurrentIndex(cbIndex)
             self._primed = currentText
@@ -208,13 +205,12 @@ class GradeTableDelegate(QStyledItemDelegate):
             # value has been set, thus the used of <self._primed>.
             if self._primed is None:
                 self._primed = index.data(Qt.ItemDataRole.EditRole)
-                #editor.setText(currentText)
                 print("§ACTIVATE")
                 QTimer.singleShot(0, lambda: self.popup(editor))
-            else:
-                print("§REPEATED ACTIVATION")
+            #else:
+            #    print("§REPEATED ACTIVATION")
 
-
+#TODO: COMPOSITE, AVERAGE, TEXT
 
         super().setEditorData(editor, index)
 
@@ -224,14 +220,18 @@ class GradeTableDelegate(QStyledItemDelegate):
         """Calendar popup.
         """
         cal = Calendar(editor)
+        self._date_editor.setText(self._primed)
         cal.open(self._primed)
-        self._text = cal.text()
-        print(f"Calendar {self._primed} -> {self._text}")
+        #self._text = cal.text()
+        text = cal.text()
+        if text is not None:
+            self._date_editor.setText(text)
+        #print(f"Calendar {self._primed} -> {text}")
         # Ensure the edited cell regains focus
-        editor.parent().setFocus(Qt.FocusReason.PopupFocusReason)
+        self._date_editor.parent().setFocus(Qt.FocusReason.PopupFocusReason)
         # Finish editing
-        self.commitData.emit(editor)
-        self.closeEditor.emit(editor)
+        self.commitData.emit(self._date_editor)
+        self.closeEditor.emit(self._date_editor)
 
 
 
@@ -289,11 +289,11 @@ class GradeTableDelegate(QStyledItemDelegate):
                 items = grade_field.DATA.split()
                 w, m = self._max_width(items)
                 w += m * 2
-                data = TableComboBox()
+                data = TableComboBox(self._done)
                 data.addItems(items)
-                data.currentIndexChanged.connect(
-                    lambda x: self._done(data)
-                )
+#                data.currentIndexChanged.connect(
+#                    lambda x: self._done(data)
+#                )
 #TODO: leaving the value unchanged doesn't remove editor overlay,
 # which can lead to errors because the editor is wrong:
 #   QAbstractItemView::commitData called with an editor that does not belong to this view
