@@ -1,7 +1,7 @@
 """
 ui/modules/grades_manager.py
 
-Last updated:  2024-01-14
+Last updated:  2024-01-15
 
 Front-end for managing grade reports.
 
@@ -86,8 +86,33 @@ from grades.grade_tables import (
 )
 from grades.grade_tables import grade_table_data
 from grades.ods_template import BuildGradeTable
+import local
 
 ### -----
+
+class TableItem(QTableWidgetItem):
+    """A custom table-widget-item which differentiates (minimally)
+    between EditRole and DisplayRole, currently only for displaying
+    the value – no distinct values are saved.
+    """
+    def __init__(self, text: str = None, ctype: str = None):
+        self._ctype = ctype
+        if text is None:
+            super().__init__()
+        else:
+            super().__init__(text)
+
+    def data(self, role: Qt.ItemDataRole):
+        val = super().data(role)
+        if role == Qt.ItemDataRole.DisplayRole:
+            if self._ctype == "DATE":
+                return print_date(val)
+        return val
+
+#    def setData(self, role: Qt.ItemDataRole, value: str):
+#        self.setText(text)
+#        if ctype == "DATE":
+
 
 class EscapeKeyEventFilter(QObject):
     """Implement an event filter to catch escape-key presses.
@@ -148,6 +173,10 @@ class GradeTableDelegate(QStyledItemDelegate):
     def set_columns(self, column_types: list[str]):
         self.column_types = column_types
 
+#TODO: remove this because it can't depend on the column?
+# Somehow use data edit role and display role?
+# or (last resort?) use complicated data, combining column (type?)
+# and value?
     def displayText(self, key, locale):
 #TODO: How to make this depend on the column ???!!!
 #        try:
@@ -205,12 +234,15 @@ class GradeTableDelegate(QStyledItemDelegate):
             # value has been set, thus the used of <self._primed>.
             if self._primed is None:
                 self._primed = index.data(Qt.ItemDataRole.EditRole)
-                print("§ACTIVATE")
+                print("§ACTIVATE", self._primed)
                 QTimer.singleShot(0, lambda: self.popup(editor))
             #else:
             #    print("§REPEATED ACTIVATION")
 
 #TODO: COMPOSITE, AVERAGE, TEXT
+# Would I want to differentiate between "in-place" text (short) and
+# pop-up (long) text entry?
+# COMPOSITE and AVERAGE should probably have handlers in "local" code.
 
         super().setEditorData(editor, index)
 
@@ -234,10 +266,21 @@ class GradeTableDelegate(QStyledItemDelegate):
         self.closeEditor.emit(self._date_editor)
 
 
-
+    '''
     def setModelData(self, editor, model, index):
-        super().setModelData(editor, model, index)
-        #model.setData(index, editor.currentText(), Qt.EditRole)
+        # Use "properties" to get the value
+        metaobject = editor.metaObject()
+        #print("%%1:", dir(metaobject))
+        for i in range(metaobject.propertyCount()):
+            metaproperty = metaobject.property(i)
+            if metaproperty.isUser():
+                name = metaproperty.name()
+                #print("%%name:", name)
+                #print("%%value:", editor.property(name))
+                #print("%%user:", metaproperty.isUser())
+                text = editor.property(name)
+        model.setData(index, text, Qt.EditRole)
+    '''
 
     def _max_width(self, string_list: list[str]) -> tuple[int, int]:
         """Return the display width of the widest item in the list
@@ -374,186 +417,6 @@ class Calendar(QDialog):
         return self.result
 
 
-###########################################################################
-
-#deprecated ...
-class ListDelegate(QStyledItemDelegate):
-    def __init__(self, validation_list, table, parent = None):
-        super().__init__(parent)
-        fm = table.fontMetrics()
-        w = 0
-        for s in validation_list:
-            _w = fm.boundingRect(s).width()
-            if _w > w:
-                w = _w
-        self.min_width = w + fm.horizontalAdvance("M")
-        self._validator = ListValidator(validation_list)
-        #self._completer = QCompleter(validation_list)
-
-    def createEditor(self, parent, option, index):
-        w = QLineEdit(parent)
-        w.setValidator(self._validator)
-        #w.setCompleter(self._completer)
-        return w
-
-
-class ComboBoxDelegate(QStyledItemDelegate):
-    def __init__(self, validation_list, table, parent = None):
-        super().__init__(parent)
-        self._items = validation_list
-        fm = table.fontMetrics()
-        w = 0
-        for s in validation_list:
-            _w = fm.boundingRect(s).width()
-            if _w > w:
-                w = _w
-        self.min_width = w + fm.horizontalAdvance("M") * 2
-
-    def _done(self, editor, i):
-        self.commitData.emit(editor)
-        self.closeEditor.emit(editor)
-
-    def createEditor(self, parent, option, index):
-        # Create the combobox and populate it
-        cb = QComboBox(parent)
-        cb.addItems(self._items)
-        return cb
-
-    def setEditorData(self, editor, index):
-        # get the index of the text in the combobox that matches the
-        # current value of the item
-        currentText = index.data(Qt.EditRole)
-        cbIndex = editor.findText(currentText);
-        # if it is valid, adjust the combobox
-        if cbIndex >= 0:
-           editor.setCurrentIndex(cbIndex)
-        editor.currentIndexChanged.connect(
-            lambda x: self._done(editor, x)
-        )
-
-    def setModelData(self, editor, model, index):
-        model.setData(index, editor.currentText(), Qt.EditRole)
-
-
-class DateDelegate(QStyledItemDelegate):
-    """An "item delegate" for displaying and editing date fields.
-    """
-    def __init__(self, table, parent = None):
-        super().__init__(parent)
-        fm = table.fontMetrics()
-        self.min_width = (
-            fm.boundingRect(print_date("2024-12-30")).width()
-            + fm.horizontalAdvance("M")
-        )
-        # Use a "dummy" line editor (because it seems to work, while
-        # other approaches are a bit difficult to get working ...)
-        self._editor = QLineEdit()
-        self._editor.setReadOnly(True)
-
-    def editorEvent(self, event, model, option, index):
-        print("§editorEvent")
-        self._model = model
-        return super().editorEvent(event, model, option, index)
-
-    def destroyEditor(self, editor,  index):
-        print("§destroyEditor")
-        #super().destroyEditor(editor,  index)
-
-    def createEditor(self, parent, option, index):
-        print("§createEditor")
-        self._editor.setParent(parent)
-        #w = QLineEdit(parent)
-        #w.setReadOnly(True)
-        self._primed = None
-        self._text = None
-        return self._editor
-
-    def setEditorData(self, editor, index):
-        # For some reason (!?), this gets called again after the new value
-        # has been set, thus the used of <self._primed>.
-        if self._primed is None:
-            self._primed = index.data(Qt.ItemDataRole.EditRole)
-            #editor.setText(currentText)
-            print("§ACTIVATE")
-            QTimer.singleShot(0, lambda: self.popup(editor))
-        else:
-            print("§REPEATED ACTIVATION")
-
-    def popup(self, editor):
-        cal = Calendar(editor)
-        cal.open(self._primed)
-        self._text = cal.text()
-        print(f"Calendar {self._primed} -> {self._text}")
-        # Ensure the edited cell regains focus
-        editor.parent().setFocus(Qt.FocusReason.PopupFocusReason)
-        # Finish editing
-        self.commitData.emit(editor)
-        self.closeEditor.emit(editor)
-
-    def setModelData(self, editor, model, index):
-        print("§setModelData", self._text)
-        if self._text is not None:
-            model.setData(index, self._text, Qt.ItemDataRole.EditRole)
-
-
-class DateDelegate_0(QStyledItemDelegate):
-    """An "item delegate" for displaying and editing date fields.
-    """
-    def __init__(self, table, parent = None):
-        super().__init__(parent)
-        fm = table.fontMetrics()
-        self.min_width = (
-            fm.boundingRect(print_date("2024-12-30")).width()
-            + fm.horizontalAdvance("M")
-        )
-
-    def editorEvent(self, event, model, option, index):
-        print("§editorEvent")
-        self._model = model
-        return super().editorEvent(event, model, option, index)
-
-    def destroyEditor(self, editor,  index):
-        print("§destroyEditor")
-        super().destroyEditor(editor,  index)
-
-    def createEditor(self, parent, option, index):
-        print("§createEditor")
-        w = QLineEdit(parent)
-        w.setReadOnly(True)
-        #d = Calendar(parent)
-        #d.setModal(True)
-        self._primed = None
-        self._text = None
-        return w
-
-    def setEditorData(self, editor, index):
-        # For some reason, this gets called again after the new value
-        # has been set, thus the used of <self._primed>.
-        if self._primed is None:
-            self._primed = index.data(Qt.ItemDataRole.EditRole)
-            #editor.setText(currentText)
-            print("§ACTIVATE")
-            QTimer.singleShot(0, lambda: self.popup(editor))
-        else:
-            print("§REPEATED ACTIVATION")
-
-    def popup(self, editor):
-        cal = Calendar(editor)
-        cal.set_text(self._primed)
-        self._text = cal.text()
-        print("Calendar ->", self._text)
-        editor.parent().setFocus(Qt.FocusReason.PopupFocusReason)
-        self.commitData.emit(editor)
-        self.closeEditor.emit(editor)
-
-    def setModelData(self, editor, model, index):
-        print("§setModelData", self._text)
-        #val = editor.text()
-        if self._text is not None:
-            model.setData(index, self._text, Qt.ItemDataRole.EditRole)
-
-
-###########################
 # Maybe something based on:
     '''
     class MyLineEdit(QLineEdit):
@@ -573,12 +436,6 @@ class DateDelegate_0(QStyledItemDelegate):
     '''
 ############################
 
-    def displayText(self, key, locale):
-        try:
-            return print_date(key)
-#TODO
-        except:
-            return key
 
 
 
@@ -798,7 +655,7 @@ class ManageGradesPage(QObject):
                             val = "2024-01-12"
                         else:
                             val = "??"
-                    item = QTableWidgetItem(val)
+                    item = TableItem(val, handlers[j].TYPE)
                     item.setBackground(QColor("#FFFFA0"))
 
 #TODO: I would need configuration involving translations for those
@@ -809,7 +666,7 @@ class ManageGradesPage(QObject):
 
                 else:
                     g = grades[str(s_id)]
-                    item = QTableWidgetItem(g or "?")
+                    item = TableItem(g or "?")
 #TODO ...
 #                item.setBackground(QColor("#FABBFF"))
 #                if j & 1:
@@ -874,7 +731,9 @@ class ManageGradesPage(QObject):
     @Slot(QTableWidgetItem)
     def on_grade_table_itemChanged(self, item):
         if self.suppress_handlers: return
-        print("§CHANGED:", item.row(), item.column(), item.text())
+        print("§CHANGED:", item.row(), item.column(),
+            item.data(Qt.ItemDataRole.EditRole)
+        )
 
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#

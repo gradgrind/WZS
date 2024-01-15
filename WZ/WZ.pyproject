@@ -45,6 +45,8 @@
         "program/tables/ods_support.py",
         "program/text/odt_support.py",
         "program/grades/odt_grade_reports.py",
-        "program/tables/table_utilities.py"
+        "program/tables/table_utilities.py",
+        "program/local/__init__.py",
+        "program/local/niwa/averages.py"
     ]
 }
