@@ -39,6 +39,7 @@ T = Tr("ui.modules.grades_manager")
 
 ### +++++
 
+from typing import Optional
 import json
 
 from ui.ui_base import (
@@ -54,6 +55,8 @@ from ui.ui_base import (
     QDialog,
     QVBoxLayout,
     QCalendarWidget,
+    QTextEdit,
+    QDialogButtonBox,
     #QCompleter,
     ### QtGui:
     QColor,
@@ -66,6 +69,7 @@ from ui.ui_base import (
     QTimer,
     QDate,
     Slot,
+    QPoint,
     ### other
     APP,
     SHOW_CONFIRM,
@@ -163,31 +167,37 @@ class GradeTableDelegate(QStyledItemDelegate):
         self._columns = []      # type tags
         self._column_data = []  # type-dependent data
         ## Date field delegate
-        print("?????CONFIG:", CONFIG._map)
+        #print("?????CONFIG:", CONFIG._map)
         w, m = self._max_width([print_date("2024-12-30")])
         self._min_date_width = w + m
+#TODO: I'm beginning to get the feeling that this works when the editor
+# is not shared among columns  ... could that be so?
+# Grades still work, so is something different there?
+
         # Use a "dummy" line editor (because it seems to work, while
         # other approaches are a bit difficult to get working ...)
-        self._date_editor = QLineEdit()
-        self._date_editor.setReadOnly(True)
+        self._editor = QLineEdit()
+        self._editor.setReadOnly(True)
 
     def set_columns(self, column_types: list[str]):
         self.column_types = column_types
 
     def destroyEditor(self, editor,  index):
-        print("§destroyEditor")
+        print("§destroyEditor ... or not!")
 #TODO: temporary ... in the end I expect nothing should be destroyed
-        if self._columns[index.column()] not in (
-            "GRADE", "GRADE.", "CHOICE", "DATE"
-        ):
-            super().destroyEditor(editor,  index)
+#        if self._columns[index.column()] not in (
+#            "GRADE", "GRADE.", "CHOICE", "DATE"
+#        ):
+#            super().destroyEditor(editor,  index)
 
     def createEditor(self, parent, option, index):
         col = index.column()
         ctype = self._columns[col]
-        print("§index:", col)
+        print("§index:", col, parent)
+        if ctype.endswith("!"):
+            # read-only
+            return None
         self._primed = None
-
         if ctype.startswith("GRADE"):
             self._grade_editor.setParent(parent)
             return self._grade_editor
@@ -195,17 +205,15 @@ class GradeTableDelegate(QStyledItemDelegate):
             editor = self._column_data[col]
             editor.setParent(parent)
             return editor
-        if ctype == "DATE":
-            self._date_editor.setParent(parent)
-            return self._date_editor
+        else:
+            self._editor.setParent(parent)
+            return self._editor
 #TODO: other types?
-
-        return super().createEditor(parent, option, index)
 
     def setEditorData(self, editor, index):
         col = index.column()
         ctype = self._columns[col]
-        print("§sed-index:", col, ctype)
+        print("§sed-index:", col, ctype, editor.pos())
 #        self._primed = False
         if ctype == "CHOICE":
             currentText = index.data(Qt.EditRole)
@@ -222,7 +230,7 @@ class GradeTableDelegate(QStyledItemDelegate):
             if self._primed is None:
                 self._primed = index.data(Qt.ItemDataRole.EditRole)
                 print("§ACTIVATE", self._primed)
-                QTimer.singleShot(0, lambda: self.popup(editor))
+                QTimer.singleShot(0, lambda: self.popup_cal(editor))
             #else:
             #    print("§REPEATED ACTIVATION")
 
@@ -239,30 +247,96 @@ class GradeTableDelegate(QStyledItemDelegate):
 
 # I probably need a link to the table widget to have access to the
 # key-value information for the cells. Or I use the "changed" signal?
+        elif ctype == "TEXT":
+            # For some reason (!?), this gets called again after the new
+            # value has been set, thus the used of <self._primed>.
+            if self._primed is None:
+                self._primed = index.data(Qt.ItemDataRole.EditRole)
+                print("§ACTIVATE", self._primed)
 
-        elif ctype in ("COMPOSITE", "AVERAGE"):
-            return
+#                self.popup_text(editor)
+#                return
+
+                QTimer.singleShot(0, lambda: self.popup_text(editor))
+#                return
+            #else:
+            #    print("§REPEATED ACTIVATION")
 
         super().setEditorData(editor, index)
 
 
-
-    def popup(self, editor):
+    def popup_cal(self, editor):
         """Calendar popup.
         """
         cal = Calendar(editor)
-        self._date_editor.setText(self._primed)
+        self._editor.setText(self._primed)
         cal.open(self._primed)
         #self._text = cal.text()
         text = cal.text()
         if text is not None:
-            self._date_editor.setText(text)
+            self._editor.setText(text)
         #print(f"Calendar {self._primed} -> {text}")
+        print("§editor-parent:", self._editor.parent())
         # Ensure the edited cell regains focus
-        self._date_editor.parent().setFocus(Qt.FocusReason.PopupFocusReason)
+        self._editor.parent().setFocus(Qt.FocusReason.PopupFocusReason)
         # Finish editing
-        self.commitData.emit(self._date_editor)
-        self.closeEditor.emit(self._date_editor)
+        self.commitData.emit(self._editor)
+        self.closeEditor.emit(self._editor)
+
+#TODO
+    def popup_text(self, editor):
+        """Text popup, for longer texts.
+        """
+        te = TextEditor(editor)
+        self._editor.setText(self._primed)
+        te.open(self._primed)
+        #self._text = te.text()
+        text = te.text()
+        if text is not None:
+            self._editor.setText(text)
+        #print(f"Calendar {self._primed} -> {text}")
+        print("§editor-parent:", self._editor.parent())
+        # Ensure the edited cell regains focus
+        self._editor.parent().setFocus(Qt.FocusReason.PopupFocusReason)
+        # Finish editing
+        self.commitData.emit(self._editor)
+        self.closeEditor.emit(self._editor)
+        return
+
+# old attempts ...
+
+        self._editor.setText(self._primed)
+#        text = text_editor(self._primed, self._editor)
+
+        import time
+        time.sleep(1)
+        print("§TESTING")
+        text = text_editor(self._primed, self._editor)
+#        text = None
+        time.sleep(1)
+
+        if text is not None:
+            self._editor.setText(text)
+        print(f"TEXT {self._primed} -> {text}")
+        print("§editor-parent:", self._editor.parent())
+        # Ensure the edited cell regains focus
+        p = self._editor.parent()
+        # Finish editing
+# I'm getting the error about the editor not belonging to the view again ...
+        #self._editor.setParent(None)
+        #self._editor.hide()
+        self._editor.editingFinished.emit()
+        p.setFocus(Qt.FocusReason.PopupFocusReason)
+#???
+#        QTimer.singleShot(0, self.refocus)
+
+#        self.commitData.emit(self._editor)
+#        self.closeEditor.emit(self._editor)
+
+#???
+    def refocus(self):
+        print("§refocus", self._editor.parent())
+        self._editor.parent().setFocus(Qt.FocusReason.PopupFocusReason)
 
 
     '''
@@ -345,7 +419,7 @@ class GradeTableDelegate(QStyledItemDelegate):
 #TODO:
             #REPORT_WARNING(f"TODO:: Unknown column type: '{ctype}'")
             print(f"§WARNING:: Unknown column type: '{ctype}'")
-            ctype = "DEFAULT"
+#            ctype = "DEFAULT"
         self._columns.append(ctype)
         self._column_data.append(data)
         return w
@@ -388,7 +462,7 @@ class Calendar(QDialog):
     def open(self, text = None):
         self.result = None
         #print("§open:", text)
-        if open:
+        if text:
             self.cal.setSelectedDate(
                 QDate.fromString(text, Qt.DateFormat.ISODate)
             )
@@ -397,6 +471,84 @@ class Calendar(QDialog):
     def text(self):
         return self.result
 
+
+#TODO: This looks quite promising!
+class TextEditor(QDialog):
+    def __init__(self, parent = None):
+        super().__init__(parent = parent)
+        self.te = QTextEdit()
+        vbox = QVBoxLayout(self)
+        vbox.addWidget(self.te)
+        bb = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok
+            | QDialogButtonBox.StandardButton.Cancel
+            | QDialogButtonBox.StandardButton.Reset
+        )
+        vbox.addWidget(bb)
+        bb.accepted.connect(self.done_ok)
+        self.te.textChanged.connect(self.changed)
+#        self.cal.clicked.connect(self._choose1)
+#        self.cal.activated.connect(self._choose)
+
+    def done_ok(self):
+        self.result = self.current
+        self.accept()
+
+    def _choose(self, date: QDate):
+        self.result = date.toString(Qt.DateFormat.ISODate)
+        self.accept()
+
+    def open(self, text = None):
+        self.result = None
+        #print("§open:", text)
+        if text:
+            self.te.setPlainText(text)
+
+        self.current = "XXX"
+
+        self.exec()
+
+    def changed(self):
+        self.current = self.te.toPlainText()
+
+    def text(self):
+        return self.result
+
+#TODO: It might be a good idea to replace the comboboxes by popup
+# listwidgets? Is that simple enough?
+
+#TODO: This seems not to work properly. WHY?????
+def text_editor(text: str, parent: QWidget = None) -> Optional[str]:
+    def on_buttonBox_clicked(btn):
+        if btn == pb_reset:
+            ui.text_edit.clear()
+
+    def on_text_edit_textChanged():
+        nonlocal text
+        text = ui.text_edit.toPlainText()
+        print("§text-changed:", text)
+        pb_accept.setDisabled(text == text0)
+
+    ui = load_ui("dialog_text_editor.ui", None, locals())
+    pb_accept = ui.buttonBox.button(
+        QDialogButtonBox.StandardButton.Ok
+    )
+    pb_reset = ui.buttonBox.button(
+        QDialogButtonBox.StandardButton.Reset
+    )
+    text0 = text.replace('¶', '\n')
+    ui.text_edit.setPlainText(text0)
+#    pb_accept.setDisabled(True)
+
+#TODO: Can this work before the window is shown???
+# I've got this in all my dialogs!
+    if parent:
+#        print("§pos:", parent.pos())
+#        ui.move(parent.mapToGlobal(parent.pos()))
+        ui.move(parent.mapToGlobal(QPoint(0, 0)))
+    if ui.exec() == QDialog.DialogCode.Accepted:
+        return '¶'.join(text.splitlines())
+    return None
 
 # Maybe something based on:
     '''
@@ -418,10 +570,8 @@ class Calendar(QDialog):
 ############################
 
 
-
-
 class ManageGradesPage(QObject):
-    def __init__(self, parent=None):
+    def __init__(self, parent = None):
         super().__init__()
         self.ui = load_ui("grades.ui", parent, self)
         tw = self.ui.grade_table
