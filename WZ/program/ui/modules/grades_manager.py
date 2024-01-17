@@ -1,7 +1,7 @@
 """
 ui/modules/grades_manager.py
 
-Last updated:  2024-01-16
+Last updated:  2024-01-17
 
 Front-end for managing grade reports.
 
@@ -57,6 +57,8 @@ from ui.ui_base import (
     QCalendarWidget,
     QTextEdit,
     QDialogButtonBox,
+    QListWidget,
+    QStyle,
     #QCompleter,
     ### QtGui:
     QColor,
@@ -146,7 +148,7 @@ class TableComboBox(QComboBox):
         super().__init__()
         self._callback = callback
         self.activated.connect(self._activated)
-        #print("§view:", self.view())
+        print("§view:", self.view(), hex(self.view().windowFlags()))
         self.escape_filter = EscapeKeyEventFilter(self.view(), self.esc)
 
     def esc(self):
@@ -183,12 +185,8 @@ class GradeTableDelegate(QStyledItemDelegate):
         self.column_types = column_types
 
     def destroyEditor(self, editor,  index):
-        print("§destroyEditor ... or not!")
-#TODO: temporary ... in the end I expect nothing should be destroyed
-#        if self._columns[index.column()] not in (
-#            "GRADE", "GRADE.", "CHOICE", "DATE"
-#        ):
-#            super().destroyEditor(editor,  index)
+        pass
+        #print("§destroyEditor ... or not!")
 
     def createEditor(self, parent, option, index):
         col = index.column()
@@ -201,10 +199,10 @@ class GradeTableDelegate(QStyledItemDelegate):
         if ctype.startswith("GRADE"):
             self._grade_editor.setParent(parent)
             return self._grade_editor
-        if ctype == "CHOICE":
-            editor = self._column_data[col]
-            editor.setParent(parent)
-            return editor
+#        if ctype == "CHOICE":
+#            editor = self._column_data[col]
+#            editor.setParent(parent)
+#            return editor
         else:
             self._editor.setParent(parent)
             return self._editor
@@ -216,14 +214,28 @@ class GradeTableDelegate(QStyledItemDelegate):
         print("§sed-index:", col, ctype, editor.pos())
 #        self._primed = False
         if ctype == "CHOICE":
-            currentText = index.data(Qt.EditRole)
-            cbIndex = editor.findText(currentText);
-            # If the text is in the combobox list, select it
-#            self._primed = None
-            if cbIndex >= 0:
-                editor.setCurrentIndex(cbIndex)
-            self._primed = currentText
-            editor.showPopup()
+            # For some reason (!?), this gets called again after the new
+            # value has been set, thus the used of <self._primed>.
+            if self._primed is None:
+                self._primed = index.data(Qt.ItemDataRole.EditRole)
+                print("§ACTIVATE", self._primed)
+                QTimer.singleShot(0, lambda: self.popup_choice(
+                    ["HS", "RS", "Gym"]
+                ))
+                return
+            #else:
+            #    print("§REPEATED ACTIVATION")
+
+
+
+#            currentText = index.data(Qt.EditRole)
+#            cbIndex = editor.findText(currentText);
+#            # If the text is in the combobox list, select it
+##            self._primed = None
+#            if cbIndex >= 0:
+#                editor.setCurrentIndex(cbIndex)
+#            self._primed = currentText
+#            editor.showPopup()
         elif ctype == "DATE":
             # For some reason (!?), this gets called again after the new
             # value has been set, thus the used of <self._primed>.
@@ -231,6 +243,7 @@ class GradeTableDelegate(QStyledItemDelegate):
                 self._primed = index.data(Qt.ItemDataRole.EditRole)
                 print("§ACTIVATE", self._primed)
                 QTimer.singleShot(0, lambda: self.popup_cal(editor))
+                return
             #else:
             #    print("§REPEATED ACTIVATION")
 
@@ -253,12 +266,8 @@ class GradeTableDelegate(QStyledItemDelegate):
             if self._primed is None:
                 self._primed = index.data(Qt.ItemDataRole.EditRole)
                 print("§ACTIVATE", self._primed)
-
-#                self.popup_text(editor)
-#                return
-
-                QTimer.singleShot(0, lambda: self.popup_text(editor))
-#                return
+                QTimer.singleShot(0, self.popup_text)
+                return
             #else:
             #    print("§REPEATED ACTIVATION")
 
@@ -270,9 +279,7 @@ class GradeTableDelegate(QStyledItemDelegate):
         """
         cal = Calendar(editor)
         self._editor.setText(self._primed)
-        cal.open(self._primed)
-        #self._text = cal.text()
-        text = cal.text()
+        text = cal.open(self._primed)
         if text is not None:
             self._editor.setText(text)
         #print(f"Calendar {self._primed} -> {text}")
@@ -283,60 +290,35 @@ class GradeTableDelegate(QStyledItemDelegate):
         self.commitData.emit(self._editor)
         self.closeEditor.emit(self._editor)
 
-#TODO
-    def popup_text(self, editor):
+    def popup_text(self):
         """Text popup, for longer texts.
         """
-        te = TextEditor(editor)
+        te = TextEditor(self._editor)
         self._editor.setText(self._primed)
-        te.open(self._primed)
-        #self._text = te.text()
-        text = te.text()
+        text = te.open(self._primed)
         if text is not None:
             self._editor.setText(text)
-        #print(f"Calendar {self._primed} -> {text}")
-        print("§editor-parent:", self._editor.parent())
         # Ensure the edited cell regains focus
         self._editor.parent().setFocus(Qt.FocusReason.PopupFocusReason)
         # Finish editing
         self.commitData.emit(self._editor)
         self.closeEditor.emit(self._editor)
-        return
 
-# old attempts ...
-
+    def popup_choice(self, items: list[str]):
+        """List popup, choose one entry (or escape).
+        """
+        lc = ListChoice(self._editor)
         self._editor.setText(self._primed)
-#        text = text_editor(self._primed, self._editor)
-
-        import time
-        time.sleep(1)
-        print("§TESTING")
-        text = text_editor(self._primed, self._editor)
-#        text = None
-        time.sleep(1)
-
+        text = lc.open(items, self._primed)
+        #text = lc.open(self._primed)
+        #text = lc.text()
         if text is not None:
             self._editor.setText(text)
-        print(f"TEXT {self._primed} -> {text}")
-        print("§editor-parent:", self._editor.parent())
         # Ensure the edited cell regains focus
-        p = self._editor.parent()
-        # Finish editing
-# I'm getting the error about the editor not belonging to the view again ...
-        #self._editor.setParent(None)
-        #self._editor.hide()
-        self._editor.editingFinished.emit()
-        p.setFocus(Qt.FocusReason.PopupFocusReason)
-#???
-#        QTimer.singleShot(0, self.refocus)
-
-#        self.commitData.emit(self._editor)
-#        self.closeEditor.emit(self._editor)
-
-#???
-    def refocus(self):
-        print("§refocus", self._editor.parent())
         self._editor.parent().setFocus(Qt.FocusReason.PopupFocusReason)
+        # Finish editing
+        self.commitData.emit(self._editor)
+        self.closeEditor.emit(self._editor)
 
 
     '''
@@ -440,6 +422,49 @@ class ListValidator(QValidator):
             return (QValidator.State.Intermediate, text, pos)
 
 
+class ListChoice(QDialog):
+    def __init__(self, parent = None):
+        super().__init__(parent = parent)
+        self.setWindowFlags(Qt.WindowType.SplashScreen)
+        vbox = QVBoxLayout(self)
+        vbox.setContentsMargins(0, 0, 0, 0)
+        self.listwidget = QListWidget()
+        self.listwidget.setStyleSheet("QListView::item {padding: 3px}")
+        vbox.addWidget(self.listwidget)
+        self.listwidget.itemClicked.connect(self.done_ok)
+        self.listwidget.itemActivated.connect(self.done_ok)
+
+    def open(self, items: list[str], value: str = None):
+        self.result = None
+        self.listwidget.clear()
+        row = 0
+        for i, s in enumerate(items):
+            if s == value:
+                row = i
+            self.listwidget.addItem(s)
+        lw = self.listwidget
+        w = lw.sizeHintForColumn(0) + lw.frameWidth() * 2
+        h = lw.sizeHintForRow(0) * lw.count() + 2 * lw.frameWidth()
+        if h > 200:
+            h = 200
+            scrollBarWidth = lw.style().pixelMetric(
+                QStyle.PixelMetric.PM_ScrollBarExtent
+            )
+            w += scrollBarWidth + lw.width() - lw.viewport().width()
+        lw.setFixedSize(w, h)
+        self.resize(0, 0)
+        self.listwidget.setCurrentRow(row)
+        p = self.parent()
+        if p:
+            self.move(p.mapToGlobal(QPoint(0, 0)))
+        self.exec()
+        return self.result
+
+    def done_ok(self, item):
+        self.result = item.text()
+        self.accept()
+
+
 class Calendar(QDialog):
     def __init__(self, parent = None):
         super().__init__(parent = parent)
@@ -467,107 +492,56 @@ class Calendar(QDialog):
                 QDate.fromString(text, Qt.DateFormat.ISODate)
             )
         self.exec()
-
-    def text(self):
         return self.result
 
 
-#TODO: This looks quite promising!
 class TextEditor(QDialog):
     def __init__(self, parent = None):
         super().__init__(parent = parent)
         self.te = QTextEdit()
         vbox = QVBoxLayout(self)
         vbox.addWidget(self.te)
-        bb = QDialogButtonBox(
+        self.bb = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok
             | QDialogButtonBox.StandardButton.Cancel
             | QDialogButtonBox.StandardButton.Reset
         )
-        vbox.addWidget(bb)
-        bb.accepted.connect(self.done_ok)
+        vbox.addWidget(self.bb)
+        self.bb.accepted.connect(self.done_ok)
+        self.bb.rejected.connect(self.close)
+        self.bb.button(
+            QDialogButtonBox.StandardButton.Reset
+        ).clicked.connect(self.reset)
         self.te.textChanged.connect(self.changed)
-#        self.cal.clicked.connect(self._choose1)
-#        self.cal.activated.connect(self._choose)
 
-    def done_ok(self):
-        self.result = self.current
+    def reset(self):
+        self.result = ""
         self.accept()
 
-    def _choose(self, date: QDate):
-        self.result = date.toString(Qt.DateFormat.ISODate)
+    def done_ok(self):
+        self.result = '¶'.join(self.current.splitlines())
         self.accept()
 
     def open(self, text = None):
         self.result = None
+        self.suppress_handlers = True
         #print("§open:", text)
-        if text:
-            self.te.setPlainText(text)
-
-        self.current = "XXX"
-
+        self.text0 = text.replace('¶', '\n') if text else ""
+        self.te.setPlainText(self.text0)
+        self.suppress_handlers = False
+        self.changed()
+        p = self.parent()
+        if p:
+            self.move(p.mapToGlobal(QPoint(0, 0)))
         self.exec()
-
-    def changed(self):
-        self.current = self.te.toPlainText()
-
-    def text(self):
         return self.result
 
-#TODO: It might be a good idea to replace the comboboxes by popup
-# listwidgets? Is that simple enough?
-
-#TODO: This seems not to work properly. WHY?????
-def text_editor(text: str, parent: QWidget = None) -> Optional[str]:
-    def on_buttonBox_clicked(btn):
-        if btn == pb_reset:
-            ui.text_edit.clear()
-
-    def on_text_edit_textChanged():
-        nonlocal text
-        text = ui.text_edit.toPlainText()
-        print("§text-changed:", text)
-        pb_accept.setDisabled(text == text0)
-
-    ui = load_ui("dialog_text_editor.ui", None, locals())
-    pb_accept = ui.buttonBox.button(
-        QDialogButtonBox.StandardButton.Ok
-    )
-    pb_reset = ui.buttonBox.button(
-        QDialogButtonBox.StandardButton.Reset
-    )
-    text0 = text.replace('¶', '\n')
-    ui.text_edit.setPlainText(text0)
-#    pb_accept.setDisabled(True)
-
-#TODO: Can this work before the window is shown???
-# I've got this in all my dialogs!
-    if parent:
-#        print("§pos:", parent.pos())
-#        ui.move(parent.mapToGlobal(parent.pos()))
-        ui.move(parent.mapToGlobal(QPoint(0, 0)))
-    if ui.exec() == QDialog.DialogCode.Accepted:
-        return '¶'.join(text.splitlines())
-    return None
-
-# Maybe something based on:
-    '''
-    class MyLineEdit(QLineEdit):
-        def showEvent(self, event):
-            if self.myPopup:
-                QTimer.singleShot(0, self.myPopup.exec)
-            super().showEvent(event)
-
-    class MyItemDelegate(QStyledItemDelegate):
-        def createEditor(self, parent, option, index):
-            popup = QDialog(parent)
-
-            popup.setMinimumSize(500, 200)
-            edit = MyLineEdit(parent)
-            edit.myPopup = popup
-            return edit
-    '''
-############################
+    def changed(self):
+        if self.suppress_handlers: return
+        self.current = self.te.toPlainText()
+        self.bb.button(QDialogButtonBox.StandardButton.Ok).setDisabled(
+            self.current == self.text0
+        )
 
 
 class ManageGradesPage(QObject):
