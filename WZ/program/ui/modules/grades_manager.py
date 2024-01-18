@@ -1,7 +1,7 @@
 """
 ui/modules/grades_manager.py
 
-Last updated:  2024-01-17
+Last updated:  2024-01-18
 
 Front-end for managing grade reports.
 
@@ -215,27 +215,16 @@ class GradeTableDelegate(QStyledItemDelegate):
 #        self._primed = False
         if ctype == "CHOICE":
             # For some reason (!?), this gets called again after the new
-            # value has been set, thus the used of <self._primed>.
+            # value has been set, thus the use of <self._primed>.
             if self._primed is None:
                 self._primed = index.data(Qt.ItemDataRole.EditRole)
                 print("§ACTIVATE", self._primed)
                 QTimer.singleShot(0, lambda: self.popup_choice(
-                    ["HS", "RS", "Gym"]
+                    self._column_data[col]
                 ))
                 return
             #else:
             #    print("§REPEATED ACTIVATION")
-
-
-
-#            currentText = index.data(Qt.EditRole)
-#            cbIndex = editor.findText(currentText);
-#            # If the text is in the combobox list, select it
-##            self._primed = None
-#            if cbIndex >= 0:
-#                editor.setCurrentIndex(cbIndex)
-#            self._primed = currentText
-#            editor.showPopup()
         elif ctype == "DATE":
             # For some reason (!?), this gets called again after the new
             # value has been set, thus the used of <self._primed>.
@@ -247,7 +236,7 @@ class GradeTableDelegate(QStyledItemDelegate):
             #else:
             #    print("§REPEATED ACTIVATION")
 
-#TODO: COMPOSITE, AVERAGE, TEXT
+#TODO: COMPOSITE, AVERAGE
 # Would I want to differentiate between "in-place" text (short) and
 # pop-up (long) text entry?
 # COMPOSITE and AVERAGE should probably have handlers in "local" code.
@@ -272,7 +261,6 @@ class GradeTableDelegate(QStyledItemDelegate):
             #    print("§REPEATED ACTIVATION")
 
         super().setEditorData(editor, index)
-
 
     def popup_cal(self, editor):
         """Calendar popup.
@@ -393,10 +381,13 @@ class GradeTableDelegate(QStyledItemDelegate):
             items = grade_field.DATA.split()
             w, m = self._max_width(items)
             w += m * 2
-            data = TableComboBox(self._done)
-            data.addItems(items)
+            #data = TableComboBox(self._done)
+            #data.addItems(items)
+            data = items
         elif ctype == "DATE":
             w = self._min_date_width
+        elif ctype == "TEXT":
+            w, m = self._max_width(["Text field width"])
         elif ctype != "DEFAULT":
 #TODO:
             #REPORT_WARNING(f"TODO:: Unknown column type: '{ctype}'")
@@ -562,7 +553,7 @@ class ManageGradesPage(QObject):
         tw.setHorizontalHeader(headerView)
         tw.setHorizontalHeaderLabels(cols)
 
-
+        headerView.setStretchLastSection(True)
         #headerView.setDefaultSectionSize(30) # what does this do?
         headerView.setMinimumSectionSize(20)
 #        headerView.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
@@ -653,6 +644,8 @@ class ManageGradesPage(QObject):
             REPORT_ERROR("TODO: '$'-occasions not yet implemented")
             self.ui.grade_table.clear()
             return
+# Consider removing this category: couldn't I simply add all tables to
+# the occasions list?
 
         self.info, self.subject_list, self.student_list = grade_table_data(
             occasion = self.occasion,
@@ -664,10 +657,10 @@ class ManageGradesPage(QObject):
         )
         tw = self.ui.grade_table
         tw.clear()
-        #tw.clearSelection()
-        # Set validation using column delegates
+        ## Set up grade arithmetic and validation
         gscale = grade_scale(self.class_group)
         grade_map = valid_grade_map(gscale)
+        self.grade_arithmetic = local.grades.GradeArithmetic(grade_map)
         delegate = tw.itemDelegate()
         delegate.clear()
         delegate.set_grade_map(list(grade_map))
@@ -677,11 +670,9 @@ class ManageGradesPage(QObject):
         handlers = []
         grade_colours = {}
         self.key_col = {}
-        grades_component = set()
+        grade_type = {}     # sid-col -> normal (True) / component (False)
         gfields = self.db.table("GRADE_FIELDS").records
         for gf_i, rec in enumerate(gfields):
-#            if rec.SORTING >= 0:
-#                break
             gl = rec.GROUPS
             if gl != '*' and self.class_group not in gl.split():
                 continue
@@ -694,12 +685,16 @@ class ManageGradesPage(QObject):
                 ## Now the grade columns
                 for sbj in self.subject_list:
                     self.col_sid.append(sbj.id)
-                    self.key_col[sbj.SID] = len(headers)
+                    i = len(headers)
+                    self.key_col[sbj.SID] = i
                     headers.append(sbj.NAME)
                     handlers.append(rec)
+                    # Add this subject as "normal", though that might
+                    # change later ...
+                    grade_type[i] = True
                 continue
 
-            if ctype == "COMPOSITE":
+            if ctype == "COMPOSITE!":
                 q_colour = QColor(rec.COLOUR).darker(120)
                 components = []
                 for sid in rec.DATA.split():
@@ -707,12 +702,20 @@ class ManageGradesPage(QObject):
                         col = self.key_col[sid]
                     except KeyError:
                         continue
-                    if col in grades_component:
-                        REPORT_ERROR(T("COMPONENT_NOT_UNIQUE",
-                            subject = rec.NAME
+                    try:
+                        gtype = grade_type[col]
+                    except KeyError:
+                        REPORT_ERROR(T("COMPONENT_NOT_GRADE",
+                            subject = rec.NAME,
+                            sid = sid
                         ))
                         continue
-                    grades_component.add(col)
+                    if not gtype:
+                        REPORT_ERROR(T("COMPONENT_NOT_UNIQUE",
+                            sid = sid
+                        ))
+                        continue
+                    grade_type[col] = False # mark as component
                     components.append(col)
                     handlers[col] = component_handler
                     grade_colours[col] = q_colour
@@ -722,11 +725,19 @@ class ManageGradesPage(QObject):
                         subject = rec.NAME
                     ))
                     continue
+                if rec.LOCAL:
+                    grade_type[len(headers)] = True
             if rec.LOCAL:
                 self.col_sid.append(rec.NAME)
                 self.key_col[rec.NAME] = len(headers)
                 headers.append(rec.LOCAL)
                 handlers.append(rec)
+        self.all_grade_cols = {
+            col
+            for col, t in grade_type.items()
+            if t
+        }
+        #print("§all_grade_cols:", self.all_grade_cols)
 
         ## Set the table size
         tw.setColumnCount(len(headers))

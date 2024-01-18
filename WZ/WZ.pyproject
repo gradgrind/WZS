@@ -47,6 +47,6 @@
         "program/grades/odt_grade_reports.py",
         "program/tables/table_utilities.py",
         "program/local/__init__.py",
-        "program/local/niwa/averages.py"
+        "program/local/niwa/grades.py"
     ]
 }
