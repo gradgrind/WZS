@@ -1,7 +1,7 @@
 """
 ui/modules/grades_manager.py
 
-Last updated:  2024-01-18
+Last updated:  2024-01-19
 
 Front-end for managing grade reports.
 
@@ -39,15 +39,16 @@ T = Tr("ui.modules.grades_manager")
 
 ### +++++
 
-from typing import Optional
+#from typing import Optional
+import datetime
 import json
 
 from ui.ui_base import (
     load_ui,
     ### QtWidgets:
     QWidget,
-    QHeaderView,
-    QAbstractButton,
+#    QHeaderView,
+#    QAbstractButton,
     QTableWidgetItem,
     QStyledItemDelegate,
     QLineEdit,
@@ -62,7 +63,7 @@ from ui.ui_base import (
     #QCompleter,
     ### QtGui:
     QColor,
-    QBrush,
+#    QBrush,
     QValidator,
     ### QtCore:
     QObject,
@@ -74,7 +75,7 @@ from ui.ui_base import (
     QPoint,
     ### other
     APP,
-    SHOW_CONFIRM,
+#    SHOW_CONFIRM,
     SAVE_FILE,
 )
 from ui.rotated_table_header import RotatedHeaderView
@@ -84,7 +85,7 @@ from core.base import REPORT_INFO, REPORT_ERROR, REPORT_WARNING
 from core.basic_data import get_database, CONFIG
 from core.dates import print_date
 from core.list_activities import report_data
-from core.classes import class_group_split_with_id
+#from core.classes import class_group_split_with_id
 from grades.grade_tables import (
     #subject_map,
     grade_scale,
@@ -93,6 +94,8 @@ from grades.grade_tables import (
 from grades.grade_tables import grade_table_data
 from grades.ods_template import BuildGradeTable
 import local
+
+UPDATE_PAUSE = 1000     # time between cell edit and db update in ms
 
 ### -----
 
@@ -180,11 +183,19 @@ class GradeTableDelegate(QStyledItemDelegate):
         # other approaches are a bit difficult to get working ...)
         self._editor = QLineEdit()
         self._editor.setReadOnly(True)
+        self._timer = QTimer()
+        self._timer.setSingleShot(True)
+        self._timer.setInterval(2000)
+        self._timer.timeout.connect(self.update_db)
+
 
     def set_columns(self, column_types: list[str]):
         self.column_types = column_types
 
     def destroyEditor(self, editor,  index):
+        """Reimplement <destroyEditor> to do nothing because the editors
+        are retained.
+        """
         pass
         #print("§destroyEditor ... or not!")
 
@@ -308,9 +319,15 @@ class GradeTableDelegate(QStyledItemDelegate):
         self.commitData.emit(self._editor)
         self.closeEditor.emit(self._editor)
 
-
-    '''
     def setModelData(self, editor, model, index):
+        """Reimplement to handle cells set by functions.
+        Trigger line processing via a delay, so that multiple updates to
+        a single line can all be processed together.
+        """
+        # First perform standard update
+        super().setModelData(editor, model, index)
+
+        '''
         # Use "properties" to get the value
         metaobject = editor.metaObject()
         #print("%%1:", dir(metaobject))
@@ -322,8 +339,77 @@ class GradeTableDelegate(QStyledItemDelegate):
                 #print("%%value:", editor.property(name))
                 #print("%%user:", metaproperty.isUser())
                 text = editor.property(name)
-        model.setData(index, text, Qt.EditRole)
-    '''
+        model.setData(index, text, Qt.ItemDataRole.EditRole)
+        '''
+
+        r, c = index.row(), index.column()
+        d = model.data(index, Qt.ItemDataRole.EditRole)
+        self.cell_edited(r, c, d)
+
+    def cell_edited(self, row, col, value):
+        #print("§CHANGED:", row, col, value)
+        try:
+            self._pending_changes[row][col] = value
+        except KeyError:
+            self._pending_changes[row] = {col: value}
+        # If the timer is already running, this will stop and restart it
+        self._timer.start(UPDATE_PAUSE)
+
+    @Slot()
+    def update_db(self):
+        """Automatic update of calculated fields and writing of changed
+        data to database.
+        Update one row and start the timer again with minimal delay to
+        allow pending events to be processed before the next row.
+        """
+        for r, cd in self._pending_changes.items():
+            if cd:
+                break
+        else:
+            return
+#TODO
+        print("§update_db:", r, cd)
+        grades = self.calculate_row(r)
+        self._pending_changes[r] = {}
+        self._timer.start(0)
+
+#TODO
+    def calculate_row(self, row: int):
+        print("§TODO: calculate_row", row)
+
+    def paste_cell(self, item: QTableWidgetItem, value: str):
+        """This handles paste operations, validating the value.
+        """
+        row, col = item.row(), item.column()
+        ctype = self._columns[col]
+        #print("§paste_cell:", row, col, value, ctype)
+        ok = True
+        if ctype.startswith("GRADE"):
+            if value not in self._grade_validator._values:
+                ok = False
+        elif ctype == "CHOICE":
+            if value not in self._column_data[col]:
+                ok = False
+        elif ctype == "DATE":
+            try:
+                datetime.datetime.strptime(value, "%Y-%m-%d")
+            except ValueError:
+                ok = False
+        elif ctype[-1] == "!":
+            ok = False  # a read-only column
+        # Other column types are not checked
+        if ok:
+            # Set value in table
+            item.setText(value)
+            # Trigger database update
+            self.cell_edited(row, col, value)
+            return True
+        REPORT_ERROR(T("PASTE_VALUE_ERROR",
+            row = item.row() + 1,
+            col = self._column_names[col],
+            value = value
+        ))
+        return False
 
     def _max_width(self, string_list: list[str]) -> tuple[int, int]:
         """Return the display width of the widest item in the list
@@ -337,9 +423,11 @@ class GradeTableDelegate(QStyledItemDelegate):
                 w = _w
         return w, fm.horizontalAdvance("M")
 
-    def set_grade_map(self, glist: list[str]):
+    def set_grade_map(self, column_names: list[str], glist: list[str]):
         """Set up the information for editing grade cells.
         """
+        self._column_names = column_names
+        self._pending_changes = {}
         w, m = self._max_width(glist)
         self._min_grade_width = w + m
         self._grade_editor = QLineEdit()
@@ -540,29 +628,28 @@ class ManageGradesPage(QObject):
         super().__init__()
         self.ui = load_ui("grades.ui", parent, self)
         tw = self.ui.grade_table
-        tw.setItemDelegate(GradeTableDelegate(parent = tw))
-        self.event_filter = CopyPasteEventFilter(tw)
-
+        delegate = GradeTableDelegate(parent = tw)
+        tw.setItemDelegate(delegate)
+        self.event_filter = CopyPasteEventFilter(
+            tw, paste_cell = delegate.paste_cell
+        )
+        headerView = RotatedHeaderView()
+        tw.setHorizontalHeader(headerView)
+        headerView.setStretchLastSection(True)
+        headerView.setMinimumSectionSize(20)
+        tw.clear()
+        '''
         nrows = 10
         cols = ("Long Column 100", "Column 2", "Col 3", "Col 4a", "Column 5",)
         cols += ("Column n",) * 20
         tw.setColumnCount(len(cols))
         tw.setRowCount(nrows)
-
-        headerView = RotatedHeaderView()
-        tw.setHorizontalHeader(headerView)
         tw.setHorizontalHeaderLabels(cols)
-
-        headerView.setStretchLastSection(True)
-        #headerView.setDefaultSectionSize(30) # what does this do?
-        headerView.setMinimumSectionSize(20)
-#        headerView.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-#        headerView.setSectionResizeMode(
-#            0, QHeaderView.ResizeMode.ResizeToContents
-#        )
-#        headerView.set_horiz_index(0, True)
-#        pItem = tw.horizontalHeaderItem(0)
-#        pItem.setTextAlignment(Qt.AlignHCenter | Qt.AlignBottom)
+        for i in range(len(cols)):
+            tw.setColumnWidth(i, 20 if i > 0 else 150)
+        #    print("§width:", i, tw.columnWidth(i))
+        #    print("§section-size:", headerView.sectionSizeHint(i))
+        '''
         m = headerView._margin
         tw.setStyleSheet(
 #            "QTableView {"
@@ -574,13 +661,6 @@ class ManageGradesPage(QObject):
 #            "}"
             f"QHeaderView::section {{padding: {m}px;}}"
         )
-        for i in range(len(cols)):
-            tw.setColumnWidth(i, 20 if i > 0 else 150)
-        #    print("§width:", i, tw.columnWidth(i))
-        #    print("§section-size:", headerView.sectionSizeHint(i))
-
-
-
 
     def enter(self):
 #TODO: This comment is probably inaccurate! I certainly intend to permit
@@ -590,14 +670,8 @@ class ManageGradesPage(QObject):
         # Set up lists of classes, teachers and subjects for the course
         # filter. These are lists of tuples:
         #    (db-primary-key, short form, full name)
-        db = get_database()
-        self.db = db
+        self.db = get_database()
         self.report_info = report_data(GRADES = True)[0] # only for the classes
-
-#        cal = Calendar()
-#        cal.exec()
-#        print("§DATE:", cal.result)
-
         ## Set up widgets
         self.suppress_handlers = True
         # Set up the "occasions" choice.
@@ -661,9 +735,6 @@ class ManageGradesPage(QObject):
         gscale = grade_scale(self.class_group)
         grade_map = valid_grade_map(gscale)
         self.grade_arithmetic = local.grades.GradeArithmetic(grade_map)
-        delegate = tw.itemDelegate()
-        delegate.clear()
-        delegate.set_grade_map(list(grade_map))
         ### Collect the columns
         self.col_sid = []
         headers = []
@@ -727,6 +798,14 @@ class ManageGradesPage(QObject):
                     continue
                 if rec.LOCAL:
                     grade_type[len(headers)] = True
+
+            if ctype == "AVERAGE":
+                print("TODO: AVERAGE")
+# Perhaps I should rather have a general "FUNCTION" type, the actual
+# function being specified in the data field (json), along with
+# parameters ...
+
+
             if rec.LOCAL:
                 self.col_sid.append(rec.NAME)
                 self.key_col[rec.NAME] = len(headers)
@@ -749,6 +828,9 @@ class ManageGradesPage(QObject):
 
 #TODO: Can/should LEVEL be optional? I would also need to look at the
 # grade_tables (?) module
+        delegate = tw.itemDelegate()
+        delegate.clear()
+        delegate.set_grade_map(headers, list(grade_map))
         for i, h in enumerate(handlers):
             tw.setColumnWidth(i, delegate.add_column(h))
 
@@ -831,13 +913,6 @@ class ManageGradesPage(QObject):
 #    @Slot(int,int)
 #    def on_grade_table_cellActivated(self, row, col):
 #        print("§on_grade_table_cellActivated:", row, col)
-
-    @Slot(QTableWidgetItem)
-    def on_grade_table_itemChanged(self, item):
-        if self.suppress_handlers: return
-        print("§CHANGED:", item.row(), item.column(),
-            item.data(Qt.ItemDataRole.EditRole)
-        )
 
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#

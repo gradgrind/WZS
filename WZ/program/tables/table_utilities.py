@@ -1,7 +1,7 @@
 """
 tables/table_utilities.py
 
-Last updated:  2024-01-12
+Last updated:  2024-01-19
 
 Support functions for various table-based operations.
 
@@ -165,29 +165,29 @@ def pasteFit(
 
     Perform the operation "in place", return <True> if successful.
     """
-    print("%%% IN:", table_data)
+    #print("%%% IN:", table_data)
     paste_rows = len(table_data)
     row0 = table_data[0]
     paste_cols = len(row0)
     if paste_rows == 1:     # paste a single row
         if paste_cols == 1: # paste a single cell
-            print("%%% 1 cell")
+            #print("%%% 1 cell")
             row0 *= ncols   # copy value for each column
         elif paste_cols != ncols:
             return False
-        print("%%% 1 row")
+        #print("%%% 1 row")
         table_data *= nrows
         return True
     if paste_cols == 1:     # paste a single column
         if paste_rows != nrows:
             return False
-        print("%%% 1 column")
+        #print("%%% 1 column")
         # copy the column
         for r in table_data:
             r *= ncols
         return True
     # paste a block
-    print("%%% test block")
+    #print("%%% test block")
     return paste_rows == nrows and paste_cols == ncols
 
 
