@@ -81,8 +81,14 @@ from ui.ui_base import (
 from ui.rotated_table_header import RotatedHeaderView
 from ui.table_support import CopyPasteEventFilter
 
-from core.base import REPORT_INFO, REPORT_ERROR, REPORT_WARNING
+from core.base import (
+    REPORT_INFO,
+    REPORT_ERROR,
+    REPORT_WARNING,
+    REPORT_CRITICAL,
+)
 from core.basic_data import get_database, CONFIG
+from core.db_access import db_TableRow
 from core.dates import print_date
 from core.list_activities import report_data
 #from core.classes import class_group_split_with_id
@@ -98,6 +104,28 @@ import local
 UPDATE_PAUSE = 1000     # time between cell edit and db update in ms
 
 ### -----
+
+
+class DelegateColumnInfo:
+    def __init__(self, rowdata: db_TableRow, **xargs):
+        self.NAME = rowdata.NAME
+        self.LOCAL = rowdata.LOCAL
+        self.TYPE = rowdata.TYPE
+#?
+        self.DATA = rowdata.DATA
+        self.FLAGS = rowdata.FLAGS
+
+        for k, v in xargs.items():
+            setattr(self, k, v)
+
+    def __str__(self):
+        l = [
+            f"{k}={repr(v)}"
+            for k, v in self.__dict__.items()
+            if not k.startswith("__")
+        ]
+        return f"DelegateColumnInfo({', '.join(l)})"
+
 
 class TableItem(QTableWidgetItem):
     """A custom table-widget-item which differentiates (minimally)
@@ -170,15 +198,10 @@ class GradeTableDelegate(QStyledItemDelegate):
         super().__init__(parent)
         ## Lists for column handling
         self._columns = []      # type tags
-        self._column_data = []  # type-dependent data
         ## Date field delegate
         #print("?????CONFIG:", CONFIG._map)
         w, m = self._max_width([print_date("2024-12-30")])
         self._min_date_width = w + m
-#TODO: I'm beginning to get the feeling that this works when the editor
-# is not shared among columns  ... could that be so?
-# Grades still work, so is something different there?
-
         # Use a "dummy" line editor (because it seems to work, while
         # other approaches are a bit difficult to get working ...)
         self._editor = QLineEdit()
@@ -187,7 +210,6 @@ class GradeTableDelegate(QStyledItemDelegate):
         self._timer.setSingleShot(True)
         self._timer.setInterval(2000)
         self._timer.timeout.connect(self.update_db)
-
 
     def set_columns(self, column_types: list[str]):
         self.column_types = column_types
@@ -375,20 +397,36 @@ class GradeTableDelegate(QStyledItemDelegate):
 
 #TODO
     def calculate_row(self, row: int):
-        print("§TODO: calculate_row", row)
+        print("\n§TODO: calculate_row", row)
+        tw = self.parent()
+        col_values = []
+        for c, coldata in enumerate(self._columns):
+            ctype = coldata.TYPE
+            if ctype[-1] == "!":
+                # Calculate the value
+#TODO?: preprocess the extra info (DATA)?
+                print("§CALCULATE:",
+                    ctype, coldata.NAME, coldata)
+
+            else:
+                val = tw.item(row, c).data(Qt.ItemDataRole.EditRole)
+                col_values.append(val)
+                print("§VALUE:", ctype, coldata.NAME, val)
+
 
     def paste_cell(self, item: QTableWidgetItem, value: str):
         """This handles paste operations, validating the value.
         """
         row, col = item.row(), item.column()
-        ctype = self._columns[col]
+        coldata = self._columns[col]
+        ctype = coldata.TYPE
         #print("§paste_cell:", row, col, value, ctype)
         ok = True
         if ctype.startswith("GRADE"):
             if value not in self._grade_validator._values:
                 ok = False
         elif ctype == "CHOICE":
-            if value not in self._column_data[col]:
+            if value not in coldata._items:
                 ok = False
         elif ctype == "DATE":
             try:
@@ -406,7 +444,7 @@ class GradeTableDelegate(QStyledItemDelegate):
             return True
         REPORT_ERROR(T("PASTE_VALUE_ERROR",
             row = item.row() + 1,
-            col = self._column_names[col],
+            col = coldata.LOCAL,
             value = value
         ))
         return False
@@ -423,22 +461,18 @@ class GradeTableDelegate(QStyledItemDelegate):
                 w = _w
         return w, fm.horizontalAdvance("M")
 
-    def set_grade_map(self, column_names: list[str], glist: list[str]):
-        """Set up the information for editing grade cells.
+    def init(self, subject_list: list[db_TableRow], glist: list[str]):
+        """Call this when initializing a table for a new group.
         """
-        self._column_names = column_names
         self._pending_changes = {}
+        self._columns.clear()
+        # Set up the information for editing grade cells.
+        self._subject_list = subject_list
         w, m = self._max_width(glist)
         self._min_grade_width = w + m
         self._grade_editor = QLineEdit()
         self._grade_validator = ListValidator(glist)
         self._grade_editor.setValidator(self._grade_validator)
-
-    def clear(self):
-        """Call this when initializing a table for a new group.
-        """
-        self._columns.clear()
-        self._column_data.clear()
 
     def _done(self, editor):
         print("§done", self._primed)
@@ -453,15 +487,12 @@ class GradeTableDelegate(QStyledItemDelegate):
         """Return the minimum width for the new column
         """
         if grade_field is None:
-            REPORT_WARNING(
-                "Bug? Actually I hadn't planned for this:"
-                "  Grade table column with no type specification"
+            REPORT_CRITICAL(
+                "Bug: Grade table column with no type specification"
             )
-            ctype = "DEFAULT"
-        else:
-            ctype = grade_field.TYPE
+        ctype = grade_field.TYPE
+        print("§grade_field:", grade_field)
         # Default values:
-        data = None
         w = 50
         if ctype.startswith("GRADE"):
             w = self._min_grade_width
@@ -469,9 +500,7 @@ class GradeTableDelegate(QStyledItemDelegate):
             items = grade_field.DATA.split()
             w, m = self._max_width(items)
             w += m * 2
-            #data = TableComboBox(self._done)
-            #data.addItems(items)
-            data = items
+            grade_field._items = items
         elif ctype == "DATE":
             w = self._min_date_width
         elif ctype == "TEXT":
@@ -481,8 +510,7 @@ class GradeTableDelegate(QStyledItemDelegate):
             #REPORT_WARNING(f"TODO:: Unknown column type: '{ctype}'")
             print(f"§WARNING:: Unknown column type: '{ctype}'")
 #            ctype = "DEFAULT"
-        self._columns.append(ctype)
-        self._column_data.append(data)
+        self._columns.append(grade_field)
         return w
 
 
@@ -759,6 +787,18 @@ class ManageGradesPage(QObject):
                     i = len(headers)
                     self.key_col[sbj.SID] = i
                     headers.append(sbj.NAME)
+#TODO: Add DelegateColumnInfo objects for the other columns and send them
+# to the delegate instead of <rec>.
+                    dci = DelegateColumnInfo(rec,
+                        NAME = str(sbj.id),
+                        LOCAL = sbj.NAME,
+                        SID = sbj.SID
+                    )
+                    print("§§§", dci)
+
+
+
+
                     handlers.append(rec)
                     # Add this subject as "normal", though that might
                     # change later ...
@@ -829,8 +869,7 @@ class ManageGradesPage(QObject):
 #TODO: Can/should LEVEL be optional? I would also need to look at the
 # grade_tables (?) module
         delegate = tw.itemDelegate()
-        delegate.clear()
-        delegate.set_grade_map(headers, list(grade_map))
+        delegate.init(self.subject_list, list(grade_map))
         for i, h in enumerate(handlers):
             tw.setColumnWidth(i, delegate.add_column(h))
 
@@ -865,6 +904,8 @@ class ManageGradesPage(QObject):
                 item.setBackground(colour)
                 item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 tw.setItem(i, j, item)
+
+            delegate.calculate_row(i)
 
         tw.setVerticalHeaderLabels(vheaders)
         self.suppress_handlers = False
