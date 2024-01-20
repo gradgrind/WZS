@@ -1,7 +1,7 @@
 """
 ui/table_support.py
 
-Last updated:  2024-01-19
+Last updated:  2024-01-20
 
 Extend the interface to a QTableWidget.
 
@@ -27,7 +27,7 @@ Copyright 2024 Michael Towers
 from core.base import Tr
 T = Tr("tables.table_support")
 
-from core.base import REPORT_ERROR, REPORT_WARNING
+from core.base import REPORT_ERROR, REPORT_CRITICAL
 from ui.ui_base import (
     ### QtWidgets:
     QWidget,
@@ -77,18 +77,18 @@ class Table:
 class CopyPasteEventFilter(QObject):
     """Implement an event filter for a table widget to allow copy and paste
     operations on a table, triggered by Ctrl-C and Ctrl-V.
+    All cells must have a table-widget-item.
+    By using a subclass of QTableWidgetItem for the table-widget-items –
+    one with a <paste_cell> method – it is possible to modify the behaviour,
+    e.g. for validation.
     """
-    def __init__(self, table, paste_cell = None, copy_internal = True):
-        """The parameter <paste_cell> allows an alternative implementation
-        of the way a text value is pasted to a cell. This can be useful for
-        validation.
-        The parameter <copy_internal> determines whether the underlying
+    def __init__(self, table, copy_internal = True):
+        """The parameter <copy_internal> determines whether the underlying
         value of a cell is copied rather than its displayed value. It is
         true by default, but this is only significant if the displayed value
         differs from the stored value.
         """
         super().__init__()
-        self.paste_cell = paste_cell or self._paste_cell
         table.installEventFilter(self)
         self.table = table
         self.copy_internal = copy_internal
@@ -126,9 +126,8 @@ class CopyPasteEventFilter(QObject):
     def copy_selected_cells(self):
         tw = self.table
         selranges = tw.selectedRanges()
-#TODO: assert?
-        assert len(selranges) == 1
-
+        if len(selranges) != 1:
+            REPORT_CRITICAL("Bug: multiple selection ranges")
         selrange = selranges[0]
         rrows = []
         for r in range(selrange.topRow(), selrange.bottomRow() + 1):
@@ -154,9 +153,8 @@ class CopyPasteEventFilter(QObject):
     def paste_to_cells(self, rows: list[list[str]]):
         tw = self.table
         selranges = tw.selectedRanges()
-#TODO: assert?
-        assert len(selranges) == 1
-
+        if len(selranges) != 1:
+            REPORT_CRITICAL("Bug: multiple selection ranges")
         selrange = selranges[0]
         # <pasteFit> might modify the dimensions of the input data!
         if not pasteFit(rows, selrange.rowCount(), selrange.columnCount()):
@@ -171,19 +169,17 @@ class CopyPasteEventFilter(QObject):
             for value in row:
                 item = tw.item(r, c)
                 if not item:
-                    # This is not expected, it is assumed that all cells
-                    # are populated with table-widget-items.
-                    item = QTableWidgetItem(value)
-                    tw.setItem(r, c, item)
-                    REPORT_WARNING(T("FORCED_NEW_ITEM",
-                        value = value, row = r, col = c
-                    ))
-                if not self.paste_cell(item, value):
-                    # Break off insertion if an error occurs
-                    return
+                    REPORT_CRITICAL(
+                        "Bug: The table has no table-widget-item in the"
+                        f" cell at ({r}, {c})"
+                    )
+                try:
+                    f = item.paste_cell
+                except AttributeError:
+                    item.setText(value)
+                else:
+                    if not f(value):
+                        # Break off insertion if an error occurs
+                        return
                 c += 1
             r += 1
-
-    def _paste_cell(self, item, value):
-        #print("§_paste_cell:", item.row(), item.column(), value)
-        item.setText(value)

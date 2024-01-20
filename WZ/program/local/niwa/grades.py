@@ -1,7 +1,7 @@
 """
 local/niwa/grades.py
 
-Last updated:  2024-01-18
+Last updated:  2024-01-20
 
 Regional support for grade handling:
     Waldorfschule in Niedersachsen
@@ -36,7 +36,7 @@ if __name__ == "__main__":
     setup(os.path.join(basedir, 'TESTDATA'))
 
 #from core.base import Tr
-#T = Tr("local.averages")
+#T = Tr("local.grades")
 
 ### +++++
 
@@ -78,49 +78,75 @@ def grade_tables(grade_map: dict[str, tuple[str, int]]):
 class GradeArithmetic:
     def __init__(self, scale: str):
         self.grade_val, self.grade_list = grade_tables(scale)
+        print("\n§grade_val:", self.grade_val)
+        print("\n§grade_list:", self.grade_list)
 
-    def composite_grade(self, grades: list[str]) -> str:
+#TODO: I might need more information about the columns?
+
+    def function(self, data: dict, col_values: list[str]):
+        f = getattr(self, data["__f__"])
+        return f(data, col_values)
+
+    def COMPOSITE(self, data: dict, col_values: list[str]) -> str:
         """Calculate the average of the given grades.
         Return the result as a grade.
         If any "illegal" grades are passed, the result will be
         parenthesized. Non-numerical grades which are not "illegal"
         will be skipped.
         """
+        grades = [col_values[c] for c in data["__COLUMNS__"]]
         igrades = []
         incomplete = False
         for g in grades:
             try:
                 gi = self.grade_val[g]
                 if gi >= 0:
-                    igrades.append(g)
+                    igrades.append(gi)
             except KeyError:
                 incomplete = True
-        gs = self.grade_list[int_ave(igrades)]
-        return f"({gs})" if incomplete else gs
+        if igrades:
+            gs = self.grade_list[int_ave(igrades)]
+            return f"({gs})" if incomplete else gs
+        return ""
 
-    def average(self,
-        grades: list[str],
-        decimal_places = 2,
-        truncate = True
-    ) -> str:
+    def AVERAGE(self, data: dict, col_values: list[str]) -> str:
         """Calculate the average of the given grades.
         Return the result as a fixed-point number with the given number
-        of decimal places.
+        of decimal places. If the number of decimal places is negative,
+        the result will be truncated rather than rounded. In that case,
+        the number of decimal places is <-1 - decimal_places> (this is
+        to allow 0 decimal places although -0 is not distinguishable from 0).
         If any "illegal" grades are passed, the result will be
         parenthesized. Non-numerical grades which are not "illegal"
         will be skipped.
         """
-        assert decimal_places >= 0
+        grades = [col_values[c] for c in data["__COLUMNS__"]]
+        decimal_places = data.get("decimal_places") or -2
+        if decimal_places >= 0:
+            truncate = False
+        else:
+            decimal_places = -1 - decimal_places
+            truncate = True
         igrades = []
         incomplete = False
         for g in grades:
+            if g.startswith("("):
+                # "Incomplete" composites are parenthesized.
+                g = g.strip("()")
+                incomplete = True
             try:
+                # Use <self.grade_val[g]> to determine whether the grade
+                # is necessary for the calculation of a complete average,
+                # but get the value from the original grade.
                 gi = self.grade_val[g]
                 if gi >= 0:
-                    igrades.append(g)
+                    igrades.append(int(g.rstrip("+-")))
             except KeyError:
                 incomplete = True
-        ave = sum(igrades) / len(igrades)
+        if igrades:
+            ave = sum(igrades) / len(igrades)
+        else:
+            return ""
         if truncate:
             # Round to string with extra decimal places to avoid
             # unlikely (but maybe possible?) errors arising from
@@ -134,8 +160,6 @@ class GradeArithmetic:
                 decimal_places += 1     # to eliminate the decimal separator
             aves = aves[:-decimal_places]
         return f"({aves})" if incomplete else aves
-
-
 
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#

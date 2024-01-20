@@ -1,7 +1,7 @@
 """
 ui/modules/grades_manager.py
 
-Last updated:  2024-01-19
+Last updated:  2024-01-20
 
 Front-end for managing grade reports.
 
@@ -39,7 +39,7 @@ T = Tr("ui.modules.grades_manager")
 
 ### +++++
 
-#from typing import Optional
+from typing import Optional
 import datetime
 import json
 
@@ -107,22 +107,26 @@ UPDATE_PAUSE = 1000     # time between cell edit and db update in ms
 
 
 class DelegateColumnInfo:
-    def __init__(self, rowdata: db_TableRow, **xargs):
-        self.NAME = rowdata.NAME
-        self.LOCAL = rowdata.LOCAL
-        self.TYPE = rowdata.TYPE
-#?
-        self.DATA = rowdata.DATA
-        self.FLAGS = rowdata.FLAGS
+    __slots__ = ("NAME", "LOCAL", "TYPE", "DATA", "FLAGS")
 
-        for k, v in xargs.items():
-            setattr(self, k, v)
+    def __init__(self, rowdata: db_TableRow, **xargs):
+        for s in self.__slots__:
+            try:
+                v = xargs.pop(s)
+            except KeyError:
+                v = getattr(rowdata, s)
+            setattr(self, s, v)
+        if xargs:
+            REPORT_CRITICAL(
+                "Bug, invalid parameter(s) passed to"
+                " grades_manager::DelegateColumnInfo:\n"
+                f"  {', '.join(xargs)}"
+            )
 
     def __str__(self):
         l = [
-            f"{k}={repr(v)}"
-            for k, v in self.__dict__.items()
-            if not k.startswith("__")
+            f"{s}={repr(getattr(self, s))}"
+            for s in self.__slots__
         ]
         return f"DelegateColumnInfo({', '.join(l)})"
 
@@ -131,24 +135,42 @@ class TableItem(QTableWidgetItem):
     """A custom table-widget-item which differentiates (minimally)
     between EditRole and DisplayRole, currently only for displaying
     the value – no distinct values are saved.
+    It also uses the table item-delegate to handle validation when
+    pasting and displaying values.
     """
-    def __init__(self, text: str = None, ctype: str = None):
-        self._ctype = ctype
-        if text is None:
-            super().__init__()
-        else:
-            super().__init__(text)
-
     def data(self, role: Qt.ItemDataRole):
         val = super().data(role)
         if role == Qt.ItemDataRole.DisplayRole:
-            if self._ctype == "DATE":
-                return print_date(val)
+
+            col = self.column()
+            delegate = self.tableWidget().itemDelegate()
+            dci = delegate._columns[col]
+
+            if dci.TYPE == "DATE" and val:
+                return print_date(val, trap = False) or "???"
+            else:
+                if delegate.validate(col, val):
+                    return "??"
         return val
 
-#    def setData(self, role: Qt.ItemDataRole, value: str):
-#        self.setText(text)
-#        if ctype == "DATE":
+    def paste_cell(self, value: str):
+        """This handles paste operations, validating the value.
+        """
+        row, col = self.row(), self.column()
+        delegate = self.tableWidget().itemDelegate()
+        bad_field = delegate.validate(col, value, write = True)
+        if bad_field:
+            REPORT_ERROR(T("PASTE_VALUE_ERROR",
+                row = row + 1,
+                col = bad_field,
+                value = value
+            ))
+            return False
+        # Set value in table
+        self.setText(value)
+        # Trigger database update
+        delegate.cell_edited(row, col, value)
+        return True
 
 
 class EscapeKeyEventFilter(QObject):
@@ -222,30 +244,22 @@ class GradeTableDelegate(QStyledItemDelegate):
         #print("§destroyEditor ... or not!")
 
     def createEditor(self, parent, option, index):
-        col = index.column()
-        ctype = self._columns[col]
-        print("§index:", col, parent)
+        ctype = self._columns[index.column()].TYPE
         if ctype.endswith("!"):
             # read-only
             return None
         self._primed = None
-        if ctype.startswith("GRADE"):
+        if ctype == "GRADE":
             self._grade_editor.setParent(parent)
             return self._grade_editor
-#        if ctype == "CHOICE":
-#            editor = self._column_data[col]
-#            editor.setParent(parent)
-#            return editor
         else:
             self._editor.setParent(parent)
             return self._editor
 #TODO: other types?
 
     def setEditorData(self, editor, index):
-        col = index.column()
-        ctype = self._columns[col]
-        print("§sed-index:", col, ctype, editor.pos())
-#        self._primed = False
+        dci = self._columns[index.column()]
+        ctype = dci.TYPE
         if ctype == "CHOICE":
             # For some reason (!?), this gets called again after the new
             # value has been set, thus the use of <self._primed>.
@@ -253,7 +267,7 @@ class GradeTableDelegate(QStyledItemDelegate):
                 self._primed = index.data(Qt.ItemDataRole.EditRole)
                 print("§ACTIVATE", self._primed)
                 QTimer.singleShot(0, lambda: self.popup_choice(
-                    self._column_data[col]
+                    dci.DATA
                 ))
                 return
             #else:
@@ -396,37 +410,38 @@ class GradeTableDelegate(QStyledItemDelegate):
         self._timer.start(0)
 
 #TODO
-    def calculate_row(self, row: int):
+    def calculate_row(self, row: int) -> list[tuple[int, str]]:
         print("\n§TODO: calculate_row", row)
         tw = self.parent()
         col_values = []
+        calculated_values = []
         for c, coldata in enumerate(self._columns):
             ctype = coldata.TYPE
             if ctype[-1] == "!":
                 # Calculate the value
-#TODO?: preprocess the extra info (DATA)?
-                print("§CALCULATE:",
-                    ctype, coldata.NAME, coldata)
-
+                val = self.grade_arithmetic.function(
+                    coldata.DATA, col_values
+                )
+                calculated_values.append((len(col_values), val))
             else:
                 val = tw.item(row, c).data(Qt.ItemDataRole.EditRole)
-                col_values.append(val)
-                print("§VALUE:", ctype, coldata.NAME, val)
+            col_values.append(val)
+            #print("§VALUE:", ctype, coldata.NAME, val)
+        return calculated_values
 
-
-    def paste_cell(self, item: QTableWidgetItem, value: str):
-        """This handles paste operations, validating the value.
+    def validate(self, col: int, value: str, write: bool = False
+    ) -> Optional[str]:
+        """Checks that the value is valid for the given column.
+        Return the LOCAL name if invalid, <None> if valid.
         """
-        row, col = item.row(), item.column()
         coldata = self._columns[col]
         ctype = coldata.TYPE
-        #print("§paste_cell:", row, col, value, ctype)
         ok = True
         if ctype.startswith("GRADE"):
             if value not in self._grade_validator._values:
                 ok = False
         elif ctype == "CHOICE":
-            if value not in coldata._items:
+            if value not in coldata.DATA:
                 ok = False
         elif ctype == "DATE":
             try:
@@ -434,20 +449,11 @@ class GradeTableDelegate(QStyledItemDelegate):
             except ValueError:
                 ok = False
         elif ctype[-1] == "!":
-            ok = False  # a read-only column
+            ok = not write
         # Other column types are not checked
         if ok:
-            # Set value in table
-            item.setText(value)
-            # Trigger database update
-            self.cell_edited(row, col, value)
-            return True
-        REPORT_ERROR(T("PASTE_VALUE_ERROR",
-            row = item.row() + 1,
-            col = coldata.LOCAL,
-            value = value
-        ))
-        return False
+            return None
+        return coldata.LOCAL
 
     def _max_width(self, string_list: list[str]) -> tuple[int, int]:
         """Return the display width of the widest item in the list
@@ -461,9 +467,11 @@ class GradeTableDelegate(QStyledItemDelegate):
                 w = _w
         return w, fm.horizontalAdvance("M")
 
-    def init(self, subject_list: list[db_TableRow], glist: list[str]):
+    def init(self, subject_list: list[db_TableRow], gmap: dict):
         """Call this when initializing a table for a new group.
         """
+        self.grade_arithmetic = local.grades.GradeArithmetic(gmap)
+        glist = list(gmap)
         self._pending_changes = {}
         self._columns.clear()
         # Set up the information for editing grade cells.
@@ -491,25 +499,25 @@ class GradeTableDelegate(QStyledItemDelegate):
                 "Bug: Grade table column with no type specification"
             )
         ctype = grade_field.TYPE
-        print("§grade_field:", grade_field)
+        #print("§grade_field:", grade_field)
         # Default values:
         w = 50
-        if ctype.startswith("GRADE"):
+        if ctype == "GRADE":
             w = self._min_grade_width
         elif ctype == "CHOICE":
-            items = grade_field.DATA.split()
-            w, m = self._max_width(items)
+            w, m = self._max_width(grade_field.DATA)
             w += m * 2
-            grade_field._items = items
         elif ctype == "DATE":
             w = self._min_date_width
         elif ctype == "TEXT":
             w, m = self._max_width(["Text field width"])
+        elif ctype == "COMPOSITE!":
+            grade_field.DATA["__f__"] = "COMPOSITE"
+        elif ctype == "FUNCTION!":
+            pass
         elif ctype != "DEFAULT":
-#TODO:
-            #REPORT_WARNING(f"TODO:: Unknown column type: '{ctype}'")
-            print(f"§WARNING:: Unknown column type: '{ctype}'")
-#            ctype = "DEFAULT"
+            REPORT_ERROR(f"TODO:: Unknown column type: '{ctype}'")
+            grade_field.TYPE = "DEFAULT"
         self._columns.append(grade_field)
         return w
 
@@ -658,26 +666,12 @@ class ManageGradesPage(QObject):
         tw = self.ui.grade_table
         delegate = GradeTableDelegate(parent = tw)
         tw.setItemDelegate(delegate)
-        self.event_filter = CopyPasteEventFilter(
-            tw, paste_cell = delegate.paste_cell
-        )
+        self.event_filter = CopyPasteEventFilter(tw)
         headerView = RotatedHeaderView()
         tw.setHorizontalHeader(headerView)
         headerView.setStretchLastSection(True)
         headerView.setMinimumSectionSize(20)
         tw.clear()
-        '''
-        nrows = 10
-        cols = ("Long Column 100", "Column 2", "Col 3", "Col 4a", "Column 5",)
-        cols += ("Column n",) * 20
-        tw.setColumnCount(len(cols))
-        tw.setRowCount(nrows)
-        tw.setHorizontalHeaderLabels(cols)
-        for i in range(len(cols)):
-            tw.setColumnWidth(i, 20 if i > 0 else 150)
-        #    print("§width:", i, tw.columnWidth(i))
-        #    print("§section-size:", headerView.sectionSizeHint(i))
-        '''
         m = headerView._margin
         tw.setStyleSheet(
 #            "QTableView {"
@@ -691,10 +685,6 @@ class ManageGradesPage(QObject):
         )
 
     def enter(self):
-#TODO: This comment is probably inaccurate! I certainly intend to permit
-# some changes (grades, maybe configuration, ...)
-        ## The database tables that are loaded here are expected not to
-        ## change during the activity of this grade-editor object.
         # Set up lists of classes, teachers and subjects for the course
         # filter. These are lists of tuples:
         #    (db-primary-key, short form, full name)
@@ -749,6 +739,7 @@ class ManageGradesPage(QObject):
 # Consider removing this category: couldn't I simply add all tables to
 # the occasions list?
 
+#TODO: Do I really need to make these instance attributes?
         self.info, self.subject_list, self.student_list = grade_table_data(
             occasion = self.occasion,
             class_group = self.class_group,
@@ -762,101 +753,102 @@ class ManageGradesPage(QObject):
         ## Set up grade arithmetic and validation
         gscale = grade_scale(self.class_group)
         grade_map = valid_grade_map(gscale)
-        self.grade_arithmetic = local.grades.GradeArithmetic(grade_map)
         ### Collect the columns
-        self.col_sid = []
         headers = []
-        handlers = []
-        grade_colours = {}
-        self.key_col = {}
-        grade_type = {}     # sid-col -> normal (True) / component (False)
+        col_colours = []
+        col_dci = []       # collect <DelegateColumnInfo> objects
+        key_col = {}
+        all_grade_cols = set() # collect columns with grades for "*"
+
         gfields = self.db.table("GRADE_FIELDS").records
         for gf_i, rec in enumerate(gfields):
             gl = rec.GROUPS
             if gl != '*' and self.class_group not in gl.split():
                 continue
-
+            # Convert "sid" lists to column lists. Note that only columns
+            # that have already been added can be included!
+            try:
+                sids = rec.DATA["__SIDS__"]
+            except (TypeError, KeyError):
+                pass
+            else:
+                cols = []
+                if sids == "*":
+                    # All non-component grades, including composites
+                    for i, dci in enumerate(col_dci):
+                        if dci.TYPE == "GRADE":
+                            if "C" not in dci.FLAGS:
+                                cols.append(i)
+                        elif dci.TYPE == "COMPOSITE!":
+                            cols.append(i)
+                else:
+                    for sid in sids.split():
+                        try:
+                            cols.append(key_col[sid])
+                        except KeyError:
+                            pass
+                rec.DATA["__COLUMNS__"] = cols
+                #print("§__COLUMNS__:", rec.NAME, cols)
             ctype = rec.TYPE
-            if ctype.startswith("GRADE"):
-                if ctype[-1] == '.':
-                    component_handler = rec
-                    continue
-                ## Now the grade columns
+            if ctype == "GRADE":
+                ## Add the grade columns
                 for sbj in self.subject_list:
-                    self.col_sid.append(sbj.id)
                     i = len(headers)
-                    self.key_col[sbj.SID] = i
+                    key_col[sbj.SID] = i
                     headers.append(sbj.NAME)
-#TODO: Add DelegateColumnInfo objects for the other columns and send them
-# to the delegate instead of <rec>.
-                    dci = DelegateColumnInfo(rec,
+                    col_colours.append(rec.COLOUR)
+                    # collect <DelegateColumnInfo> objects
+                    col_dci.append(DelegateColumnInfo(rec,
                         NAME = str(sbj.id),
                         LOCAL = sbj.NAME,
-                        SID = sbj.SID
-                    )
-                    print("§§§", dci)
-
-
-
-
-                    handlers.append(rec)
-                    # Add this subject as "normal", though that might
-                    # change later ...
-                    grade_type[i] = True
+                        DATA = {"SID": sbj.SID}
+                    ))
+                    all_grade_cols.add(i)
                 continue
 
             if ctype == "COMPOSITE!":
                 q_colour = QColor(rec.COLOUR).darker(120)
                 components = []
-                for sid in rec.DATA.split():
-                    try:
-                        col = self.key_col[sid]
-                    except KeyError:
-                        continue
-                    try:
-                        gtype = grade_type[col]
-                    except KeyError:
+                for col in rec.DATA["__COLUMNS__"]:
+                    dci = col_dci[col]
+                    if dci.TYPE != "GRADE":
                         REPORT_ERROR(T("COMPONENT_NOT_GRADE",
                             subject = rec.NAME,
-                            sid = sid
+                            sid = dci.NAME
                         ))
                         continue
-                    if not gtype:
+                    if "C" in dci.FLAGS:
                         REPORT_ERROR(T("COMPONENT_NOT_UNIQUE",
-                            sid = sid
+                            sid = dci.DATA["SID"]
                         ))
                         continue
-                    grade_type[col] = False # mark as component
+                    # Mark as component
+                    dci.FLAGS += "C"
+                    all_grade_cols.discard(col)
                     components.append(col)
-                    handlers[col] = component_handler
-                    grade_colours[col] = q_colour
-                rec._components = components
+                    col_colours[col] = q_colour
                 if not components:
                     REPORT_WARNING(T("COMPOSITE_WITHOUT_COMPONENTS",
                         subject = rec.NAME
                     ))
                     continue
                 if rec.LOCAL:
-                    grade_type[len(headers)] = True
+                    all_grade_cols.add(len(headers))
+                    rec.DATA["__COLUMNS__"] = components
+                    dci = DelegateColumnInfo(rec)
+                else:
+                    continue
 
-            if ctype == "AVERAGE":
-                print("TODO: AVERAGE")
-# Perhaps I should rather have a general "FUNCTION" type, the actual
-# function being specified in the data field (json), along with
-# parameters ...
+            elif rec.LOCAL:
+                dci = DelegateColumnInfo(rec)
 
+            else:
+                continue
 
-            if rec.LOCAL:
-                self.col_sid.append(rec.NAME)
-                self.key_col[rec.NAME] = len(headers)
-                headers.append(rec.LOCAL)
-                handlers.append(rec)
-        self.all_grade_cols = {
-            col
-            for col, t in grade_type.items()
-            if t
-        }
-        #print("§all_grade_cols:", self.all_grade_cols)
+            key_col[rec.NAME] = len(headers)
+            headers.append(rec.LOCAL)
+            col_dci.append(dci)
+            col_colours.append(rec.COLOUR)
 
         ## Set the table size
         tw.setColumnCount(len(headers))
@@ -868,10 +860,15 @@ class ManageGradesPage(QObject):
 
 #TODO: Can/should LEVEL be optional? I would also need to look at the
 # grade_tables (?) module
+# There may be other fields in the students (extra) data – get these fields
+# from GRADE_FIELDS (flag S).
+# There may also be fields whose default values are in the calendar, or
+# elsewhere. These would also need to be handled appropriately.
+
         delegate = tw.itemDelegate()
-        delegate.init(self.subject_list, list(grade_map))
-        for i, h in enumerate(handlers):
-            tw.setColumnWidth(i, delegate.add_column(h))
+        delegate.init(self.subject_list, grade_map)
+        for i, dci in enumerate(col_dci):
+            tw.setColumnWidth(i, delegate.add_column(dci))
 
         ### Add students
         vheaders = []
@@ -881,31 +878,19 @@ class ManageGradesPage(QObject):
             vheaders.append(pname)
             grades = stdata["GRADES"]
             # Add grades, etc.
-            for j, s_id in enumerate(self.col_sid):
-                handler = handlers[j]
-                try:
-                    int(s_id)
-                except ValueError:
-                    # A non-grade entry
-                    try:
-                        val = grades[s_id]
-                    except KeyError:
-                        #print("§s_id:", repr(s_id))
-                        if s_id.startswith("DATE_"):
-#TODO
-                            val = "2024-01-12"
-                        else:
-                            val = "??"
-                    colour = QColor(handler.COLOUR)
-                else:
-                    val = grades[str(s_id)] or "?"
-                    colour = grade_colours.get(j) or QColor(handler.COLOUR)
-                item = TableItem(val, handler.TYPE)
-                item.setBackground(colour)
+            for j, dci in enumerate(col_dci):
+                val = grades.get(dci.NAME) or ""
+                colour = col_colours[j]
+                item = TableItem(val)
+                item.setBackground(QColor(colour))
                 item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 tw.setItem(i, j, item)
 
-            delegate.calculate_row(i)
+            for c, v in delegate.calculate_row(i):
+                #print("§calculate_row:", i, c, v)
+                tw.item(i, c).setText(v)
+#TODO: What about calculated fields that need storing in the grade map
+# (flag G)?
 
         tw.setVerticalHeaderLabels(vheaders)
         self.suppress_handlers = False

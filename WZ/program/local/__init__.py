@@ -5,9 +5,9 @@ get_database()  # to ensure that <CONFIG> is initialized
 region = CONFIG.REGION
 
 def __getattr__(mod):
-    print("GET", mod)
+    #print("GET", mod)
     m = import_module(f"local.{region}.{mod}")
-    print("  -->", m)
+    #print("  -->", m)
     globals()[mod] = m
     return m
 

@@ -1,5 +1,5 @@
 """
-grades/grade_tables.py - last updated 2024-01-14
+grades/grade_tables.py - last updated 2024-01-20
 
 Manage grade tables.
 
@@ -122,7 +122,7 @@ class GradeFields(db_Table):
                 DB_FIELD_TEXT("NAME"),
                 DB_FIELD_TEXT("LOCAL"),
                 DB_FIELD_TEXT("TYPE"),
-                DB_FIELD_TEXT("DATA"),
+                DB_FIELD_JSON("DATA"),
                 DB_FIELD_TEXT("COLOUR"),
                 DB_FIELD_TEXT("FLAGS"),
                 DB_FIELD_TEXT("GROUPS"),
