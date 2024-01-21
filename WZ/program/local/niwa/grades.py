@@ -1,7 +1,7 @@
 """
 local/niwa/grades.py
 
-Last updated:  2024-01-20
+Last updated:  2024-01-21
 
 Regional support for grade handling:
     Waldorfschule in Niedersachsen
@@ -85,6 +85,11 @@ class GradeArithmetic:
 
     def function(self, data: dict, col_values: list[str]):
         f = getattr(self, data["__f__"])
+        return f(data, col_values)
+
+    def calculate(self, dci, col_values: list[str]) -> str:
+        data = dci.DATA
+        f = getattr(self, data.get("__f__") or dci.TYPE[:-1])
         return f(data, col_values)
 
     def COMPOSITE(self, data: dict, col_values: list[str]) -> str:

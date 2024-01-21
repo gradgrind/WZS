@@ -1,5 +1,5 @@
 """
-core/dates.py - last updated 2024-01-06
+core/dates.py - last updated 2024-01-21
 
 Manage date-related information.
 
@@ -41,9 +41,14 @@ from typing import Optional
 import datetime
 
 from core.base import REPORT_CRITICAL
-from core.basic_data import CONFIG, CALENDAR, DATAPATH
+from core.basic_data import (
+    CONFIG,
+    CALENDAR,
+    DATAPATH,
+    ISOTIME,
+    isodate,
+)
 
-ISOTIME = "%Y-%m-%d"
 class DataError(Exception):
     pass
 
@@ -61,9 +66,8 @@ def print_date(date: str, date_format: str = None, trap: bool = True
     If an invalid date is passed, a <DataError> is raised, unless
     <trap> is false. In that case <None> – an invalid date – is returned.
     """
-    try:
-        d = datetime.datetime.strptime(date, ISOTIME)
-    except:
+    d = isodate(date)
+    if d is None:
         if trap:
             raise DataError(T("BAD_DATE", date = date))
     else:
@@ -87,9 +91,8 @@ def today(date_format: str = None) -> str:
             for l in fh.readlines():
                 l = l.strip()
                 if l and l[0] != "#":
-                    try:
-                        today = datetime.datetime.strptime(l, ISOTIME)
-                    except:
+                    today = isodate(l)
+                    if today is None:
                         REPORT_CRITICAL(f"Bug: Invalid date in {fakepath}")
                     break
     if today is None:
@@ -119,11 +122,10 @@ def check_schoolyear(date: str = None):
     d1, d2 = CALENDAR.ACCOUNTING_YEAR
     if date is None:
         date = today()
-    try:
-        datetime.datetime.strptime(date, ISOTIME)
-    except ValueError:
+    if isodate(date) is None:
         raise DataError(T("BAD_DATE", date = date))
     return date >= d1 and date <= d2
+
 
 
 def migrate_calendar(new_year: str = None

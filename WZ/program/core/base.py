@@ -1,7 +1,7 @@
 """
 core/base.py
 
-Last updated:  2024-01-08
+Last updated:  2024-01-21
 
 Basic configuration and structural stuff.
 
@@ -54,8 +54,8 @@ __TRANSLATIONS = ConfigParser()
 __TRANSLATIONS.read(APPDATAPATH("Translations.ini"), encoding = "utf-8")
 def Tr(module_key):
     tk = __TRANSLATIONS[module_key]
-    def __translator(key, **kargs):
-        return tk[key].replace("¶", "\n").format(**kargs)
+    def __translator(_key, **kargs):
+        return tk[_key].replace("¶", "\n").format(**kargs)
     return __translator
 
 #T = Tr("core.base")

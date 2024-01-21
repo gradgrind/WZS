@@ -1,5 +1,5 @@
 """
-grades/odt_grade_reports.py - last updated 2024-01-12
+grades/odt_grade_reports.py - last updated 2024-01-20
 
 Use odt-documents (ODF / LibreOffice) as templates for grade reports.
 
@@ -48,7 +48,6 @@ from grades.grade_tables import (
     grade_table_data,
     grade_scale,
     valid_grade_map,
-    grades_key,
 )
 
 ### -----
@@ -207,12 +206,10 @@ FIELD_MAPPING = {
 def make_grade_reports(
     occasion: str,
     class_group: str,
-    tag: str = "",
     report_info: dict[str, list] = None, # <report_data()[0]>
     # The list items are:
     #   tuple[    db_TableRow,                # SUBJECTS record
     #             Optional[tuple[str, str]],  # title, signature
-    #             str,                        # group tag
     #             list[db_TableRow]           # TEACHERS record
     #   ]
 #?
@@ -261,9 +258,8 @@ def make_grade_reports(
     info, subject_list, student_list = grade_table_data(
         occasion = occasion,
         class_group = class_group,
-        tag = tag,
         report_info = report_info,
-        grades = gtable.grades_occasion_group(occasion, class_group, tag),
+        grades = gtable.grades_occasion_group(occasion, class_group),
     )
 
     students = db.table("STUDENTS")
@@ -286,7 +282,7 @@ def make_grade_reports(
     except KeyError:
         # Get date-of-issue from CONFIG
         rdates = json.loads(CONFIG.REPORT_DATES)
-        occ_dates = rdates.get(grades_key(occasion, tag))
+        occ_dates = rdates.get(occasion)
         if occ_dates:
             d = occ_dates.get(class_group) or occ_dates.get("*")
             if d:
@@ -344,8 +340,6 @@ def make_grade_reports(
                 try:
                     fields[f] = fmap[val]
                 except:
-                    if '$' in fmap :
-                        fields[f] = val.replace('$', tag)
                     REPORT_ERROR(T("NO_FIELD_MAPPING",
                         field = f, value = val
                     ))

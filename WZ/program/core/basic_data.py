@@ -1,5 +1,5 @@
 """
-core/basic_data.py - last updated 2024-01-08
+core/basic_data.py - last updated 2024-01-21
 
 Configuration and other basic data dependent on the database.
 
@@ -43,12 +43,13 @@ T = Tr("core.basic_data")
 
 from typing import Any
 from shutil import copyfile
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 from glob import glob
 
 from core.base import (
     DATAPATH,
     REPORT_INFO,
+    REPORT_ERROR,
 )
 from core.db_access import (
     Database,
@@ -64,6 +65,8 @@ __DB = None # the current database, set in "get_database"
 REPORT_SPLITTER = '#'
 REPORT_ALL_NAMES = '*'
 SUBJECT_SPLITTER = '*'
+
+ISOTIME = "%Y-%m-%d"    # iso time format for datetime.strptime, etc.
 
 ### -----
 
@@ -138,21 +141,42 @@ class _CALENDAR:
         self._map.clear()
         hols = []
         cstmap = {}
+        reports = {}
         self._map["__HOLIDAYS__"] = hols
         self._map["__CUSTOM__"] = cstmap
+        self._map["__REPORTS__"] = reports
         for rec in db.table("__CALENDAR__").records:
             key = rec.KEY
-            val = (rec.DATE1, rec.DATE2) if rec.DATE2 else rec.DATE1
+            d1, d2 = rec.DATE1, rec.DATE2
+            if not d1:
+                continue
+            val = None
+            if d2:
+                if d2 == "X":
+                    # Only the first "date" is relevant, but it won't
+                    # be checked, to allow other formats, etc.
+                    val = d1
+                else:
+                    if isodate(d2) is None:
+                        REPORT_ERROR(T("BAD_DATE", key = key, date = d2))
+                        continue
+            if val is None:
+                if isodate(d1) is None:
+                    REPORT_ERROR(T("BAD_DATE", key = key, date = d1))
+                    continue
+                val = (d1, d2) if d2 else d1
             key0 = key[0]
             if key0 == '_':
                 # Holidays
                 hols.append(val)
             elif key0 == '*':
-                # „Custom“ values
+                # "Custom" values
                 cstmap[key[1:]] = val
+            elif key0 == '.':
+                # Date for reports, etc.
+                reports[key[1:]] = val
             else:
                 self._map[key] = val
-        d1, d2 = self._map["ACCOUNTING_YEAR"]
         #print("§CALENDAR:", self._map)
 
     def __getattr__(self, key) -> Any:
@@ -166,6 +190,13 @@ class _CALENDAR:
         }
 #+
 CALENDAR = _CALENDAR()
+
+
+def isodate(date: str) -> datetime:
+    try:
+        return datetime.strptime(date, ISOTIME)
+    except ValueError:
+        return None
 
 
 def print_fix(

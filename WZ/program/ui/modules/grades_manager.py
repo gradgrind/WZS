@@ -96,6 +96,7 @@ from grades.grade_tables import (
     #subject_map,
     grade_scale,
     valid_grade_map,
+    DelegateColumnInfo,
 )
 from grades.grade_tables import grade_table_data
 from grades.ods_template import BuildGradeTable
@@ -104,31 +105,6 @@ import local
 UPDATE_PAUSE = 1000     # time between cell edit and db update in ms
 
 ### -----
-
-
-class DelegateColumnInfo:
-    __slots__ = ("NAME", "LOCAL", "TYPE", "DATA", "FLAGS")
-
-    def __init__(self, rowdata: db_TableRow, **xargs):
-        for s in self.__slots__:
-            try:
-                v = xargs.pop(s)
-            except KeyError:
-                v = getattr(rowdata, s)
-            setattr(self, s, v)
-        if xargs:
-            REPORT_CRITICAL(
-                "Bug, invalid parameter(s) passed to"
-                " grades_manager::DelegateColumnInfo:\n"
-                f"  {', '.join(xargs)}"
-            )
-
-    def __str__(self):
-        l = [
-            f"{s}={repr(getattr(self, s))}"
-            for s in self.__slots__
-        ]
-        return f"DelegateColumnInfo({', '.join(l)})"
 
 
 class TableItem(QTableWidgetItem):
@@ -409,6 +385,8 @@ class GradeTableDelegate(QStyledItemDelegate):
         self._pending_changes[r] = {}
         self._timer.start(0)
 
+#########################++
+
 #TODO
     def calculate_row(self, row: int) -> list[tuple[int, str]]:
         print("\n§TODO: calculate_row", row)
@@ -454,6 +432,8 @@ class GradeTableDelegate(QStyledItemDelegate):
         if ok:
             return None
         return coldata.LOCAL
+
+#########################--
 
     def _max_width(self, string_list: list[str]) -> tuple[int, int]:
         """Return the display width of the widest item in the list
@@ -729,27 +709,34 @@ class ManageGradesPage(QObject):
         print("§on_combo_group_currentIndexChanged:",
             repr(self.occasion), self.class_group
         )
-        self.occasion_tag = self.ui.occasion_extra.currentText()
+#        self.occasion_tag = self.ui.occasion_extra.currentText()
 #TODO: Remove or replace this when the occasion-tag handling is implemented:
-        assert self.occasion_tag == ""
-        if '$' in self.occasion:
-            REPORT_ERROR("TODO: '$'-occasions not yet implemented")
-            self.ui.grade_table.clear()
-            return
+#        assert self.occasion_tag == ""
+#        if '$' in self.occasion:
+#            REPORT_ERROR("TODO: '$'-occasions not yet implemented")
+#            self.ui.grade_table.clear()
+#            return
 # Consider removing this category: couldn't I simply add all tables to
 # the occasions list?
 
-#TODO: Do I really need to make these instance attributes?
-        self.info, self.subject_list, self.student_list = grade_table_data(
+
+        tw = self.ui.grade_table
+        tw.clear()
+
+###########################++
+        from grades.grade_tables import GradeTable
+        GradeTable(self.occasion, self.class_group, self.report_info)
+
+
+
+        _info, subject_list, student_list = grade_table_data(
             occasion = self.occasion,
             class_group = self.class_group,
             report_info = self.report_info,
             grades = self.db.table("GRADES").grades_occasion_group(
-                self.occasion, self.class_group, self.occasion_tag
+                self.occasion, self.class_group
             ),
         )
-        tw = self.ui.grade_table
-        tw.clear()
         ## Set up grade arithmetic and validation
         gscale = grade_scale(self.class_group)
         grade_map = valid_grade_map(gscale)
@@ -792,7 +779,7 @@ class ManageGradesPage(QObject):
             ctype = rec.TYPE
             if ctype == "GRADE":
                 ## Add the grade columns
-                for sbj in self.subject_list:
+                for sbj in subject_list:
                     i = len(headers)
                     key_col[sbj.SID] = i
                     headers.append(sbj.NAME)
@@ -849,10 +836,10 @@ class ManageGradesPage(QObject):
             headers.append(rec.LOCAL)
             col_dci.append(dci)
             col_colours.append(rec.COLOUR)
-
+###########################--
         ## Set the table size
         tw.setColumnCount(len(headers))
-        nrows = len(self.student_list)
+        nrows = len(student_list)
         tw.setRowCount(nrows)
         tw.setHorizontalHeaderLabels(headers)
 
@@ -866,13 +853,15 @@ class ManageGradesPage(QObject):
 # elsewhere. These would also need to be handled appropriately.
 
         delegate = tw.itemDelegate()
-        delegate.init(self.subject_list, grade_map)
+        delegate.init(subject_list, grade_map)
         for i, dci in enumerate(col_dci):
             tw.setColumnWidth(i, delegate.add_column(dci))
 
+###########################++
+
         ### Add students
         vheaders = []
-        for i, stdata in enumerate(self.student_list):
+        for i, stdata in enumerate(student_list):
             #print("%stadata:", stdata)
             pname = stdata["NAME"]
             vheaders.append(pname)
@@ -891,6 +880,7 @@ class ManageGradesPage(QObject):
                 tw.item(i, c).setText(v)
 #TODO: What about calculated fields that need storing in the grade map
 # (flag G)?
+###########################--
 
         tw.setVerticalHeaderLabels(vheaders)
         self.suppress_handlers = False
