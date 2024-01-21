@@ -97,6 +97,7 @@ from grades.grade_tables import (
     grade_scale,
     valid_grade_map,
     DelegateColumnInfo,
+    GradeTable,
 )
 from grades.grade_tables import grade_table_data
 from grades.ods_template import BuildGradeTable
@@ -120,12 +121,13 @@ class TableItem(QTableWidgetItem):
 
             col = self.column()
             delegate = self.tableWidget().itemDelegate()
-            dci = delegate._columns[col]
+            gt = delegate.data
+            dci = gt.column_info[col]
 
             if dci.TYPE == "DATE" and val:
                 return print_date(val, trap = False) or "???"
             else:
-                if delegate.validate(col, val):
+                if gt.validate(col, val):
                     return "??"
         return val
 
@@ -134,7 +136,7 @@ class TableItem(QTableWidgetItem):
         """
         row, col = self.row(), self.column()
         delegate = self.tableWidget().itemDelegate()
-        bad_field = delegate.validate(col, value, write = True)
+        bad_field = delegate.data.validate(col, value, write = True)
         if bad_field:
             REPORT_ERROR(T("PASTE_VALUE_ERROR",
                 row = row + 1,
@@ -194,12 +196,14 @@ class TableComboBox(QComboBox):
 class GradeTableDelegate(QStyledItemDelegate):
     def __init__(self, parent):
         super().__init__(parent)
-        ## Lists for column handling
-        self._columns = []      # type tags
-        ## Date field delegate
+        ## The underlying grade table data, set in <init()>
+        self.data = None
         #print("?????CONFIG:", CONFIG._map)
-        w, m = self._max_width([print_date("2024-12-30")])
-        self._min_date_width = w + m
+        self._M_width = self.parent().fontMetrics().horizontalAdvance("M")
+        #print("§M:", self._M_width)
+        # Date field delegate
+        w = self._max_width([print_date("2024-12-30")])
+        self._min_date_width = w + self._M_width
         # Use a "dummy" line editor (because it seems to work, while
         # other approaches are a bit difficult to get working ...)
         self._editor = QLineEdit()
@@ -209,9 +213,6 @@ class GradeTableDelegate(QStyledItemDelegate):
         self._timer.setInterval(2000)
         self._timer.timeout.connect(self.update_db)
 
-    def set_columns(self, column_types: list[str]):
-        self.column_types = column_types
-
     def destroyEditor(self, editor,  index):
         """Reimplement <destroyEditor> to do nothing because the editors
         are retained.
@@ -220,7 +221,7 @@ class GradeTableDelegate(QStyledItemDelegate):
         #print("§destroyEditor ... or not!")
 
     def createEditor(self, parent, option, index):
-        ctype = self._columns[index.column()].TYPE
+        ctype = self.data.column_info[index.column()].TYPE
         if ctype.endswith("!"):
             # read-only
             return None
@@ -234,13 +235,14 @@ class GradeTableDelegate(QStyledItemDelegate):
 #TODO: other types?
 
     def setEditorData(self, editor, index):
-        dci = self._columns[index.column()]
+        row, col = index.row(), index.column()
+        dci = self.data.column_info[col]
         ctype = dci.TYPE
         if ctype == "CHOICE":
             # For some reason (!?), this gets called again after the new
             # value has been set, thus the use of <self._primed>.
             if self._primed is None:
-                self._primed = index.data(Qt.ItemDataRole.EditRole)
+                self._primed = self.data.read(row, col)
                 print("§ACTIVATE", self._primed)
                 QTimer.singleShot(0, lambda: self.popup_choice(
                     dci.DATA
@@ -252,7 +254,7 @@ class GradeTableDelegate(QStyledItemDelegate):
             # For some reason (!?), this gets called again after the new
             # value has been set, thus the used of <self._primed>.
             if self._primed is None:
-                self._primed = index.data(Qt.ItemDataRole.EditRole)
+                self._primed = self.data.read(row, col)
                 print("§ACTIVATE", self._primed)
                 QTimer.singleShot(0, lambda: self.popup_cal(editor))
                 return
@@ -276,7 +278,7 @@ class GradeTableDelegate(QStyledItemDelegate):
             # For some reason (!?), this gets called again after the new
             # value has been set, thus the used of <self._primed>.
             if self._primed is None:
-                self._primed = index.data(Qt.ItemDataRole.EditRole)
+                self._primed = self.data.read(row, col)
                 print("§ACTIVATE", self._primed)
                 QTimer.singleShot(0, self.popup_text)
                 return
@@ -331,6 +333,9 @@ class GradeTableDelegate(QStyledItemDelegate):
         self.commitData.emit(self._editor)
         self.closeEditor.emit(self._editor)
 
+#TODO: This can probably be simplified by handling writing myself.
+# I could even dispense with the special table widget by writing only
+# display values to the table.
     def setModelData(self, editor, model, index):
         """Reimplement to handle cells set by functions.
         Trigger line processing via a delay, so that multiple updates to
@@ -381,15 +386,19 @@ class GradeTableDelegate(QStyledItemDelegate):
             return
 #TODO
         print("§update_db:", r, cd)
-        grades = self.calculate_row(r)
+        tw = self.parent()
+        for c in self.data.calculate_row(r):
+            # Write to display table
+            val = self.data.read(r, c)
+            tw.item(r, c).setText(val)
         self._pending_changes[r] = {}
         self._timer.start(0)
 
 #########################++
 
-#TODO
+#TODO: deprecated (see version in <GradeTable>
     def calculate_row(self, row: int) -> list[tuple[int, str]]:
-        print("\n§TODO: calculate_row", row)
+        REPORT_WARNING("TODO: GradeTableDelegate.calculate_row is deprecated")
         tw = self.parent()
         col_values = []
         calculated_values = []
@@ -407,11 +416,13 @@ class GradeTableDelegate(QStyledItemDelegate):
             #print("§VALUE:", ctype, coldata.NAME, val)
         return calculated_values
 
+#TODO: deprecated (see version in <GradeTable>
     def validate(self, col: int, value: str, write: bool = False
     ) -> Optional[str]:
         """Checks that the value is valid for the given column.
         Return the LOCAL name if invalid, <None> if valid.
         """
+        REPORT_WARNING("TODO: GradeTableDelegate.validate is deprecated")
         coldata = self._columns[col]
         ctype = coldata.TYPE
         ok = True
@@ -436,8 +447,7 @@ class GradeTableDelegate(QStyledItemDelegate):
 #########################--
 
     def _max_width(self, string_list: list[str]) -> tuple[int, int]:
-        """Return the display width of the widest item in the list
-        and the width of a single "M".
+        """Return the display width of the widest item in the list.
         """
         fm = self.parent().fontMetrics()
         w = 0
@@ -445,22 +455,7 @@ class GradeTableDelegate(QStyledItemDelegate):
             _w = fm.boundingRect(s).width()
             if _w > w:
                 w = _w
-        return w, fm.horizontalAdvance("M")
-
-    def init(self, subject_list: list[db_TableRow], gmap: dict):
-        """Call this when initializing a table for a new group.
-        """
-        self.grade_arithmetic = local.grades.GradeArithmetic(gmap)
-        glist = list(gmap)
-        self._pending_changes = {}
-        self._columns.clear()
-        # Set up the information for editing grade cells.
-        self._subject_list = subject_list
-        w, m = self._max_width(glist)
-        self._min_grade_width = w + m
-        self._grade_editor = QLineEdit()
-        self._grade_validator = ListValidator(glist)
-        self._grade_editor.setValidator(self._grade_validator)
+        return w
 
     def _done(self, editor):
         print("§done", self._primed)
@@ -471,8 +466,21 @@ class GradeTableDelegate(QStyledItemDelegate):
 #            self.commitData.emit(editor)
 #            self.closeEditor.emit(editor)
 
-    def add_column(self, grade_field) -> int:
-        """Return the minimum width for the new column
+    def init(self, data: GradeTable) -> list[int]:
+        """Call this when initializing a table for a new group.
+        Return a list of column widths.
+        """
+        self.data = data
+        glist = list(data.grade_map)
+        self._min_grade_width = self._max_width(glist) + self._M_width
+        self._pending_changes = {}
+        self._grade_editor = QLineEdit()
+        self._grade_validator = ListValidator(glist)
+        self._grade_editor.setValidator(self._grade_validator)
+        return [self._column_width(dci) for dci in data.column_info]
+
+    def _column_width(self, grade_field) -> int:
+        """Return the minimum width for the column.
         """
         if grade_field is None:
             REPORT_CRITICAL(
@@ -484,21 +492,19 @@ class GradeTableDelegate(QStyledItemDelegate):
         w = 50
         if ctype == "GRADE":
             w = self._min_grade_width
+        elif ctype == "COMPOSITE!":
+            w = self._min_grade_width + self._M_width
         elif ctype == "CHOICE":
-            w, m = self._max_width(grade_field.DATA)
-            w += m * 2
+            w = self._max_width(grade_field.DATA) + self._M_width * 2
         elif ctype == "DATE":
             w = self._min_date_width
         elif ctype == "TEXT":
-            w, m = self._max_width(["Text field width"])
-        elif ctype == "COMPOSITE!":
-            grade_field.DATA["__f__"] = "COMPOSITE"
+            w = self._max_width(["Text field width"])
         elif ctype == "FUNCTION!":
             pass
         elif ctype != "DEFAULT":
             REPORT_ERROR(f"TODO:: Unknown column type: '{ctype}'")
             grade_field.TYPE = "DEFAULT"
-        self._columns.append(grade_field)
         return w
 
 
@@ -640,7 +646,16 @@ class TextEditor(QDialog):
 
 
 class ManageGradesPage(QObject):
+    def colour_cache(self, colour: str) -> QColor:
+        try:
+            qc = self._colours[colour]
+        except KeyError:
+            qc = QColor(colour)
+            self._colours[colour] = qc
+        return qc
+
     def __init__(self, parent = None):
+        self._colours = {}
         super().__init__()
         self.ui = load_ui("grades.ui", parent, self)
         tw = self.ui.grade_table
@@ -723,11 +738,53 @@ class ManageGradesPage(QObject):
         tw = self.ui.grade_table
         tw.clear()
 
-###########################++
-        from grades.grade_tables import GradeTable
-        GradeTable(self.occasion, self.class_group, self.report_info)
+###########################******
+
+        grade_table = GradeTable(
+            self.occasion, self.class_group, self.report_info
+        )
+
+        ## Set the table size
+        headers = [dci.LOCAL for dci in grade_table.column_info]
+        tw.setColumnCount(len(headers))
+        vheaders = [gtline.student_name for gtline in grade_table.lines]
+        tw.setRowCount(len(vheaders))
+        tw.setHorizontalHeaderLabels(headers)
+        tw.setVerticalHeaderLabels(vheaders)
+
+        delegate = tw.itemDelegate()
+        for i, w in enumerate(delegate.init(grade_table)):
+            tw.setColumnWidth(i, w)
 
 
+#        return
+
+
+        ### Fill the table
+        for i, gtline in enumerate(grade_table.lines):
+            pname = gtline.student_name
+            values = gtline.values
+            # Add grades, etc.
+            for j, dci in enumerate(grade_table.column_info):
+                item = TableItem(values[j])
+                item.setBackground(self.colour_cache(dci.COLOUR))
+                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                tw.setItem(i, j, item)
+
+#TODO: What about calculated fields that need storing in the grade map
+# (flag G)?
+###########################--
+
+        self.suppress_handlers = False
+
+#TODO: This is a fix for a visibility problem (gui refresh)
+        for w in APP.topLevelWindows():
+            if w.isVisible():
+                w.show()
+
+        return
+
+#-----------------------------------------------------
 
         _info, subject_list, student_list = grade_table_data(
             occasion = self.occasion,
@@ -859,7 +916,7 @@ class ManageGradesPage(QObject):
 
 ###########################++
 
-        ### Add students
+        ### Fill the table
         vheaders = []
         for i, stdata in enumerate(student_list):
             #print("%stadata:", stdata)

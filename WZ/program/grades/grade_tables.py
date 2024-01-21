@@ -396,7 +396,7 @@ class DelegateColumnInfo:
                 " grades_manager::DelegateColumnInfo:\n"
                 f"  {', '.join(xargs)}"
             )
-        print("§DelegateColumnInfo:", self)
+        #print("§DelegateColumnInfo:", self)
 
     def __str__(self):
         l = [
@@ -406,10 +406,9 @@ class DelegateColumnInfo:
         return f"DelegateColumnInfo({', '.join(l)})"
 
 
-########TODO ... for grades manager, etc.
-
-
 def hex_colour_adjust(colour: str, factor: float):
+    """Lighten or darken an rgb-colour in "#RRGGBB" form.
+    """
     colhex = colour.lstrip('#')
     rgb = tuple(int(colhex[i:i+2], 16) / 255.0 for i in (0, 2, 4))
     h, l, s = rgb_to_hls(*rgb)
@@ -426,6 +425,10 @@ class GradeTable:
         grades: Grades.GradeMap
         values: list[str]
         teacher_sets: list[set[int]]
+
+    def read(self, row: int, column: int) -> str:
+#TODO: trap index error?
+        return self.lines[row].values[column]
 
     def __init__(self,
         occasion: str,
@@ -464,8 +467,8 @@ class GradeTable:
 
         ## Set up grade arithmetic and validation
         gscale = grade_scale(class_group)
-        grade_map = valid_grade_map(gscale)
-        self.grade_arithmetic = local.grades.GradeArithmetic(grade_map)
+        self.grade_map = valid_grade_map(gscale)
+        self.grade_arithmetic = local.grades.GradeArithmetic(self.grade_map)
 
         ### Collect the columns
         headers = []
@@ -530,7 +533,7 @@ class GradeTable:
                     dci.DATA["calendar_key"] = kd
 
             elif ctype == "COMPOSITE!":
-                d_colour = hex_colour_adjust(rec.COLOUR, 0.8)
+                d_colour = hex_colour_adjust(rec.COLOUR, 0.9)
                 components = []
                 for col in rec.DATA["__COLUMNS__"]:
                     dci = col_dci[col]
@@ -593,17 +596,27 @@ class GradeTable:
             for dci in col_dci:
                 s_id = dci.NAME
                 gr = gmap.get(s_id) or ""
-                tset = sbjdata[sbj.id]
+
+#TODO: LEVEL (and potentially others) have default values which need to
+# be fetched here (?). At least some of them should then be saved to
+# the grade map in the database. That can be dealt with by the row
+# calculation in conjunction with the column flags.
+# Could use students.all_string_fields(self, id: int) -> dict[str, str]
+                try:
+                    tset = sbjdata.get(int(s_id))
+                except ValueError:
+                    tset = None
+                else:
+                    if not tset:
+                        # No teachers
+                        if gr and gr != NO_GRADE:
+                            REPORT_WARNING(T("UNEXPECTED_GRADE",
+                                grade = gr,
+                                subject = dci.LOCAL,
+                                student = pname,
+                            ))
+                        gr = NO_GRADE
                 tlist.append(tset)
-                if not tset:
-                    # No teachers
-                    if gr and gr != NO_GRADE:
-                        REPORT_WARNING(T("UNEXPECTED_GRADE",
-                            grade = gr,
-                            subject = sbj.NAME,
-                            student = pname,
-                        ))
-                    gr = NO_GRADE
                 values.append(gr)
 #TODO: Test for unexpected entries in gmap?
 #REPORT_WARNING(T("UNEXPECTED_SUBJECT",
@@ -620,15 +633,11 @@ class GradeTable:
             ))
             print("§GradeTableLine:", lines[-1])
 
-            for c, v in self.calculate_row(i):
-                print("§calculate_row:", i, c, v)
-                v0 = values[c]
-                if v != v0:
-                    values[c] = v
-                    if "G" in col_dci[c].FLAGS:
+            for c in self.calculate_row(i):
+                if "G" in col_dci[c].FLAGS:
 #TODO
-                        pass
-                        # save this field
+                    print("§calculated value changed:", i, c, values[c])
+                    # save this field
 
 #TODO: Dates. If the C-flag is set, there should be at least a default value
 # in the __CALENDAR__ table. This can be changed for an occasion/group by
@@ -637,11 +646,11 @@ class GradeTable:
 # If there is no personal (G) entry, the default value can be fetched – and
 # perhaps displayed in parenthesis?
 
-    def calculate_row(self, row: int) -> list[tuple[int, str]]:
+    def calculate_row(self, row: int) -> list[int]:
         #print("\n§TODO: calculate_row", row)
         line = self.lines[row]
         values = line.values
-        calculated_values = []
+        calculated_cols = []
         for c, dci in enumerate(self.column_info):
             ctype = dci.TYPE
             if ctype[-1] == "!":
@@ -650,11 +659,10 @@ class GradeTable:
                 val = self.grade_arithmetic.calculate(
                     dci, values
                 )
-                calculated_values.append((c, val))
-            else:
-                val = line.values[c]
-            #print("§VALUE:", ctype, dci.NAME, val)
-        return calculated_values
+                if values[c] != val:
+                    values[c] = val
+                    calculated_cols.append(c)
+        return calculated_cols
 
     def validate(self, col: int, value: str, write: bool = False
     ) -> Optional[str]:
@@ -663,9 +671,10 @@ class GradeTable:
         """
         dci = self.column_info[col]
         ctype = dci.TYPE
+        print("§validate:", dci.LOCAL, ctype, value)
         ok = True
-        if ctype.startswith("GRADE"):
-            if value not in self._grade_validator._values:
+        if ctype == "GRADE":
+            if value not in self.grade_map:
                 ok = False
         elif ctype == "CHOICE":
             if value not in dci.DATA:
@@ -676,6 +685,7 @@ class GradeTable:
         elif ctype[-1] == "!":
             ok = not write
         # Other column types are not checked
+        print("   -->", ok)
         if ok:
             return None
         return dci.LOCAL

@@ -1,5 +1,5 @@
 """
-core/students.py - last updated 2024-01-08
+core/students.py - last updated 2024-01-21
 
 Manage students data.
 
@@ -85,7 +85,7 @@ class Students(db_Table):
 #        self.init()
 #        super().__init__(db)
 
-    def all_string_fields(self, id: int) -> dict[str, str|int]:
+    def all_string_fields(self, id: int) -> dict[str, str]:
         """Return a mapping containing all pupil fields with string values,
         including a single name field for general usage (short form) as well
         as the full name.
