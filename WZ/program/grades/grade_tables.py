@@ -1,5 +1,5 @@
 """
-grades/grade_tables.py - last updated 2024-01-21
+grades/grade_tables.py - last updated 2024-01-22
 
 Manage grade tables.
 
@@ -54,6 +54,7 @@ from core.db_access import (
     DB_FIELD_TEXT,
     DB_FIELD_JSON,
     DB_FIELD_REFERENCE,
+    to_json,
 )
 from core.basic_data import CALENDAR, get_database, CONFIG, isodate
 from core.classes import GROUP_ALL, class_group_split_with_id
@@ -109,9 +110,14 @@ class Grades(db_Table):
             )
         }
 
-    class GradeMap(NamedTuple):
-        grades_id: int          # GRADES.id
-        grades: dict[str, str]  # GRADES.GRADE_MAP
+    class GradeMap:
+        __slots__ = (
+            "grades_id",    # int: GRADES.id
+            "grades",       # dict[str, str]: GRADES.GRADE_MAP
+        )
+        def __init__(self, grades_id = None, grades = None):
+            self.grades_id = grades_id
+            self.grades = grades
 
     def grades_for_occasion_group(self,
         occasion: str,
@@ -448,11 +454,16 @@ class GradeTable:
             REPORT_CRITICAL(
                 "Bug: Null group passed to GradeTable"
             )
+
+#TODO: Is this really the right place for this???
         self.info = {   # for external grade table
             "+1": CALENDAR.SCHOOL_YEAR, # e.g. "2024"
             "+2": class_group,          # e.g. "12G.R"
             "+3": occasion              # e.g. "2. Halbjahr", "Abitur", etc.
         }
+
+        self.occasion = occasion
+        self.class_group = class_group
         ## Get the subject data for this group
         smap = subject_map(class_id, group, report_info)
         ## ... and the student data
@@ -460,7 +471,8 @@ class GradeTable:
             class_id, group, smap
         )
         ## ... and any existing grade data
-        grades = db.table("GRADES").grades_for_occasion_group(
+        self.GRADES = db.table("GRADES")
+        grades = self.GRADES.grades_for_occasion_group(
             occasion, class_group
         )
 #TODO: Possibility of NOT including grades?
@@ -596,6 +608,18 @@ class GradeTable:
             for dci in col_dci:
                 s_id = dci.NAME
                 gr = gmap.get(s_id) or ""
+                if (not gr) and "S" in dci.FLAGS:
+                    # Get value from student's data
+                    try:
+                        gr = stdata.EXTRA[s_id]
+                    except KeyError:
+                        try:
+                            gr = getattr(stdata, s_id)
+                        except AttributeError:
+                            pass
+
+
+
 
 #TODO: LEVEL (and potentially others) have default values which need to
 # be fetched here (?). At least some of them should then be saved to
@@ -633,11 +657,7 @@ class GradeTable:
             ))
             print("§GradeTableLine:", lines[-1])
 
-            for c in self.calculate_row(i):
-                if "G" in col_dci[c].FLAGS:
-#TODO
-                    print("§calculated value changed:", i, c, values[c])
-                    # save this field
+            self.calculate_row(i)
 
 #TODO: Dates. If the C-flag is set, there should be at least a default value
 # in the __CALENDAR__ table. This can be changed for an occasion/group by
@@ -651,6 +671,8 @@ class GradeTable:
         line = self.lines[row]
         values = line.values
         calculated_cols = []
+        grades = line.grades.grades
+        changed = False     # test for changes to <grades>
         for c, dci in enumerate(self.column_info):
             ctype = dci.TYPE
             if ctype[-1] == "!":
@@ -662,6 +684,34 @@ class GradeTable:
                 if values[c] != val:
                     values[c] = val
                     calculated_cols.append(c)
+            else:
+                val = values[c]
+            if "G" in dci.FLAGS:
+                try:
+                    if val == grades[dci.NAME]:
+                        continue
+                except KeyError:
+                    if not val:
+                        continue
+                grades[dci.NAME] = val
+                changed = True
+        if changed:
+#TODO: save to db
+            print("§CHANGED 'GRADES':", grades)
+ #XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+            if line.grades.grades_id:
+                print("§  ... UPDATE", line.grades.grades_id)
+            else:
+#TODO: Using <self.GRADES> doesn't take account of the resetting of
+# the GRADES table after an update!
+                print("§  ... NEW")
+                new_id = self.GRADES.add_records([{
+                    "OCCASION": self.occasion,
+                    "CLASS_GROUP": self.class_group,
+                    "Student": line.student_id,
+                    "GRADE_MAP": to_json(grades),
+                }])[0]
+                line.grades.grades_id = new_id
         return calculated_cols
 
     def validate(self, col: int, value: str, write: bool = False

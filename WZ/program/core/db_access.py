@@ -1,7 +1,7 @@
 """
 core/db_access.py
 
-Last updated:  2024-01-06
+Last updated:  2024-01-22
 
 Helper functions for accessing the database.
 
@@ -374,11 +374,7 @@ class db_Table:
         # New json-fields
         newmap.update(jsonfields)
         # Prepare text value
-        value = json.dumps(
-            newmap,
-            ensure_ascii = False,
-            separators = (',', ':')
-        )
+        value = to_json(newmap)
         self.db.update(self.table, rowid, ftype.field0, value)
         ## Set the memory cell
         setattr(record, ftype.field, newmap)
@@ -593,6 +589,10 @@ class DB_FIELD_TEXT(DB_FIELD):
                 f"TODO: Doesn't match pattern '{self.pattern}'"
             )
         return text, ""
+
+
+def to_json(item):
+    return json.dumps(item, ensure_ascii = False, separators = (',', ':'))
 
 
 class DB_FIELD_JSON(DB_FIELD):
