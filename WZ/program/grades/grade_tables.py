@@ -471,8 +471,7 @@ class GradeTable:
             class_id, group, smap
         )
         ## ... and any existing grade data
-        self.GRADES = db.table("GRADES")
-        grades = self.GRADES.grades_for_occasion_group(
+        grades = db.table("GRADES").grades_for_occasion_group(
             occasion, class_group
         )
 #TODO: Possibility of NOT including grades?
@@ -667,7 +666,7 @@ class GradeTable:
 # perhaps displayed in parenthesis?
 
     def calculate_row(self, row: int) -> list[int]:
-        #print("\n§TODO: calculate_row", row)
+        print("\n§calculate_row", row)
         line = self.lines[row]
         values = line.values
         calculated_cols = []
@@ -696,21 +695,23 @@ class GradeTable:
                 grades[dci.NAME] = val
                 changed = True
         if changed:
-#TODO: save to db
             print("§CHANGED 'GRADES':", grades)
- #XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
             if line.grades.grades_id:
+#TODO: not working yet? It's not picking up the change!
                 print("§  ... UPDATE", line.grades.grades_id)
+                get_database().table("GRADES").update_json_cell(
+                    rowid = line.grades.grades_id,
+                    field = "GRADE_MAP",
+                    **grades,
+                )
             else:
-#TODO: Using <self.GRADES> doesn't take account of the resetting of
-# the GRADES table after an update!
-                print("§  ... NEW")
-                new_id = self.GRADES.add_records([{
+                new_id = get_database().table("GRADES").add_records([{
                     "OCCASION": self.occasion,
                     "CLASS_GROUP": self.class_group,
                     "Student": line.student_id,
                     "GRADE_MAP": to_json(grades),
                 }])[0]
+                print("§  ... NEW:", new_id)
                 line.grades.grades_id = new_id
         return calculated_cols
 
@@ -721,7 +722,6 @@ class GradeTable:
         """
         dci = self.column_info[col]
         ctype = dci.TYPE
-        print("§validate:", dci.LOCAL, ctype, value)
         ok = True
         if ctype == "GRADE":
             if value not in self.grade_map:
@@ -735,7 +735,7 @@ class GradeTable:
         elif ctype[-1] == "!":
             ok = not write
         # Other column types are not checked
-        print("   -->", ok)
+        #print("§validate:", dci.LOCAL, ctype, value, "-->", ok)
         if ok:
             return None
         return dci.LOCAL
