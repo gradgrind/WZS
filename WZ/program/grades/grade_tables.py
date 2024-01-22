@@ -526,7 +526,7 @@ class GradeTable:
                     col_dci.append(DelegateColumnInfo(rec,
                         NAME = str(sbj.id),
                         LOCAL = sbj.NAME,
-                        DATA = {"SID": sbj.SID}
+                        DATA = {"SID": sbj.SID, "SORTING": sbj.SORTING}
                     ))
                     all_grade_cols.add(i)
                 continue
@@ -607,24 +607,21 @@ class GradeTable:
             for dci in col_dci:
                 s_id = dci.NAME
                 gr = gmap.get(s_id) or ""
-                if (not gr) and "S" in dci.FLAGS:
-                    # Get value from student's data
-                    try:
-                        gr = stdata.EXTRA[s_id]
-                    except KeyError:
+                if (not gr):
+                    if "S" in dci.FLAGS:
+                        # Get value from student's data
                         try:
-                            gr = getattr(stdata, s_id)
-                        except AttributeError:
+                            gr = stdata.EXTRA[s_id]
+                        except KeyError:
+                            try:
+                                gr = getattr(stdata, s_id)
+                            except AttributeError:
+                                pass
+                    elif "C" in dci.FLAGS:
+                        try:
+                            gr = dci.DATA["default"]
+                        except KeyError:
                             pass
-
-
-
-
-#TODO: LEVEL (and potentially others) have default values which need to
-# be fetched here (?). At least some of them should then be saved to
-# the grade map in the database. That can be dealt with by the row
-# calculation in conjunction with the column flags.
-# Could use students.all_string_fields(self, id: int) -> dict[str, str]
                 try:
                     tset = sbjdata.get(int(s_id))
                 except ValueError:
@@ -654,19 +651,11 @@ class GradeTable:
                 values = values,
                 teacher_sets = tlist,
             ))
-            print("§GradeTableLine:", lines[-1])
-
+            #print("§GradeTableLine:", lines[-1])
             self.calculate_row(i)
 
-#TODO: Dates. If the C-flag is set, there should be at least a default value
-# in the __CALENDAR__ table. This can be changed for an occasion/group by
-# adding more specific entries. This implies the need for a setter widget
-# in the gui – would a list/table be more appropriate than buttons (etc.)?
-# If there is no personal (G) entry, the default value can be fetched – and
-# perhaps displayed in parenthesis?
-
     def calculate_row(self, row: int) -> list[int]:
-        print("\n§calculate_row", row)
+        #print("\n§calculate_row", row)
         line = self.lines[row]
         values = line.values
         calculated_cols = []
@@ -685,6 +674,7 @@ class GradeTable:
                     calculated_cols.append(c)
             else:
                 val = values[c]
+                #print("???", val, "#", dci, "\n ++", grades)
             if "G" in dci.FLAGS:
                 try:
                     if val == grades[dci.NAME]:
@@ -695,10 +685,7 @@ class GradeTable:
                 grades[dci.NAME] = val
                 changed = True
         if changed:
-            print("§CHANGED 'GRADES':", grades)
             if line.grades.grades_id:
-#TODO: not working yet? It's not picking up the change!
-                print("§  ... UPDATE", line.grades.grades_id)
                 get_database().table("GRADES").update_json_cell(
                     rowid = line.grades.grades_id,
                     field = "GRADE_MAP",
@@ -711,7 +698,6 @@ class GradeTable:
                     "Student": line.student_id,
                     "GRADE_MAP": to_json(grades),
                 }])[0]
-                print("§  ... NEW:", new_id)
                 line.grades.grades_id = new_id
         return calculated_cols
 
@@ -739,10 +725,6 @@ class GradeTable:
         if ok:
             return None
         return dci.LOCAL
-
-
-
-
 
 
 def get_calendar_date(name: str, occasion: str, group: str

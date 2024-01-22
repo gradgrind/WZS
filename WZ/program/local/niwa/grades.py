@@ -1,7 +1,7 @@
 """
 local/niwa/grades.py
 
-Last updated:  2024-01-21
+Last updated:  2024-01-22
 
 Regional support for grade handling:
     Waldorfschule in Niedersachsen
@@ -78,8 +78,8 @@ def grade_tables(grade_map: dict[str, tuple[str, int]]):
 class GradeArithmetic:
     def __init__(self, scale: str):
         self.grade_val, self.grade_list = grade_tables(scale)
-        print("\n§grade_val:", self.grade_val)
-        print("\n§grade_list:", self.grade_list)
+        #print("\n§grade_val:", self.grade_val)
+        #print("\n§grade_list:", self.grade_list)
 
 #TODO: I might need more information about the columns?
 

@@ -1,5 +1,5 @@
 """
-grades/odt_grade_reports.py - last updated 2024-01-20
+grades/odt_grade_reports.py - last updated 2024-01-22
 
 Use odt-documents (ODF / LibreOffice) as templates for grade reports.
 
@@ -45,9 +45,12 @@ from core.classes import class_group_split
 from core.subjects import Subjects
 from text.odt_support import write_ODT_template
 from grades.grade_tables import (
-    grade_table_data,
-    grade_scale,
-    valid_grade_map,
+    GradeTable,
+
+
+#    grade_table_data,
+#    grade_scale,
+#    valid_grade_map,
 )
 
 ### -----
@@ -250,25 +253,41 @@ def make_grade_reports(
     if not template_file:
         return
 
-    gscale = grade_scale(class_group)
-    grade_map = valid_grade_map(gscale)
+#    gscale = grade_scale(class_group)
+#    grade_map = valid_grade_map(gscale)
 
     ## Get grades
+    grade_table = GradeTable(occasion, class_group)
+
+    '''
     gtable = db.table("GRADES")
     info, subject_list, student_list = grade_table_data(
         occasion = occasion,
         class_group = class_group,
         report_info = report_info,
-        grades = gtable.grades_occasion_group(occasion, class_group),
+        grades = gtable.grades_for_occasion_group(occasion, class_group),
     )
+
+    print("\nSUBJECTS:", subject_list)
+    '''
 
     students = db.table("STUDENTS")
 
-    print("\nSUBJECTS:", subject_list)
-
-
 #TODO ... currently testing with just the first student
     n = 0
+
+    line = grade_table.lines[n]
+    st_id = line.student_id
+    stdata = students.all_string_fields(st_id)
+    values = line.values
+    for i, dci in enumerate(grade_table.column_info):
+        if dci.TYPE == "GRADE":
+            print("???", dci)
+        else:
+            stdata[dci.NAME] = values[i]
+    return
+
+
     print("\n$", student_list[n])
     st_n = student_list[n]
     st_id = st_n["id"]

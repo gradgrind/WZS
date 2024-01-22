@@ -1,5 +1,5 @@
 """
-core/basic_data.py - last updated 2024-01-21
+core/basic_data.py - last updated 2024-01-22
 
 Configuration and other basic data dependent on the database.
 
@@ -174,7 +174,7 @@ class _CALENDAR:
                 cstmap[key[1:]] = val
             elif key0 == '.':
                 # Date for reports, etc.
-                reports[key[1:]] = val
+                reports[key] = val
             else:
                 self._map[key] = val
         #print("§CALENDAR:", self._map)
