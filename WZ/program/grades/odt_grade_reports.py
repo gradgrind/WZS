@@ -1,5 +1,5 @@
 """
-grades/odt_grade_reports.py - last updated 2024-01-22
+grades/odt_grade_reports.py - last updated 2024-01-23
 
 Use odt-documents (ODF / LibreOffice) as templates for grade reports.
 
@@ -46,12 +46,11 @@ from core.subjects import Subjects
 from text.odt_support import write_ODT_template
 from grades.grade_tables import (
     GradeTable,
-
-
 #    grade_table_data,
 #    grade_scale,
 #    valid_grade_map,
 )
+import local
 
 ### -----
 
@@ -158,6 +157,8 @@ _GRADE_REPORT_CHOICE = {
 
 #####++++++++++++++++++++++++++++++++++++++++
 
+#TODO: generate pdfs, move configs to CONFIG
+
 
 def get_template(occasion: str, class_group: str) -> str:
     occ_group_key = json.loads(CONFIG.GRADE_REPORTS)
@@ -196,7 +197,7 @@ def get_template(occasion: str, class_group: str) -> str:
 #        group = class_group
 #    )
 
-
+#TODO: This should be in CONFIG somehow ...
 FIELD_MAPPING = {
     "LEVEL": {"HS": "Hauptschule", "RS": "Realschule", "Gym": "Gymnasium"},
     "SEX": {"m": "Herr", "w": "Frau"},
@@ -205,6 +206,22 @@ FIELD_MAPPING = {
         "$": "",
     }
 }
+
+#???
+REPORT_FIELD_MAPPING = {
+    "LEVEL": {
+        "*/*": {"HS": "Hauptschule", "RS": "Realschule", "Gym": "Gymnasium"},
+#        "occasion/class_group": {},
+        # first look up occasion + class_group, then just occasion,
+        # then just class_group, then default
+
+        }
+
+# ...
+}
+
+# OR put it all in a local module? together with the basic stuff below?
+
 
 def make_grade_reports(
     occasion: str,
@@ -230,7 +247,10 @@ def make_grade_reports(
             elif g_pending == CONFIG.NO_GRADE_DOC:
                 g = g_pending
             else:
-                g = grade_map[g_pending][0]
+                try:
+                    g = grade_map[g_pending][0]
+                except KeyError:
+                    g = "???"
             g_pending = None
             return g
         if key.startswith("."):
@@ -251,162 +271,90 @@ def make_grade_reports(
     ## Get template
     template_file = get_template(occasion, class_group)
     if not template_file:
-        return
-
-#    gscale = grade_scale(class_group)
-#    grade_map = valid_grade_map(gscale)
+        return []
 
     ## Get grades
     grade_table = GradeTable(occasion, class_group)
-
-    '''
-    gtable = db.table("GRADES")
-    info, subject_list, student_list = grade_table_data(
-        occasion = occasion,
-        class_group = class_group,
-        report_info = report_info,
-        grades = gtable.grades_for_occasion_group(occasion, class_group),
-    )
-
-    print("\nSUBJECTS:", subject_list)
-    '''
+    grade_map = grade_table.grade_map
 
     students = db.table("STUDENTS")
 
-#TODO ... currently testing with just the first student
-    n = 0
-
-    line = grade_table.lines[n]
-    st_id = line.student_id
-    stdata = students.all_string_fields(st_id)
-    values = line.values
-    for i, dci in enumerate(grade_table.column_info):
-        if dci.TYPE == "GRADE":
-            print("???", dci)
-        else:
-            stdata[dci.NAME] = values[i]
-    return
-
-
-    print("\n$", student_list[n])
-    st_n = student_list[n]
-    st_id = st_n["id"]
-    stdata = students.all_string_fields(st_id)
-    gmap = st_n["GRADES"]
-    print("§GRADES:", gmap)
-    # Use LEVEL from grade table, as set up by <grade_table_data>
-    stdata["LEVEL"] = gmap["LEVEL"]
-    try:
-        stdata["DATE_ISSUE"] = gmap["DATE_ISSUE"]
-    except KeyError:
-        # Get date-of-issue from CONFIG
-        rdates = json.loads(CONFIG.REPORT_DATES)
-        occ_dates = rdates.get(occasion)
-        if occ_dates:
-            d = occ_dates.get(class_group) or occ_dates.get("*")
-            if d:
-                if d.startswith("#"):
-#TODO: catch look-up error
-                    d = getattr(CALENDAR, d[1:])
-                stdata["DATE_ISSUE"] = d
-    subject_map = {}
-    for sbj in subject_list:
-        s = sbj.SORTING
-        val = (Subjects.clip_name(sbj.NAME), gmap[str(sbj.id)])
-        try:
-            subject_map[s].append(val)
-        except KeyError:
-            subject_map[s] = [val]
-    print("§SUBJECT_MAP:", subject_map)
-    for k, v in subject_map.items():
-        v.reverse()
-    print("§SUBJECT_MAP_REVERSED:", subject_map)
-
-    stdata.update(CALENDAR.all_string_fields())
-#TODO: add other fields
-
-#TODO
-    stdata["REMARKS"] = (
-        "A comment.\n"
-        "A further comment.\n"
-        "Something to sum the whole thing up without going into too much"
-        " depth, but still saying something new.\n"
-        "More? You must be kidding!"
-    )
-
     c, g = class_group_split(class_group)
-    fields = {
-        "SCHOOL": CONFIG.SCHOOL,
-        "SCHOOLBIG": CONFIG.SCHOOL.upper(),
-        "OCCASION": occasion,
-        "CLASS": c,
-        "-REMARKS": "––––––––––––",
-    }
-    for f, val in stdata.items():
-        if f.startswith("DATE_"):
-            if val:
+
+    results = []
+    for line in grade_table.lines:
+        st_id = line.student_id
+        fields = {
+            "SCHOOL": CONFIG.SCHOOL,
+            "OCCASION": occasion,
+            "CLASS": c,
+        }
+        fields.update(students.all_string_fields(st_id))
+        values = line.values
+        subject_map = {}
+        for i, dci in enumerate(grade_table.column_info):
+            if dci.TYPE == "GRADE":
+                print("???", dci)
+                s = dci.DATA["SORTING"]
+                val = (Subjects.clip_name(dci.LOCAL), values[i]) #???
                 try:
-                    val = print_date(val, CONFIG.GRADE_DATE_FORMAT)
+                    subject_map[s].append(val)
                 except KeyError:
-                    val = print_date(val)
-            fields[f] = val
-        else:
-            try:
-                fmap = FIELD_MAPPING[f]
-            except KeyError:
-                fields[f] = val
+                    subject_map[s] = [val]
             else:
-                try:
-                    fields[f] = fmap[val]
-                except:
-                    REPORT_ERROR(T("NO_FIELD_MAPPING",
-                        field = f, value = val
-                    ))
-    print("\n$$$", fields)
+                fields[dci.NAME] = values[i]
+        print("§SUBJECT_MAP:", subject_map)
+        for k, v in subject_map.items():
+            v.reverse()
+        print("§SUBJECT_MAP_REVERSED:", subject_map)
 
-    g_pending = None
-    odt, m, u = write_ODT_template(template_file, fields, special)
-    # If there are still entries in <subject_map> at the end of
-    # the processing, these are unplaced values – report them.
-    xs_subjects = []
-    for sg in subject_map.values():
-        xs_subjects += [ f"  -- {s}: {g}" for s, g in sg ]
-    if xs_subjects:
-        REPORT_ERROR(T("EXCESS_SUBJECTS", slist = "\n".join(xs_subjects)))
+        fields.update(CALENDAR.all_string_fields())
+        print("\n§FIELDS:", fields)
 
-    print("\n§MISSING:", m)
-    print("\n§USED:", u)
+        # Make adjustments for specialities of the region or school-type
+        local.reports.local_fields(fields)
+        # Convert dates
+        for f, val in fields.items():
+            if f.startswith("DATE_"):
+                if val:
+                    try:
+                        dateformat = CONFIG.GRADE_DATE_FORMAT
+                    except KeyError:
+                        dateformat = None
+                    print("§dateformat:", dateformat, val)
+                    val = print_date(val, dateformat)
+                fields[f] = val
+        print("\n$$$", fields)
 
-# Just for testing!
-    outpath = template_file.rsplit('.', 1)[0] + '_X.odt'
-    with open(outpath, 'bw') as fh:
-        fh.write(odt)
-    print(" -->", outpath)
+        g_pending = None
+        odt, m, u = write_ODT_template(template_file, fields, special)
+        # If there are still entries in <subject_map> at the end of
+        # the processing, these are unplaced values – report them.
+        xs_subjects = []
+        for sg in subject_map.values():
+            xs_subjects += [ f"  -- {s}: {g}" for s, g in sg ]
+        if xs_subjects:
+            REPORT_ERROR(T("EXCESS_SUBJECTS", slist = "\n".join(xs_subjects)))
+
+        results.append((odt, fields["SORTNAME"]))
+
+        print("\n§MISSING:", m)
+        print("\n§USED:", u)
+
+    return results
 
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
 
 if __name__ == "__main__":
 
-    make_grade_reports("1. Halbjahr", "12G.R")
-
-    quit(2)
-
-    fields = {
-        "SCHOOLBIG": "MY SCHOOL",
-        "LEVEL": "My level",
-        "SCHOOL": "My School",
-        "SCHOOL_YEAR": "2024",
-        "EXTRA": "Not included",
-    }
-
-    odt, m, u = write_ODT_template(filepath, fields)
-
-    print("\n§MISSING:", m)
-    print("\n§USED:", u)
-
-    outpath = filepath.rsplit('.', 1)[0] + '_X.odt'
-    with open(outpath, 'bw') as fh:
-        fh.write(odt)
-    print(" -->", outpath)
-
+    _o = "1. Halbjahr"
+    _cg = "12G.R"
+    outdir = DATAPATH(f"{_o}/{_cg}".replace(" ", "_"), "working_data")
+    print("§outdir", outdir)
+    os.makedirs(outdir, exist_ok = True)
+    for odt, sname in make_grade_reports(_o, _cg):
+        outpath = os.path.join(outdir, sname) + ".odt"
+        with open(outpath, 'bw') as fh:
+            fh.write(odt)
+        print(" -->", outpath)

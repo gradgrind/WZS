@@ -1,5 +1,5 @@
 """
-core/dates.py - last updated 2024-01-21
+core/dates.py - last updated 2024-01-23
 
 Manage date-related information.
 
@@ -71,7 +71,7 @@ def print_date(date: str, date_format: str = None, trap: bool = True
         if trap:
             raise DataError(T("BAD_DATE", date = date))
     else:
-        if date_format is None:
+        if not date_format:
             date_format = CONFIG.FORMAT_DATE
         return d.strftime(date_format)
     return None
