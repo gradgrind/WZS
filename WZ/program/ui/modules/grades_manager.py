@@ -1,7 +1,7 @@
 """
 ui/modules/grades_manager.py
 
-Last updated:  2024-01-22
+Last updated:  2024-01-23
 
 Front-end for managing grade reports.
 
@@ -71,6 +71,7 @@ from ui.ui_base import (
     QDate,
     Slot,
     QPoint,
+    QAbstractListModel,
     ### other
     APP,
 #    SHOW_CONFIRM,
@@ -96,6 +97,10 @@ UPDATE_PAUSE = 1000     # time between cell edit and db update in ms
 ### -----
 
 
+class GroupDataModel(QAbstractListModel):
+    pass
+
+
 class TableItem(QTableWidgetItem):
     """A custom table-widget-item which differentiates (minimally)
     between EditRole and DisplayRole, currently only for displaying
@@ -106,12 +111,10 @@ class TableItem(QTableWidgetItem):
     def data(self, role: Qt.ItemDataRole):
         val = super().data(role)
         if role == Qt.ItemDataRole.DisplayRole:
-
             col = self.column()
             delegate = self.tableWidget().itemDelegate()
             gt = delegate.data
             dci = gt.column_info[col]
-
             if dci.TYPE == "DATE" and val:
                 return print_date(val, trap = False) or "???"
             else:
@@ -180,6 +183,101 @@ class TableComboBox(QComboBox):
         #print("§activated:", i)
         self._callback(self)
 
+
+#############++++++++++
+
+class TableDelegate(QStyledItemDelegate):
+    def __init__(self, parent):
+        super().__init__(parent)
+        ## The underlying table data, set in <init()>
+        self.data = None
+        # Use a "dummy" line editor (because it seems to work, while
+        # other approaches are a bit difficult to get working ...)
+        self._editor = QLineEdit()
+        self._editor.setReadOnly(True)
+#? The following was for the delayed writing to database of changed grades
+#        self._timer = QTimer()
+#        self._timer.setSingleShot(True)
+#        self._timer.setInterval(2000)
+#        self._timer.timeout.connect(self.update_db)
+
+    def get_dci(self, row, col):
+        """Customized for the particular data model.
+        """
+        return self.data[row]
+
+    def get_value(self, row, col):
+        """Customized for the particular data model.
+        """
+        return self.data[row].DATA["default"]
+
+    def destroyEditor(self, editor,  index):
+        """Reimplement <destroyEditor> to do nothing because the editors
+        are retained.
+        """
+        pass
+
+    def createEditor(self, parent, option, index):
+        self._primed = None
+        self._editor.setParent(parent)
+        return self._editor
+
+    def setEditorData(self, editor, index):
+        row, col = index.row(), index.column()
+        dci = self.get_dci(row, col)
+        ctype = dci.TYPE
+        if ctype == "CHOICE":
+            # For some reason (!?), this gets called again after the new
+            # value has been set, thus the use of <self._primed>.
+            if self._primed is None:
+                self._primed = self.get_value(row, col)
+                #print("§ACTIVATE", self._primed)
+                QTimer.singleShot(0, lambda: self.popup_choice(
+                    dci.DATA
+                ))
+                return
+            #else:
+            #    print("§REPEATED ACTIVATION")
+        elif ctype == "DATE":
+            # For some reason (!?), this gets called again after the new
+            # value has been set, thus the used of <self._primed>.
+            if self._primed is None:
+                self._primed = self.get_value(row, col)
+                #print("§ACTIVATE", self._primed)
+                QTimer.singleShot(0, lambda: self.popup_cal(editor))
+                return
+            #else:
+            #    print("§REPEATED ACTIVATION")
+        elif ctype == "TEXT":
+            # For some reason (!?), this gets called again after the new
+            # value has been set, thus the used of <self._primed>.
+            if self._primed is None:
+                self._primed = self.get_value(row, col)
+                #print("§ACTIVATE", self._primed)
+                QTimer.singleShot(0, self.popup_text)
+                return
+            #else:
+            #    print("§REPEATED ACTIVATION")
+
+        super().setEditorData(editor, index)
+
+    def popup_cal(self, editor):
+        """Calendar popup.
+        """
+        cal = Calendar(editor)
+        self._editor.setText(self._primed)
+        text = cal.open(self._primed)
+        if text is not None:
+            self._editor.setText(text)
+        #print(f"Calendar {self._primed} -> {text}")
+        #print("§editor-parent:", self._editor.parent())
+        # Ensure the edited cell regains focus
+        self._editor.parent().setFocus(Qt.FocusReason.PopupFocusReason)
+        # Finish editing
+        self.commitData.emit(self._editor)
+        self.closeEditor.emit(self._editor)
+
+###########----------
 
 class GradeTableDelegate(QStyledItemDelegate):
     def __init__(self, parent):
@@ -410,6 +508,8 @@ class GradeTableDelegate(QStyledItemDelegate):
             )
         ctype = grade_field.TYPE
         #print("§grade_field:", grade_field)
+        if "-" in grade_field.FLAGS:
+            return -1   # hide column
         # Default values:
         w = 50
         if ctype == "GRADE":
@@ -580,6 +680,11 @@ class ManageGradesPage(QObject):
         self._colours = {}
         super().__init__()
         self.ui = load_ui("grades.ui", parent, self)
+        # group-data table
+        dtw = self.ui.date_table
+        delegate = TableDelegate(parent = dtw)
+        dtw.setItemDelegate(delegate)
+        # grade-table
         tw = self.ui.grade_table
         delegate = GradeTableDelegate(parent = tw)
         tw.setItemDelegate(delegate)
@@ -648,13 +753,30 @@ class ManageGradesPage(QObject):
         #)
         tw = self.ui.grade_table
         tw.clear()
+        dtw = self.ui.date_table
 
         grade_table = GradeTable(
             self.occasion, self.class_group, self.report_info
         )
 
-        ## Set the table size
-        headers = [dci.LOCAL for dci in grade_table.column_info]
+        ## Set the table sizes and headers
+        headers = []    # grade-table column headers
+        dtheaders = []  # group-data fields
+        dtdata = []     # Underlying data for group-data table
+        for dci in grade_table.column_info:
+            headers.append(dci.LOCAL)
+            if "*" in dci.FLAGS:
+                # Add to group-data table
+                dtheaders.append(dci.LOCAL)
+                dtdata.append(dci)
+        dtw.setRowCount(len(dtheaders))
+        dtw.setVerticalHeaderLabels(dtheaders)
+        for i, d in enumerate(dtdata):
+#TODO ??? xxxxxxxxxxxxxxxxxxxxxxxxxxxx
+# consider display values which differ from the actual values ...
+#            dtw.item(i, 0).set_value(d.DATA["default"])
+            dtw.item(i, 0).setText(d.DATA["default"])
+
         tw.setColumnCount(len(headers))
         vheaders = [gtline.student_name for gtline in grade_table.lines]
         tw.setRowCount(len(vheaders))
@@ -663,7 +785,11 @@ class ManageGradesPage(QObject):
 
         delegate = tw.itemDelegate()
         for i, w in enumerate(delegate.init(grade_table)):
-            tw.setColumnWidth(i, w)
+            if w >= 0:
+                tw.setColumnWidth(i, w)
+                tw.showColumn(i)
+            else:
+                tw.hideColumn(i)
 
         ### Fill the table
         for i, gtline in enumerate(grade_table.lines):
@@ -675,7 +801,6 @@ class ManageGradesPage(QObject):
                 item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 tw.setItem(i, j, item)
         self.suppress_handlers = False
-
 #TODO: This is a fix for a visibility problem (gui refresh)
         for w in APP.topLevelWindows():
             if w.isVisible():

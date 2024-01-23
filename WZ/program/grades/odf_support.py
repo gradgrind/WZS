@@ -43,6 +43,8 @@ import platform, subprocess     #, tempfile
 from core.base import REPORT_OUT, REPORT_ERROR
 from core.basic_data import CONFIG
 
+from pypdf import PdfWriter
+
 ### -----
 
 #TODO
@@ -115,33 +117,29 @@ def run_extern(command, *args, cwd = None, xpath = None, feedback = None):
 #    subprocess.Popen(args, stdin = subprocess.DEVNULL,
 #            stdout = subprocess.DEVNULL, stderr = subprocess.DEVNULL)
 
-
-#TODO: switch from pikepdf to pypdf
-def merge_pdf(ifile_list: list[str], pad2sided: int=0) -> bytes:
-    """Join the pdf-files in the input list <ifile_list> to produce a
-    single pdf-file. The output is returned as a <bytes> object.
+def merge_pdf(infiles: list[str], outfile: str, pad2sided: int = 0):
+    """Join the pdf-files in the input list <infiles> to produce a
+    single pdf-file, <outfile>.
     The parameter <pad2sided> allows blank pages to be added
     when input files have an odd number of pages – to ensure that
     double-sided printing works properly. It can take the value 0 (no
     padding), 1 (padding if odd number of pages, but more than 1 page)
     or 2 (padding if odd number of pages).
     """
-    pdf = Pdf.new()
-    for ifile in ifile_list:
-        src = Pdf.open(ifile)
-        pdf.pages.extend(src.pages)
-        if pad2sided and (len(src.pages) & 1):
-            if pad2sided != 1 or len(src.pages) > 1:
-                page = Page(src.pages[0])
-                w = page.trimbox[2]
-                h = page.trimbox[3]
-                pdf.add_blank_page(page_size=(w, h))
-    bstream = BytesIO()
-    pdf.save(bstream)
-    return bstream.getvalue()
+    merger = PdfWriter()
+    pcount = 0
+    for pdf in infiles:
+        merger.append(pdf)
+        _pcount = pcount
+        pcount = len(merger.pages)
+        n = pcount - _pcount
+        if (n & 1) and (pad2sided > 1 or (pad2sided == 1 and n > 2)):
+            merger.add_blank_page()
+    merger.write(outfile)
+    merger.close()
 
 
-def libre_office(odf_list, pdf_dir, show_output=False):
+def libre_office(odf_list, pdf_dir, show_output = False):
     """Convert a list of odf-files to pdf-files.
     The input files are provided as a list of absolute paths,
     <pdf_dir> is the absolute path to the output folder.

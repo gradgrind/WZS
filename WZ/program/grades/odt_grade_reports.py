@@ -50,10 +50,13 @@ from grades.grade_tables import (
 #    grade_scale,
 #    valid_grade_map,
 )
-from grades.odf_support import libre_office
+from grades.odf_support import libre_office, merge_pdf
 import local
 
 ### -----
+
+#TODO: Allow for "no report" ("-") to be chosen, perhaps as default for the
+# REPORT_TYPE field.
 
 #TODO ...
 _GRADE_REPORT_TEMPLATE = {
@@ -242,14 +245,27 @@ def make_grade_reports(
 #TODO: Handle subject keys ...
         nonlocal g_pending
         #print("§SPECIAL:", key)
-        if key == "$":
+        if key.startswith("$"):
+            if key == "$":
+                gplain = True
+            elif key == "$$":
+                gplain = False
+            else:
+                return None
             if g_pending is None:
                 g = "!!!"
             elif g_pending == CONFIG.NO_GRADE_DOC:
                 g = g_pending
             else:
                 try:
-                    g = grade_map[g_pending][0]
+                    gx = grade_map[g_pending]
+                    if gplain:
+                        if gx[1] < 0:
+                            g = gx[0]
+                        else:
+                            g = g_pending
+                    else:
+                        g = gx[0]
                 except KeyError:
                     g = "???"
             g_pending = None
@@ -351,11 +367,26 @@ if __name__ == "__main__":
 
     _o = "1. Halbjahr"
     _cg = "12G.R"
+    #_cg = "11G"
     outdir = DATAPATH(f"{_o}/{_cg}".replace(" ", "_"), "working_data")
     print("§outdir", outdir)
-    os.makedirs(outdir, exist_ok = True)
+    pdf_dir = os.path.join(outdir, "pdf")
+    os.makedirs(pdf_dir, exist_ok = True)
+    odt_list = []
     for odt, sname in make_grade_reports(_o, _cg):
         outpath = os.path.join(outdir, sname) + ".odt"
         with open(outpath, 'bw') as fh:
             fh.write(odt)
         print(" -->", outpath)
+        odt_list.append(outpath)
+#TODO: clear pdf folder?
+    libre_office(odt_list, pdf_dir, show_output = True)
+
+    pdf_list = [
+        os.path.join(pdf_dir, f)
+        for f in sorted(os.listdir(pdf_dir))
+        if f.endswith(".pdf")
+    ]
+    pdf_path = os.path.join(outdir, f"{_o}-{_cg}.pdf".replace(" ", "_"))
+    merge_pdf(pdf_list, pdf_path)
+    print(" PDF:->", pdf_path)
