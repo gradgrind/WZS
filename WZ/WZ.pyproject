@@ -15,7 +15,6 @@
         "program/core/subjects.py",
         "program/core/teachers.py",
         "program/core/time_slots.py",
-        "program/grades/grade_tables_0.py",
         "program/grades/grade_tables.py",
         "program/grades/grades_base.py",
         "program/grades/make_grade_reports.py",
@@ -47,6 +46,8 @@
         "program/grades/odt_grade_reports.py",
         "program/tables/table_utilities.py",
         "program/local/__init__.py",
-        "program/local/niwa/grades.py"
+        "program/local/niwa/grades.py",
+        "program/local/niwa/reports.py",
+        "program/grades/odf_support.py"
     ]
 }

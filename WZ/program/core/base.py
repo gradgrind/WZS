@@ -1,7 +1,7 @@
 """
 core/base.py
 
-Last updated:  2024-01-21
+Last updated:  2024-01-23
 
 Basic configuration and structural stuff.
 
@@ -86,6 +86,9 @@ def REPORT_WARNING(text):
 #+
 def REPORT_INFO(text):
     __report("INFO", text)
+#+
+def REPORT_OUT(text):
+    __report("OUT", text)
 #+
 def REPORT_DEBUG(text):
     if DEBUG:

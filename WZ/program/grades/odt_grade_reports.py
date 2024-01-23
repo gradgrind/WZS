@@ -50,6 +50,7 @@ from grades.grade_tables import (
 #    grade_scale,
 #    valid_grade_map,
 )
+from grades.odf_support import libre_office
 import local
 
 ### -----
