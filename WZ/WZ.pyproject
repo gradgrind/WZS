@@ -16,8 +16,6 @@
         "program/core/teachers.py",
         "program/core/time_slots.py",
         "program/grades/grade_tables.py",
-        "program/grades/grades_base.py",
-        "program/grades/make_grade_reports.py",
         "program/grades/ods_template.py",
         "program/tables/matrix.py",
         "program/ui/README_icons",

@@ -1,5 +1,5 @@
 """
-grades/odt_grade_reports.py - last updated 2024-01-23
+grades/odt_grade_reports.py - last updated 2024-01-24
 
 Use odt-documents (ODF / LibreOffice) as templates for grade reports.
 
@@ -46,6 +46,7 @@ from core.subjects import Subjects
 from text.odt_support import write_ODT_template
 from grades.grade_tables import (
     GradeTable,
+    NO_GRADE,
 #    grade_table_data,
 #    grade_scale,
 #    valid_grade_map,
@@ -92,6 +93,12 @@ _GRADE_REPORT_TEMPLATE = {
     },
     "SEK_II_ABGANG_13": {
         "PATH": "GRADE_REPORTS/SekII-13-Abgang",
+        "FIELDS": [
+            ["DATE_ISSUE", "Ausstellungsdatum"],
+        ]
+    },
+    "SEK_II_1": {
+        "PATH": "GRADE_REPORTS/SekII-12_1",
         "FIELDS": [
             ["DATE_ISSUE", "Ausstellungsdatum"],
         ]
@@ -191,7 +198,7 @@ def get_template(occasion: str, class_group: str) -> str:
     template_file = DATAPATH(tpath, "TEMPLATES")
     if not template_file.endswith(".odt"):
         template_file = f"{template_file}.odt"
-        print("§template:", template_file)
+    print("§template:", template_file)
     return template_file
 
 
@@ -313,7 +320,10 @@ def make_grade_reports(
             if dci.TYPE == "GRADE":
                 print("???", dci)
                 s = dci.DATA["SORTING"]
-                val = (Subjects.clip_name(dci.LOCAL), values[i]) #???
+                v = values[i]
+                if v == NO_GRADE:
+                    continue
+                val = (Subjects.clip_name(dci.LOCAL), v) #???
                 try:
                     subject_map[s].append(val)
                 except KeyError:
@@ -367,6 +377,8 @@ if __name__ == "__main__":
 
     _o = "1. Halbjahr"
     _cg = "12G.R"
+    _cg = "12G.G"
+    _cg = "13"
     #_cg = "11G"
     outdir = DATAPATH(f"{_o}/{_cg}".replace(" ", "_"), "working_data")
     print("§outdir", outdir)
