@@ -72,6 +72,7 @@ from ui.ui_base import (
     Slot,
     QPoint,
     QAbstractListModel,
+    QModelIndex,
     ### other
     APP,
 #    SHOW_CONFIRM,
@@ -96,9 +97,94 @@ UPDATE_PAUSE = 1000     # time between cell edit and db update in ms
 
 ### -----
 
-
+#TODO:
 class GroupDataModel(QAbstractListModel):
-    pass
+    #editCompleted = Signal(str)
+
+    def set_data(self):
+        self.data_list = ["One", "Two", "Three"]
+
+    def rowCount(self, parent: QModelIndex):
+#TODO:
+        return len(self.data_list)
+
+    def data(self,
+        index: QModelIndex,
+        role: Qt.ItemDataRole = Qt.ItemDataRole.DisplayRole
+    ):
+        row = index.row()
+#TODO:
+        if role == Qt.ItemDataRole.DisplayRole:
+            return '*' + self.data_list[row]
+
+        elif role == Qt.ItemDataRole.EditRole:
+            return self.data_list[row]
+
+        #elif role == Qt.FontRole:
+        #    if row == 0 and col == 0:  # change font only for cell(0,0)
+        #        bold_font = QFont()
+        #        bold_font.setBold(True)
+        #        return bold_font
+
+        #elif role == Qt.BackgroundRole:
+        #    if row == 1 and col == 2:  # change background only for cell(1,2)
+        #        return QBrush(Qt.red)
+
+        elif role == Qt.TextAlignmentRole:
+            return Qt.Alignment.AlignCenter
+        #    # change text alignment only for cell(1,1)
+        #    if row == 1 and col == 1:
+        #        return Qt.AlignRight | Qt.AlignVCenter
+
+        #elif role == Qt.CheckStateRole:
+        #    if row == 1 and col == 0:  # add a checkbox to cell(1,0)
+        #        return Qt.Checked
+
+        return None
+
+    def setData(self, index, value, role):
+        if role != Qt.ItemDataRole.EditRole or not self.checkIndex(index):
+            return False
+        # save value from editor to member m_gridData
+        self.data_list[index.row()] = value
+        # for presentation purposes only:
+        #result = repr(value)
+        #self.editCompleted.emit(result)
+        return True
+
+    def flags(self, index):
+        return Qt.ItemFlag.ItemIsEditable | super().flags(index)
+
+    def headerData(self, section: int, orientation, role):
+        if (
+            role == Qt.DisplayRole
+            and orientation == Qt.Orientation.Vertical
+        ):
+            return ["first", "second", "third"][section]
+        return None
+
+
+
+#****************************** +++
+
+#testing ...
+from ui.ui_base import QTableView
+
+list = QTableView()
+model = GroupDataModel(list)
+model.set_data()
+
+# Apply the model to the list view
+list.setModel(model)
+list.horizontalHeader().hide()
+
+# Show the window and run the app
+list.show()
+APP.exec()
+quit(2)
+
+#-testing
+#*************************************************************** -----
 
 
 class TableItem(QTableWidgetItem):
