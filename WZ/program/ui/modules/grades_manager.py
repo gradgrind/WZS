@@ -49,9 +49,10 @@ from ui.ui_base import (
     QStyledItemDelegate,
     QLineEdit,
     QAbstractItemView,
+    QCompleter,
     ### QtGui:
     QColor,
-#    QBrush,
+    QBrush,
     QValidator,
     ### QtCore:
     QObject,
@@ -91,76 +92,6 @@ UPDATE_PAUSE = 1000     # time between cell edit and db update in ms
 
 ### -----
 
-#TODO:
-class _GroupDataModel(QAbstractListModel):
-    #editCompleted = Signal(str)
-
-    def set_data(self):
-        self.data_list = ["One", "Two", "Three"]
-
-    def data_type(self, row: int) -> str:
-        #return "TEXT"
-        return "DATE"
-
-    def rowCount(self, parent: QModelIndex):
-#TODO:
-        return len(self.data_list)
-
-    def data(self,
-        index: QModelIndex,
-        role: Qt.ItemDataRole = Qt.ItemDataRole.DisplayRole
-    ):
-        row = index.row()
-#TODO:
-        if role == Qt.ItemDataRole.DisplayRole:
-            return '*' + self.data_list[row]
-
-        elif role == Qt.ItemDataRole.EditRole:
-            return self.data_list[row]
-
-        #elif role == Qt.FontRole:
-        #    if row == 0 and col == 0:  # change font only for cell(0,0)
-        #        bold_font = QFont()
-        #        bold_font.setBold(True)
-        #        return bold_font
-
-        #elif role == Qt.BackgroundRole:
-        #    if row == 1 and col == 2:  # change background only for cell(1,2)
-        #        return QBrush(Qt.red)
-
-        elif role == Qt.TextAlignmentRole:
-            return Qt.Alignment.AlignCenter
-        #    # change text alignment only for cell(1,1)
-        #    if row == 1 and col == 1:
-        #        return Qt.AlignRight | Qt.AlignVCenter
-
-        #elif role == Qt.CheckStateRole:
-        #    if row == 1 and col == 0:  # add a checkbox to cell(1,0)
-        #        return Qt.Checked
-
-        return None
-
-    def setData(self, index, value, role):
-        if role != Qt.ItemDataRole.EditRole:
-            return False
-        # save value from editor
-        self.data_list[index.row()] = value
-        # for presentation purposes only:
-        #result = repr(value)
-        #self.editCompleted.emit(result)
-        return True
-
-    def flags(self, index):
-        return Qt.ItemFlag.ItemIsEditable | super().flags(index)
-
-    def headerData(self, section: int, orientation, role):
-        if (
-            role == Qt.DisplayRole
-            and orientation == Qt.Orientation.Vertical
-        ):
-            return ["first", "second", "third"][section]
-        return None
-
 
 class GroupDataDelegate(QStyledItemDelegate):
     """A delegate for the group-data table.
@@ -189,26 +120,129 @@ class GroupDataDelegate(QStyledItemDelegate):
         return super().createEditor(parent, option, index)
 
 
-class TableDelegate(QStyledItemDelegate):
+# New attempt!
+class _GradeTableDelegate(QStyledItemDelegate):
+    """A delegate for the group-data table.
+    Pop-up editors are handled in the method <createEditor>, which then
+    returns no cell editor, everything being done within this method.
+    """
     def __init__(self, parent):
         super().__init__(parent)
-        ## The underlying table data, set in <init()>
-        self.data = None
-        # Use a "dummy" line editor (because it seems to work, while
-        # other approaches are a bit difficult to get working ...)
-        self._editor = QLineEdit()
-        self._editor.setReadOnly(True)
-#? The following was for the delayed writing to database of changed grades
-#        self._timer = QTimer()
-#        self._timer.setSingleShot(True)
-#        self._timer.setInterval(2000)
-#        self._timer.timeout.connect(self.update_db)
+        ## The underlying table data, set in <set_data()>
+        self.grade_table = None
+        ## Pop-up editors
+        self._calendar = Calendar()
+        self._text_editor = TextEditor()
+        self._list_choice = ListChoice()
 
+        # This timer is to delay writing to database of changed grade-map
+        # entries. The aim of this delay is so that when multiple changes
+        # are made to one entry these will be collected before doing the
+        # actual writing.
+        self._timer = QTimer()
+        self._timer.setSingleShot(True)
+        self._timer.setInterval(2000)
+        self._timer.timeout.connect(self.update_db)
+
+    def load_data(self, grade_table):
+#???
+        glist = list(grade_table.grade_map)
+        self._min_grade_width = self._max_width(glist) + self._M_width
+        self._pending_changes = {}
+        self._grade_editor = QLineEdit()
+        self._grade_validator = ListValidator(glist)
+        self._grade_completer = QCompleter(glist)
+        self._grade_completer.setCaseSensitivity(
+            Qt.CaseSensitivity.CaseInsensitive
+        )
+        self._grade_completer.setCompletionMode(
+            Qt.CompletionMode.UnfilteredPopupCompletion
+        )
+        self._grade_editor.setValidator(self._grade_validator)
+        return [self._column_width(dci) for dci in grade_table.column_info]
+
+
+    @Slot()
+    def update_db(self):
+        """Automatic update of calculated fields and writing of changed
+        data to database.
+        Update one row and start the timer again with minimal delay to
+        allow pending events to be processed before the next row.
+        """
+        for r, cd in self._pending_changes.items():
+            if cd:
+                break
+        else:
+            return
+        tw = self.parent()
+        for c in self.data.calculate_row(r):
+            # Write to display table
+            val = self.data.read(r, c)
+            tw.item(r, c).setText(val)
+        self._pending_changes[r] = {}
+        self._timer.start(0)
+
+#?
+    def _max_width(self, string_list: list[str]) -> tuple[int, int]:
+        """Return the display width of the widest item in the list.
+        """
+        fm = self.parent().fontMetrics()
+        w = 0
+        for s in string_list:
+            _w = fm.boundingRect(s).width()
+            if _w > w:
+                w = _w
+        return w
+
+
+
+
+    def createEditor(self, parent, option, index):
+        row, col = index.row(), index.column()
+        tw = self.parent()
+        model = tw.model()
+#TODO: via method of model?
+        dci = model.grade_table.column_info[col]
+        value = model.data(index, Qt.ItemDataRole.EditRole)
+        ctype = dci.TYPE
+        if ctype == "CHOICE":
+            y = tw.rowViewportPosition(row)
+            x = tw.columnViewportPosition(col)
+            self._list_choice.move(parent.mapToGlobal(QPoint(x, y)))
+            v = self._list_choice.open(dci.DATA, value)
+            if v is not None and v != value:
+                #print("§saving:", value, "->", v)
+                model.setData(index, v, Qt.ItemDataRole.EditRole)
+            return None
+        if ctype == "TEXT":
+            y = tw.rowViewportPosition(row)
+            x = tw.columnViewportPosition(col)
+            self._text_editor.move(parent.mapToGlobal(QPoint(x, y)))
+            v = self._text_editor.open(value)
+            if v is not None and v != value:
+                #print("§saving:", value, "->", v)
+                model.setData(index, v, Qt.ItemDataRole.EditRole)
+            return None
+        if ctype == "DATE":
+            y = tw.rowViewportPosition(row)
+            x = tw.columnViewportPosition(col)
+            self._calendar.move(parent.mapToGlobal(QPoint(x, y)))
+            v = self._calendar.open(value)
+            if v is not None and v != value:
+                #print("§saving:", value, "->", v)
+                model.setData(index, v, Qt.ItemDataRole.EditRole)
+            return None
+#TODO: other types?
+        return super().createEditor(parent, option, index)
+
+
+
+#?
     def get_dci(self, row, col):
         """Customized for the particular data model.
         """
         return self.data[row]
-
+#?
     def get_value(self, row, col):
         """Customized for the particular data model.
         """
@@ -220,11 +254,7 @@ class TableDelegate(QStyledItemDelegate):
         """
         pass
 
-    def createEditor(self, parent, option, index):
-        self._primed = None
-        self._editor.setParent(parent)
-        return self._editor
-
+#old ... do I need anything here?
     def setEditorData(self, editor, index):
         row, col = index.row(), index.column()
         dci = self.get_dci(row, col)
@@ -264,65 +294,20 @@ class TableDelegate(QStyledItemDelegate):
 
         super().setEditorData(editor, index)
 
-    def popup_cal(self, editor):
-        """Calendar popup.
-        """
-        cal = Calendar(editor)
-        self._editor.setText(self._primed)
-        text = cal.open(self._primed)
-        if text is not None:
-            self._editor.setText(text)
-        #print(f"Calendar {self._primed} -> {text}")
-        #print("§editor-parent:", self._editor.parent())
-        # Ensure the edited cell regains focus
-        self._editor.parent().setFocus(Qt.FocusReason.PopupFocusReason)
-        # Finish editing
-        self.commitData.emit(self._editor)
-        self.closeEditor.emit(self._editor)
-
-###########----------
-
-#****************************** +++
-'''
-#testing ...
-from ui.ui_base import QTableView
-
-#__C = _Calendar()
-#print(__C.open())
-#quit(3)
-list = QTableView()
-list.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
-model = _GroupDataModel(list)
-list.setItemDelegate(GroupDataDelegate(list))
-model.set_data()
-
-# Apply the model to the list view
-list.setModel(model)
-list.horizontalHeader().hide()
-
-# Show the window and run the app
-list.show()
-APP.exec()
-quit(2)
-'''
-#-testing
-#*************************************************************** -----
 
 
 class GroupDataModel(QAbstractListModel):
-    #editCompleted = Signal(str)
-
     def set_data(self, dci_list):
         print("§set group data:", dci_list)
+        self.beginResetModel()
         self.data_list = dci_list
-#TODO: What more do I need to do to get this to show?
-# probably use beginRemoveRows, endRemoveRows, beginInsertRows, endInsertRows
+        self.endResetModel()
+
+#?
     def data_type(self, row: int) -> str:
-        #return "TEXT"
-        return "DATE"
+        return self.data_list[row].TYPE
 
     def rowCount(self, parent: QModelIndex):
-#TODO:
         return len(self.data_list)
 
     def data(self,
@@ -384,9 +369,93 @@ class GroupDataModel(QAbstractListModel):
 
 
 
+###
+class GradeTableModel(QAbstractListModel):
+    def brush_cache(self, colour: str) -> QBrush:
+        try:
+            qb = self._brushes[colour]
+        except KeyError:
+            qb = QBrush(QColor(colour))
+            self._brushes[colour] = qb
+        return qb
+
+    def set_data(self, grade_table):
+        self.beginResetModel()
+        self.grade_table = grade_table
+#TODO: Do I need more?
+        self.endResetModel()
+
+    def rowCount(self, parent: QModelIndex):
+        return len(self.grade_table.lines)
+
+    def columnCount(self, parent: QModelIndex):
+        return len(self.grade_table.column_info)
+
+    def data(self,
+        index: QModelIndex,
+        role: Qt.ItemDataRole = Qt.ItemDataRole.DisplayRole
+    ):
+        row = index.row()
+        col = index.column()
+        dci = self.grade_table.column_info[col]
+        if role == Qt.ItemDataRole.EditRole:
+            return self.grade_table.lines[row].values[col]
+
+        elif role == Qt.ItemDataRole.DisplayRole:
+            val = self.grade_table.lines[row].values[col]
+            if dci.TYPE == "DATE" and val:
+                return print_date(val, trap = False) or "???"
+            else:
+#TODO: use dci instead of col here?
+                if self.grade_table.validate(col, val):
+                    return "??"
+            return val
+
+        elif role == Qt.BackgroundRole:
+            return self.brush_cache(dci.COLOUR)
+
+        elif role == Qt.TextAlignmentRole:
+            return Qt.Alignment.AlignCenter
+        #    return Qt.AlignRight | Qt.AlignVCenter
+
+        #elif role == Qt.FontRole:
+        #    if row == 0 and col == 0:  # change font only for cell(0,0)
+        #        bold_font = QFont()
+        #        bold_font.setBold(True)
+        #        return bold_font
+
+        #elif role == Qt.CheckStateRole:
+        #    if row == 1 and col == 0:  # add a checkbox to cell(1,0)
+        #        return Qt.Checked
+
+        return None
+
+    def setData(self, index, value, role):
+        if role != Qt.ItemDataRole.EditRole:
+            return False
+        # save value from editor
+        self.grade_table.lines[index.row()].values[index.col()] = value
+#TODO: save to database, adjust grade table? via timer?
+        return True
+
+    def flags(self, index):
+        f = super().flags(index)
+        if self.grade_table.column_info[index.col()].TYPE.endswith("!"):
+            return f        # read-only
+        return f | Qt.ItemFlag.ItemIsEditable
+
+    def headerData(self, section: int, orientation, role):
+        if role == Qt.DisplayRole:
+            if orientation == Qt.Orientation.Horizontal:
+                return self.grade_table.column_info[section].LOCAL
+            if orientation == Qt.Orientation.Vertical:
+                return self.grade_table.lines[section].student_name
+        return None
 
 
 
+
+#TODO: If I use a QTableView for the grade table, this will be superfluous.
 class TableItem(QTableWidgetItem):
     """A custom table-widget-item which differentiates (minimally)
     between EditRole and DisplayRole, currently only for displaying
@@ -451,7 +520,7 @@ class EscapeKeyEventFilter(QObject):
 class GradeTableDelegate(QStyledItemDelegate):
     def __init__(self, parent):
         super().__init__(parent)
-        ## The underlying grade table data, set in <init()>
+        ## The underlying grade table data, set in <set_data()>
         self.data = None
         #print("?????CONFIG:", CONFIG._map)
         self._M_width = self.parent().fontMetrics().horizontalAdvance("M")
@@ -655,7 +724,7 @@ class GradeTableDelegate(QStyledItemDelegate):
 #            self.commitData.emit(editor)
 #            self.closeEditor.emit(editor)
 
-    def init(self, data: GradeTable) -> list[int]:
+    def set_data(self, data: GradeTable) -> list[int]:
         """Call this when initializing a table for a new group.
         Return a list of column widths.
         """
@@ -729,20 +798,11 @@ class ManageGradesPage(QObject):
         self.ui = load_ui("grades.ui", parent, self)
         # group-data table
         dtw = self.ui.date_table
-#        delegate = TableDelegate(parent = dtw)
-#        dtw.setItemDelegate(delegate)
-
-
-        #dtw.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
         model = GroupDataModel(dtw)
         dtw.setItemDelegate(GroupDataDelegate(dtw))
         model.set_data([])
         # Apply the model to the list view
         dtw.setModel(model)
-        #dtw.horizontalHeader().hide()
-
-
-
         # grade-table
         tw = self.ui.grade_table
         delegate = GradeTableDelegate(parent = tw)
@@ -811,47 +871,35 @@ class ManageGradesPage(QObject):
         #    repr(self.occasion), self.class_group
         #)
         tw = self.ui.grade_table
-        tw.clear()
         dtw = self.ui.date_table
-
         grade_table = GradeTable(
             self.occasion, self.class_group, self.report_info
         )
-
-        ## Set the table sizes and headers
+        ### Set the table sizes and headers
         headers = []    # grade-table column headers
-#        dtheaders = []  # group-data fields
         dtdata = []     # Underlying data for group-data table
         for dci in grade_table.column_info:
             headers.append(dci.LOCAL)
             if "*" in dci.FLAGS:
                 # Add to group-data table
-#                dtheaders.append(dci.LOCAL)
                 dtdata.append(dci)
-#        dtw.setRowCount(len(dtheaders))
-#        dtw.setVerticalHeaderLabels(dtheaders)
-#        for i, d in enumerate(dtdata):
-##TODO ??? xxxxxxxxxxxxxxxxxxxxxxxxxxxx
-## consider display values which differ from the actual values ...
-##            dtw.item(i, 0).set_value(d.DATA["default"])
-#            dtw.item(i, 0).setText(d.DATA["default"])
+        ## Initialize group-data table
         dtw.model().set_data(dtdata)
-
+        ## Initialize grade table
+        tw.clear()
         tw.setColumnCount(len(headers))
         vheaders = [gtline.student_name for gtline in grade_table.lines]
         tw.setRowCount(len(vheaders))
         tw.setHorizontalHeaderLabels(headers)
         tw.setVerticalHeaderLabels(vheaders)
-
         delegate = tw.itemDelegate()
-        for i, w in enumerate(delegate.init(grade_table)):
+        for i, w in enumerate(delegate.set_data(grade_table)):
             if w >= 0:
                 tw.setColumnWidth(i, w)
                 tw.showColumn(i)
             else:
                 tw.hideColumn(i)
-
-        ### Fill the table
+        ## Fill the grade table
         for i, gtline in enumerate(grade_table.lines):
             values = gtline.values
             # Add grades, etc.
