@@ -1,7 +1,7 @@
 """
 ui/modules/grades_manager.py
 
-Last updated:  2024-01-23
+Last updated:  2024-01-25
 
 Front-end for managing grade reports.
 
@@ -45,20 +45,10 @@ from ui.ui_base import (
     load_ui,
     ### QtWidgets:
     QWidget,
-#    QHeaderView,
-#    QAbstractButton,
     QTableWidgetItem,
     QStyledItemDelegate,
     QLineEdit,
-    QComboBox,
-    QDialog,
-    QVBoxLayout,
-    QCalendarWidget,
-    QTextEdit,
-    QDialogButtonBox,
-    QListWidget,
-    QStyle,
-    #QCompleter,
+    QAbstractItemView,
     ### QtGui:
     QColor,
 #    QBrush,
@@ -68,7 +58,6 @@ from ui.ui_base import (
     Qt,
     QEvent,
     QTimer,
-    QDate,
     Slot,
     QPoint,
     QAbstractListModel,
@@ -79,7 +68,12 @@ from ui.ui_base import (
     SAVE_FILE,
 )
 from ui.rotated_table_header import RotatedHeaderView
-from ui.table_support import CopyPasteEventFilter
+from ui.table_support import (
+    CopyPasteEventFilter,
+    Calendar,
+    TextEditor,
+    ListChoice,
+)
 
 from core.base import (
     REPORT_INFO,
@@ -98,11 +92,15 @@ UPDATE_PAUSE = 1000     # time between cell edit and db update in ms
 ### -----
 
 #TODO:
-class GroupDataModel(QAbstractListModel):
+class _GroupDataModel(QAbstractListModel):
     #editCompleted = Signal(str)
 
     def set_data(self):
         self.data_list = ["One", "Two", "Three"]
+
+    def data_type(self, row: int) -> str:
+        #return "TEXT"
+        return "DATE"
 
     def rowCount(self, parent: QModelIndex):
 #TODO:
@@ -143,9 +141,9 @@ class GroupDataModel(QAbstractListModel):
         return None
 
     def setData(self, index, value, role):
-        if role != Qt.ItemDataRole.EditRole or not self.checkIndex(index):
+        if role != Qt.ItemDataRole.EditRole:
             return False
-        # save value from editor to member m_gridData
+        # save value from editor
         self.data_list[index.row()] = value
         # for presentation purposes only:
         #result = repr(value)
@@ -164,113 +162,32 @@ class GroupDataModel(QAbstractListModel):
         return None
 
 
-
-#****************************** +++
-
-#testing ...
-from ui.ui_base import QTableView
-
-list = QTableView()
-model = GroupDataModel(list)
-model.set_data()
-
-# Apply the model to the list view
-list.setModel(model)
-list.horizontalHeader().hide()
-
-# Show the window and run the app
-list.show()
-APP.exec()
-quit(2)
-
-#-testing
-#*************************************************************** -----
-
-
-class TableItem(QTableWidgetItem):
-    """A custom table-widget-item which differentiates (minimally)
-    between EditRole and DisplayRole, currently only for displaying
-    the value – no distinct values are saved.
-    It also uses the table item-delegate to handle validation when
-    pasting and displaying values.
+class GroupDataDelegate(QStyledItemDelegate):
+    """A delegate for the group-data table.
+    Pop-up editors are handled in the method <createEditor>, which then
+    returns no cell editor, everything being done within this method.
     """
-    def data(self, role: Qt.ItemDataRole):
-        val = super().data(role)
-        if role == Qt.ItemDataRole.DisplayRole:
-            col = self.column()
-            delegate = self.tableWidget().itemDelegate()
-            gt = delegate.data
-            dci = gt.column_info[col]
-            if dci.TYPE == "DATE" and val:
-                return print_date(val, trap = False) or "???"
-            else:
-                if gt.validate(col, val):
-                    return "??"
-        return val
+    def __init__(self, parent):
+        super().__init__(parent)
+        self._calendar = Calendar()
 
-    def paste_cell(self, value: str):
-        """This handles paste operations, validating the value.
-        """
-        row, col = self.row(), self.column()
-        delegate = self.tableWidget().itemDelegate()
-        bad_field = delegate.data.validate(col, value, write = True)
-        if bad_field:
-            REPORT_ERROR(T("PASTE_VALUE_ERROR",
-                row = row + 1,
-                col = bad_field,
-                value = value
-            ))
-            return False
-        # Set value in table
-        self.setText(value)
-        # Trigger database update
-        delegate.cell_edited(row, col, value)
-        return True
+    def createEditor(self, parent, option, index):
+        r = index.row()
+        tw = self.parent()
+        model = tw.model()
+        value = model.data(index, Qt.ItemDataRole.EditRole)
+        dtype = model.data_type(r)
+        if dtype == "DATE":
+            y = tw.rowViewportPosition(r)
+            self._calendar.move(parent.mapToGlobal(QPoint(0, y)))
+            v = self._calendar.open(value)
+            if v is not None and v != value:
+                #print("§saving:", value, "->", v)
+                model.setData(index, v, Qt.ItemDataRole.EditRole)
+            return None
+#TODO: other types?
+        return super().createEditor(parent, option, index)
 
-
-class EscapeKeyEventFilter(QObject):
-    """Implement an event filter to catch escape-key presses.
-    """
-    def __init__(self, widget, callback):
-        super().__init__()
-        widget.installEventFilter(self)
-        self._widget = widget
-        self._callback = callback
-
-    def eventFilter(self, obj: QWidget, event: QEvent) -> bool:
-        if event.type() == QEvent.Type.KeyPress:
-            key = event.key()
-            if key == Qt.Key.Key_Escape:
-                #print("§escape")
-                self._callback()
-                #return True
-        # otherwise standard event processing
-        return False
-
-
-class TableComboBox(QComboBox):
-    """A QComboBox adapted for use as a table delegate.
-    The main point is that the "closed" box is never shown.
-    """
-    def __init__(self, callback):
-        super().__init__()
-        self._callback = callback
-        self.activated.connect(self._activated)
-        #print("§view:", self.view(), hex(self.view().windowFlags()))
-        self.escape_filter = EscapeKeyEventFilter(self.view(), self.esc)
-
-    def esc(self):
-        #print("§esc")
-        self.hidePopup()
-        self._callback(self)
-
-    def _activated(self, i):
-        # Not called on ESC
-        #print("§activated:", i)
-        self._callback(self)
-
-
-#############++++++++++
 
 class TableDelegate(QStyledItemDelegate):
     def __init__(self, parent):
@@ -364,6 +281,172 @@ class TableDelegate(QStyledItemDelegate):
         self.closeEditor.emit(self._editor)
 
 ###########----------
+
+#****************************** +++
+'''
+#testing ...
+from ui.ui_base import QTableView
+
+#__C = _Calendar()
+#print(__C.open())
+#quit(3)
+list = QTableView()
+list.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+model = _GroupDataModel(list)
+list.setItemDelegate(GroupDataDelegate(list))
+model.set_data()
+
+# Apply the model to the list view
+list.setModel(model)
+list.horizontalHeader().hide()
+
+# Show the window and run the app
+list.show()
+APP.exec()
+quit(2)
+'''
+#-testing
+#*************************************************************** -----
+
+
+class GroupDataModel(QAbstractListModel):
+    #editCompleted = Signal(str)
+
+    def set_data(self, dci_list):
+        print("§set group data:", dci_list)
+        self.data_list = dci_list
+#TODO: What more do I need to do to get this to show?
+# probably use beginRemoveRows, endRemoveRows, beginInsertRows, endInsertRows
+    def data_type(self, row: int) -> str:
+        #return "TEXT"
+        return "DATE"
+
+    def rowCount(self, parent: QModelIndex):
+#TODO:
+        return len(self.data_list)
+
+    def data(self,
+        index: QModelIndex,
+        role: Qt.ItemDataRole = Qt.ItemDataRole.DisplayRole
+    ):
+        row = index.row()
+#TODO:
+        if role == Qt.ItemDataRole.DisplayRole:
+            return '*' + self.data_list[row].DATA["default"]
+
+        elif role == Qt.ItemDataRole.EditRole:
+            return self.data_list[row].DATA["default"]
+
+        #elif role == Qt.FontRole:
+        #    if row == 0 and col == 0:  # change font only for cell(0,0)
+        #        bold_font = QFont()
+        #        bold_font.setBold(True)
+        #        return bold_font
+
+        #elif role == Qt.BackgroundRole:
+        #    if row == 1 and col == 2:  # change background only for cell(1,2)
+        #        return QBrush(Qt.red)
+
+        elif role == Qt.TextAlignmentRole:
+            return Qt.Alignment.AlignCenter
+        #    # change text alignment only for cell(1,1)
+        #    if row == 1 and col == 1:
+        #        return Qt.AlignRight | Qt.AlignVCenter
+
+        #elif role == Qt.CheckStateRole:
+        #    if row == 1 and col == 0:  # add a checkbox to cell(1,0)
+        #        return Qt.Checked
+
+        return None
+
+    def setData(self, index, value, role):
+        if role != Qt.ItemDataRole.EditRole:
+            return False
+        # save value from editor
+        self.data_list[index.row()].DATA["default"] = value
+#TODO: save to database, adjust grade table?
+        # for presentation purposes only:
+        #result = repr(value)
+        #self.editCompleted.emit(result)
+        return True
+
+    def flags(self, index):
+        return Qt.ItemFlag.ItemIsEditable | super().flags(index)
+
+    def headerData(self, section: int, orientation, role):
+        if (
+            role == Qt.DisplayRole
+            and orientation == Qt.Orientation.Vertical
+        ):
+            return self.data_list[section].LOCAL
+        return None
+
+
+
+
+
+
+
+class TableItem(QTableWidgetItem):
+    """A custom table-widget-item which differentiates (minimally)
+    between EditRole and DisplayRole, currently only for displaying
+    the value – no distinct values are saved.
+    It also uses the table item-delegate to handle validation when
+    pasting and displaying values.
+    """
+    def data(self, role: Qt.ItemDataRole):
+        val = super().data(role)
+        if role == Qt.ItemDataRole.DisplayRole:
+            col = self.column()
+            delegate = self.tableWidget().itemDelegate()
+            gt = delegate.data
+            dci = gt.column_info[col]
+            if dci.TYPE == "DATE" and val:
+                return print_date(val, trap = False) or "???"
+            else:
+                if gt.validate(col, val):
+                    return "??"
+        return val
+
+    def paste_cell(self, value: str):
+        """This handles paste operations, validating the value.
+        """
+        row, col = self.row(), self.column()
+        delegate = self.tableWidget().itemDelegate()
+        bad_field = delegate.data.validate(col, value, write = True)
+        if bad_field:
+            REPORT_ERROR(T("PASTE_VALUE_ERROR",
+                row = row + 1,
+                col = bad_field,
+                value = value
+            ))
+            return False
+        # Set value in table
+        self.setText(value)
+        # Trigger database update
+        delegate.cell_edited(row, col, value)
+        return True
+
+
+class EscapeKeyEventFilter(QObject):
+    """Implement an event filter to catch escape-key presses.
+    """
+    def __init__(self, widget, callback):
+        super().__init__()
+        widget.installEventFilter(self)
+        self._widget = widget
+        self._callback = callback
+
+    def eventFilter(self, obj: QWidget, event: QEvent) -> bool:
+        if event.type() == QEvent.Type.KeyPress:
+            key = event.key()
+            if key == Qt.Key.Key_Escape:
+                #print("§escape")
+                self._callback()
+                #return True
+        # otherwise standard event processing
+        return False
+
 
 class GradeTableDelegate(QStyledItemDelegate):
     def __init__(self, parent):
@@ -631,128 +714,6 @@ class ListValidator(QValidator):
             return (QValidator.State.Intermediate, text, pos)
 
 
-class ListChoice(QDialog):
-    def __init__(self, parent = None):
-        super().__init__(parent = parent)
-        self.setWindowFlags(Qt.WindowType.SplashScreen)
-        vbox = QVBoxLayout(self)
-        vbox.setContentsMargins(0, 0, 0, 0)
-        self.listwidget = QListWidget()
-        self.listwidget.setStyleSheet("QListView::item {padding: 3px}")
-        vbox.addWidget(self.listwidget)
-        self.listwidget.itemClicked.connect(self.done_ok)
-        self.listwidget.itemActivated.connect(self.done_ok)
-
-    def open(self, items: list[str], value: str = None):
-        self.result = None
-        self.listwidget.clear()
-        row = 0
-        for i, s in enumerate(items):
-            if s == value:
-                row = i
-            self.listwidget.addItem(s)
-        lw = self.listwidget
-        w = lw.sizeHintForColumn(0) + lw.frameWidth() * 2
-        h = lw.sizeHintForRow(0) * lw.count() + 2 * lw.frameWidth()
-        if h > 200:
-            h = 200
-            scrollBarWidth = lw.style().pixelMetric(
-                QStyle.PixelMetric.PM_ScrollBarExtent
-            )
-            w += scrollBarWidth + lw.width() - lw.viewport().width()
-        lw.setFixedSize(w, h)
-        self.resize(0, 0)
-        self.listwidget.setCurrentRow(row)
-        p = self.parent()
-        if p:
-            self.move(p.mapToGlobal(QPoint(0, 0)))
-        self.exec()
-        return self.result
-
-    def done_ok(self, item):
-        self.result = item.text()
-        self.accept()
-
-
-class Calendar(QDialog):
-    def __init__(self, parent = None):
-        super().__init__(parent = parent)
-        self.cal = QCalendarWidget()
-        vbox = QVBoxLayout(self)
-        vbox.addWidget(self.cal)
-        self.cal.clicked.connect(self._choose1)
-        self.cal.activated.connect(self._choose)
-
-    def _choose1(self, date: QDate):
-        #print("§CLICKED:", date)
-        self.cal.setSelectedDate(date)
-        self.result = date.toString(Qt.DateFormat.ISODate)
-        QTimer.singleShot(200, self.accept)
-
-    def _choose(self, date: QDate):
-        self.result = date.toString(Qt.DateFormat.ISODate)
-        self.accept()
-
-    def open(self, text = None):
-        self.result = None
-        #print("§open:", text)
-        if text:
-            self.cal.setSelectedDate(
-                QDate.fromString(text, Qt.DateFormat.ISODate)
-            )
-        self.exec()
-        return self.result
-
-
-class TextEditor(QDialog):
-    def __init__(self, parent = None):
-        super().__init__(parent = parent)
-        self.te = QTextEdit()
-        vbox = QVBoxLayout(self)
-        vbox.addWidget(self.te)
-        self.bb = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok
-            | QDialogButtonBox.StandardButton.Cancel
-            | QDialogButtonBox.StandardButton.Reset
-        )
-        vbox.addWidget(self.bb)
-        self.bb.accepted.connect(self.done_ok)
-        self.bb.rejected.connect(self.close)
-        self.bb.button(
-            QDialogButtonBox.StandardButton.Reset
-        ).clicked.connect(self.reset)
-        self.te.textChanged.connect(self.changed)
-
-    def reset(self):
-        self.result = ""
-        self.accept()
-
-    def done_ok(self):
-        self.result = '¶'.join(self.current.splitlines())
-        self.accept()
-
-    def open(self, text = None):
-        self.result = None
-        self.suppress_handlers = True
-        #print("§open:", text)
-        self.text0 = text.replace('¶', '\n') if text else ""
-        self.te.setPlainText(self.text0)
-        self.suppress_handlers = False
-        self.changed()
-        p = self.parent()
-        if p:
-            self.move(p.mapToGlobal(QPoint(0, 0)))
-        self.exec()
-        return self.result
-
-    def changed(self):
-        if self.suppress_handlers: return
-        self.current = self.te.toPlainText()
-        self.bb.button(QDialogButtonBox.StandardButton.Ok).setDisabled(
-            self.current == self.text0
-        )
-
-
 class ManageGradesPage(QObject):
     def colour_cache(self, colour: str) -> QColor:
         try:
@@ -768,8 +729,20 @@ class ManageGradesPage(QObject):
         self.ui = load_ui("grades.ui", parent, self)
         # group-data table
         dtw = self.ui.date_table
-        delegate = TableDelegate(parent = dtw)
-        dtw.setItemDelegate(delegate)
+#        delegate = TableDelegate(parent = dtw)
+#        dtw.setItemDelegate(delegate)
+
+
+        #dtw.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        model = GroupDataModel(dtw)
+        dtw.setItemDelegate(GroupDataDelegate(dtw))
+        model.set_data([])
+        # Apply the model to the list view
+        dtw.setModel(model)
+        #dtw.horizontalHeader().hide()
+
+
+
         # grade-table
         tw = self.ui.grade_table
         delegate = GradeTableDelegate(parent = tw)
@@ -847,21 +820,22 @@ class ManageGradesPage(QObject):
 
         ## Set the table sizes and headers
         headers = []    # grade-table column headers
-        dtheaders = []  # group-data fields
+#        dtheaders = []  # group-data fields
         dtdata = []     # Underlying data for group-data table
         for dci in grade_table.column_info:
             headers.append(dci.LOCAL)
             if "*" in dci.FLAGS:
                 # Add to group-data table
-                dtheaders.append(dci.LOCAL)
+#                dtheaders.append(dci.LOCAL)
                 dtdata.append(dci)
-        dtw.setRowCount(len(dtheaders))
-        dtw.setVerticalHeaderLabels(dtheaders)
-        for i, d in enumerate(dtdata):
-#TODO ??? xxxxxxxxxxxxxxxxxxxxxxxxxxxx
-# consider display values which differ from the actual values ...
-#            dtw.item(i, 0).set_value(d.DATA["default"])
-            dtw.item(i, 0).setText(d.DATA["default"])
+#        dtw.setRowCount(len(dtheaders))
+#        dtw.setVerticalHeaderLabels(dtheaders)
+#        for i, d in enumerate(dtdata):
+##TODO ??? xxxxxxxxxxxxxxxxxxxxxxxxxxxx
+## consider display values which differ from the actual values ...
+##            dtw.item(i, 0).set_value(d.DATA["default"])
+#            dtw.item(i, 0).setText(d.DATA["default"])
+        dtw.model().set_data(dtdata)
 
         tw.setColumnCount(len(headers))
         vheaders = [gtline.student_name for gtline in grade_table.lines]

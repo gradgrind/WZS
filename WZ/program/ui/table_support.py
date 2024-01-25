@@ -1,9 +1,9 @@
 """
 ui/table_support.py
 
-Last updated:  2024-01-20
+Last updated:  2024-01-25
 
-Extend the interface to a QTableWidget.
+Support for table widgets, extending their capabilities.
 
 
 =+LICENCE=============================
@@ -30,13 +30,23 @@ T = Tr("tables.table_support")
 from core.base import REPORT_ERROR, REPORT_CRITICAL
 from ui.ui_base import (
     ### QtWidgets:
+    QDialog,
     QWidget,
     QTableWidget,
     QTableWidgetItem,
+    QCalendarWidget,
+    QVBoxLayout,
+    QListWidget,
+    QTextEdit,
+    QDialogButtonBox,
+    QStyle,
     ### QtCore
     Qt,
     QObject,
     QEvent,
+    QPoint,
+    QDate,
+    QTimer,
     APP,
 )
 from tables.table_utilities import TSV2Table, pasteFit, html2Table
@@ -183,3 +193,133 @@ class CopyPasteEventFilter(QObject):
                         return
                 c += 1
             r += 1
+
+
+
+
+
+###### Pop-up cell editors ######
+
+class Calendar(QDialog):
+    def __init__(self, parent = None):
+        super().__init__(parent = parent)
+        self.setWindowFlags(Qt.WindowType.SplashScreen)
+        self.cal = QCalendarWidget()
+        vbox = QVBoxLayout(self)
+        vbox.addWidget(self.cal)
+        self.cal.clicked.connect(self._choose1)
+        self.cal.activated.connect(self._choose)
+
+    def _choose1(self, date: QDate):
+        #print("§CLICKED:", date)
+        self.cal.setSelectedDate(date)
+        self.result = date.toString(Qt.DateFormat.ISODate)
+        QTimer.singleShot(200, self.accept)
+
+    def _choose(self, date: QDate):
+        self.result = date.toString(Qt.DateFormat.ISODate)
+        self.accept()
+
+    def open(self, text = None):
+        self.result = None
+        #print("§open:", text)
+        if text:
+            self.cal.setSelectedDate(
+                QDate.fromString(text, Qt.DateFormat.ISODate)
+            )
+        self.exec()
+        return self.result
+
+
+class ListChoice(QDialog):
+    def __init__(self, parent = None):
+        super().__init__(parent = parent)
+        self.setWindowFlags(Qt.WindowType.SplashScreen)
+        vbox = QVBoxLayout(self)
+        vbox.setContentsMargins(0, 0, 0, 0)
+        self.listwidget = QListWidget()
+        self.listwidget.setStyleSheet("QListView::item {padding: 3px}")
+        vbox.addWidget(self.listwidget)
+        self.listwidget.itemClicked.connect(self.done_ok)
+        self.listwidget.itemActivated.connect(self.done_ok)
+
+    def open(self, items: list[str], value: str = None):
+        self.result = None
+        self.listwidget.clear()
+        row = 0
+        for i, s in enumerate(items):
+            if s == value:
+                row = i
+            self.listwidget.addItem(s)
+        lw = self.listwidget
+        w = lw.sizeHintForColumn(0) + lw.frameWidth() * 2
+        h = lw.sizeHintForRow(0) * lw.count() + 2 * lw.frameWidth()
+        if h > 200:
+            h = 200
+            scrollBarWidth = lw.style().pixelMetric(
+                QStyle.PixelMetric.PM_ScrollBarExtent
+            )
+            w += scrollBarWidth + lw.width() - lw.viewport().width()
+        lw.setFixedSize(w, h)
+        self.resize(0, 0)
+        self.listwidget.setCurrentRow(row)
+        p = self.parent()
+        if p:
+            self.move(p.mapToGlobal(QPoint(0, 0)))
+        self.exec()
+        return self.result
+
+    def done_ok(self, item):
+        self.result = item.text()
+        self.accept()
+
+
+class TextEditor(QDialog):
+    def __init__(self, parent = None):
+        super().__init__(parent = parent)
+        self.te = QTextEdit()
+        vbox = QVBoxLayout(self)
+        vbox.addWidget(self.te)
+        self.bb = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok
+            | QDialogButtonBox.StandardButton.Cancel
+            | QDialogButtonBox.StandardButton.Reset
+        )
+        vbox.addWidget(self.bb)
+        self.bb.accepted.connect(self.done_ok)
+        self.bb.rejected.connect(self.close)
+        self.bb.button(
+            QDialogButtonBox.StandardButton.Reset
+        ).clicked.connect(self.reset)
+        self.te.textChanged.connect(self.changed)
+
+    def reset(self):
+        self.result = ""
+        self.accept()
+
+    def done_ok(self):
+        self.result = '¶'.join(self.current.splitlines())
+        self.accept()
+
+    def open(self, text = None):
+        self.result = None
+        self.suppress_handlers = True
+        #print("§open:", text)
+        self.text0 = text.replace('¶', '\n') if text else ""
+        self.te.setPlainText(self.text0)
+        self.suppress_handlers = False
+        self.changed()
+        p = self.parent()
+        if p:
+            self.move(p.mapToGlobal(QPoint(0, 0)))
+        self.exec()
+        return self.result
+
+    def changed(self):
+        if self.suppress_handlers: return
+        self.current = self.te.toPlainText()
+        self.bb.button(QDialogButtonBox.StandardButton.Ok).setDisabled(
+            self.current == self.text0
+        )
+
+

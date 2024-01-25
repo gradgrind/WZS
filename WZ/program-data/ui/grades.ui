@@ -216,7 +216,10 @@
          </widget>
         </item>
         <item>
-         <widget class="QTableWidget" name="date_table">
+         <widget class="QTableView" name="date_table">
+          <property name="selectionMode">
+           <enum>QAbstractItemView::NoSelection</enum>
+          </property>
           <attribute name="horizontalHeaderVisible">
            <bool>false</bool>
           </attribute>
@@ -229,31 +232,9 @@
           <attribute name="horizontalHeaderStretchLastSection">
            <bool>true</bool>
           </attribute>
-          <row>
-           <property name="text">
-            <string>Ausstellungsdatum</string>
-           </property>
-          </row>
-          <row>
-           <property name="text">
-            <string>Notendatum</string>
-           </property>
-          </row>
-          <column>
-           <property name="text">
-            <string>date</string>
-           </property>
-          </column>
-          <item row="0" column="0">
-           <property name="text">
-            <string>01.04.2024</string>
-           </property>
-          </item>
-          <item row="1" column="0">
-           <property name="text">
-            <string>01.04.2024</string>
-           </property>
-          </item>
+          <attribute name="verticalHeaderCascadingSectionResizes">
+           <bool>true</bool>
+          </attribute>
          </widget>
         </item>
         <item>
