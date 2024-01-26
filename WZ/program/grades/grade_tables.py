@@ -1,5 +1,5 @@
 """
-grades/grade_tables.py - last updated 2024-01-22
+grades/grade_tables.py - last updated 2024-01-26
 
 Manage grade tables.
 
@@ -411,6 +411,32 @@ class DelegateColumnInfo:
         ]
         return f"DelegateColumnInfo({', '.join(l)})"
 
+    def validate(self, value: str, write: bool = False
+    ) -> Optional[str]:
+        """Checks that the value is valid for this column.
+        <write> should be true if writing the value – this allows blocking
+        of writing to read-only columns.
+        Return the LOCAL name if invalid, <None> if valid.
+        """
+        ctype = self.TYPE
+        ok = True
+        if ctype == "GRADE":
+            if value not in self.DATA["valid"]:
+                ok = False
+        elif ctype == "CHOICE":
+            if value not in self.DATA:
+                ok = False
+        elif ctype == "DATE":
+            if isodate(value) is None:
+                ok = False
+        elif ctype[-1] == "!":
+            ok = not write
+        # Other column types are not checked
+        #print("§validate:", self.LOCAL, ctype, value, "-->", ok)
+        if ok:
+            return None
+        return self.LOCAL
+
 
 def hex_colour_adjust(colour: str, factor: float):
     """Lighten or darken an rgb-colour in "#RRGGBB" form.
@@ -435,6 +461,10 @@ class GradeTable:
     def read(self, row: int, column: int) -> str:
 #TODO: trap index error?
         return self.lines[row].values[column]
+
+    def write(self, row: int, column: int, value: str):
+#TODO: trap index error?
+        self.lines[row].values[column] = value
 
     def __init__(self,
         occasion: str,
@@ -526,7 +556,11 @@ class GradeTable:
                     col_dci.append(DelegateColumnInfo(rec,
                         NAME = str(sbj.id),
                         LOCAL = sbj.NAME,
-                        DATA = {"SID": sbj.SID, "SORTING": sbj.SORTING}
+                        DATA = {
+                            "SID": sbj.SID,
+                            "SORTING": sbj.SORTING,
+                            "valid": self.grade_map,
+                        }
                     ))
                     all_grade_cols.add(i)
                 continue
@@ -654,11 +688,11 @@ class GradeTable:
             #print("§GradeTableLine:", lines[-1])
             self.calculate_row(i)
 
-    def calculate_row(self, row: int) -> list[int]:
+    def calculate_row(self, row: int) -> dict[int, str]:
         #print("\n§calculate_row", row)
         line = self.lines[row]
         values = line.values
-        calculated_cols = []
+        calculated_cols = {}
         grades = line.grades.grades
         changed = False     # test for changes to <grades>
         for c, dci in enumerate(self.column_info):
@@ -671,7 +705,7 @@ class GradeTable:
                 )
                 if values[c] != val:
                     values[c] = val
-                    calculated_cols.append(c)
+                    calculated_cols[c] = val
             else:
                 val = values[c]
                 #print("???", val, "#", dci, "\n ++", grades)
@@ -701,7 +735,8 @@ class GradeTable:
                 line.grades.grades_id = new_id
         return calculated_cols
 
-    def validate(self, col: int, value: str, write: bool = False
+#TODO: --?
+    def _validate(self, col: int, value: str, write: bool = False
     ) -> Optional[str]:
         """Checks that the value is valid for the given column.
         Return the LOCAL name if invalid, <None> if valid.
@@ -710,7 +745,8 @@ class GradeTable:
         ctype = dci.TYPE
         ok = True
         if ctype == "GRADE":
-            if value not in self.grade_map:
+#            if value not in self.grade_map: # dci.DATA["valid"]?
+            if value not in dci.DATA["valid"]:
                 ok = False
         elif ctype == "CHOICE":
             if value not in dci.DATA:
