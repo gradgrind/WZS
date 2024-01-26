@@ -1,7 +1,7 @@
 """
 ui/table_support.py
 
-Last updated:  2024-01-25
+Last updated:  2024-01-26
 
 Support for table widgets, extending their capabilities.
 
@@ -87,10 +87,10 @@ class Table:
 class CopyPasteEventFilter(QObject):
     """Implement an event filter for a table widget to allow copy and paste
     operations on a table, triggered by Ctrl-C and Ctrl-V.
-    All cells must have a table-widget-item.
-    By using a subclass of QTableWidgetItem for the table-widget-items –
-    one with a <paste_cell> method – it is possible to modify the behaviour,
-    e.g. for validation.
+    Writing is done by means of a <write> method on the table, reading by
+    means of a <read> method. The read method should have an extra
+    argument to indicate whether the underlying (actual) value or the
+    displayed value is read. Normally it will be the underlying value.
     """
     def __init__(self, table, copy_internal = True):
         """The parameter <copy_internal> determines whether the underlying
@@ -145,16 +145,7 @@ class CopyPasteEventFilter(QObject):
             c0 = selrange.leftColumn()
             c1 = selrange.rightColumn() + 1
             for c in range(c0, c1):
-                item = tw.item(r, c)
-                if item:
-                    cflag = (
-                        Qt.ItemDataRole.EditRole
-                        if self.copy_internal
-                        else Qt.ItemDataRole.DisplayRole
-                    )
-                    rcols.append(item.data(cflag))
-                else:
-                    rcols.append("")
+                rcols.append(tw.read(r, c, self.copy_internal))
             rrows.append('\t'.join(rcols))
         text = '\n'.join(rrows)
         #print("   -->", repr(text))
@@ -177,25 +168,9 @@ class CopyPasteEventFilter(QObject):
         for row in rows:
             c = c0
             for value in row:
-                item = tw.item(r, c)
-                if not item:
-                    REPORT_CRITICAL(
-                        "Bug: The table has no table-widget-item in the"
-                        f" cell at ({r}, {c})"
-                    )
-                try:
-                    f = item.paste_cell
-                except AttributeError:
-                    item.setText(value)
-                else:
-                    if not f(value):
-                        # Break off insertion if an error occurs
-                        return
+                tw.write(r, c, value)
                 c += 1
             r += 1
-
-
-
 
 
 ###### Pop-up cell editors ######

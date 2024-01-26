@@ -48,11 +48,8 @@ from ui.ui_base import (
     QTableWidgetItem,
     QStyledItemDelegate,
     QLineEdit,
-#    QAbstractItemView,
-    QCompleter,
     ### QtGui:
     QColor,
-#    QBrush,
     QValidator,
     ### QtCore:
     QObject,
@@ -84,7 +81,6 @@ from core.base import (
 from core.basic_data import get_database, CONFIG
 from core.dates import print_date
 from core.list_activities import report_data
-#from core.classes import class_group_split_with_id
 from grades.grade_tables import GradeTable, DelegateColumnInfo
 from grades.ods_template import BuildGradeTable
 
@@ -94,11 +90,8 @@ UPDATE_PAUSE = 1000     # time between cell edit and db update in ms
 
 
 #TODO:
-# 1)The grade completer is no fun at all – either leave it out completely
-# or go for a list popup?
-# 2) Paste is not yet reimplemented.
-# 3) Move group data table back to QTableWidget.
-# 4) Tidying.
+# 1) Move group data table back to QTableWidget.
+# 2) Tidying.
 
 
 class GroupDataDelegate(QStyledItemDelegate):
@@ -199,48 +192,8 @@ class GroupDataModel(QAbstractListModel):
         return None
 
 
-#TODO: If I use a QTableView for the grade table, this will be superfluous.
-class __TableItem(QTableWidgetItem):
-    """A custom table-widget-item which differentiates (minimally)
-    between EditRole and DisplayRole, currently only for displaying
-    the value – no distinct values are saved.
-    It also uses the table item-delegate to handle validation when
-    pasting and displaying values.
-    """
-    def data(self, role: Qt.ItemDataRole):
-        val = super().data(role)
-        if role == Qt.ItemDataRole.DisplayRole:
-            col = self.column()
-            delegate = self.tableWidget().itemDelegate()
-            gt = delegate.data
-            dci = gt.column_info[col]
-            if dci.TYPE == "DATE" and val:
-                return print_date(val, trap = False) or "???"
-            else:
-                if gt.validate(col, val):
-                    return "??"
-        return val
-
-    def paste_cell(self, value: str):
-        """This handles paste operations, validating the value.
-        """
-        row, col = self.row(), self.column()
-        delegate = self.tableWidget().itemDelegate()
-        bad_field = delegate.data.validate(col, value, write = True)
-        if bad_field:
-            REPORT_ERROR(T("PASTE_VALUE_ERROR",
-                row = row + 1,
-                col = bad_field,
-                value = value
-            ))
-            return False
-        # Set value in table
-        self.setText(value)
-        # Trigger database update
-        delegate.cell_edited(row, col, value)
-        return True
-
 #TODO: Not needed any more?
+'''
 class EscapeKeyEventFilter(QObject):
     """Implement an event filter to catch escape-key presses.
     """
@@ -259,7 +212,7 @@ class EscapeKeyEventFilter(QObject):
                 #return True
         # otherwise standard event processing
         return False
-
+'''
 
 class GradeTableDelegate(QStyledItemDelegate):
     def __init__(self, table_widget, data_proxy):
@@ -319,10 +272,8 @@ class GradeTableDelegate(QStyledItemDelegate):
         e.setText(value)
         if ctype == "GRADE":
             e.setValidator(self._grade_validator)
-            e.setCompleter(self._grade_completer)
         else:
             e.setValidator(0)
-            e.setCompleter(0)
         return e
 
     def setEditorData(self, editor, index):
@@ -360,19 +311,12 @@ class GradeTableDelegate(QStyledItemDelegate):
         model.setData(index, text, Qt.ItemDataRole.EditRole)
         '''
 
-#        r, c = index.row(), index.column()
-#        d = model.data(index, Qt.ItemDataRole.EditRole)
-#        self.cell_edited(r, c, d)
-
     def setup(self):
         """Call this when initializing a table for a new group.
         """
         glist = self._table.get_grade_list()
         self._min_grade_width = self._max_width(glist) + self._m_width
         self._grade_validator = ListValidator(glist)
-        self._grade_completer = (gc := QCompleter(glist))
-        gc.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
-        gc.setCompletionMode(gc.CompletionMode.UnfilteredPopupCompletion)
         tw = self.parent() # the table widget, NOT the same as <parent>!
         for i in range(tw.columnCount()):
             dci = self._table.get_column_info(i)
@@ -460,7 +404,7 @@ class ManageGradesPage(QObject):
         tw = self.ui.grade_table
         delegate = GradeTableDelegate(table_widget = tw, data_proxy = self)
         tw.setItemDelegate(delegate)
-        self.event_filter = CopyPasteEventFilter(tw)
+        self.event_filter = CopyPasteEventFilter(self)
         headerView = RotatedHeaderView()
         tw.setHorizontalHeader(headerView)
         headerView.setStretchLastSection(True)
@@ -517,17 +461,24 @@ class ManageGradesPage(QObject):
     def get_column_info(self, col: int) -> DelegateColumnInfo:
         return self.grade_table.column_info[col]
 
-    def read(self, row: int, col: int) -> str:
-        return self.grade_table.read(row, col)
+    def read(self, row: int, col: int, copy_internal: bool = True) -> str:
+        if copy_internal:
+            return self.grade_table.read(row, col)
+        else:
+            return self.ui.grade_table.item(row, col).text()
 
-    def write(self, row: int, col: int, val: str):
+    def write(self, row: int, col: int, val: str) -> bool:
         print("§CHANGED:", row, col, val)
         # Set data in underlying table
         dci = self.get_column_info(col)
-        if dci.validate(val, write = True):
-#TODO
-            REPORT_ERROR(f"TODO: Write to ({row}, {col}), bad value: {val}")
-            return
+        bad_field = dci.validate(val, write = True)
+        if bad_field:
+            REPORT_ERROR(T("WRITE_VALUE_ERROR",
+                row = row + 1,
+                col = bad_field,
+                value = val
+            ))
+            return False
         self.grade_table.write(row, col, val)
         # Set cell in gui table
         self.display_cell(row, col, val)
@@ -538,6 +489,15 @@ class ManageGradesPage(QObject):
             self._pending_changes[row] = {col: val}
         # If the timer is already running, this will stop and restart it
         self._timer.start(UPDATE_PAUSE)
+        return True
+
+    # Needed for the copy-paste facility
+    def installEventFilter(self, eventfilter):
+        self.ui.grade_table.installEventFilter(eventfilter)
+
+    # Needed for the copy-paste facility
+    def selectedRanges(self):
+        return self.ui.grade_table.selectedRanges()
 
     ### actions ###
 
@@ -610,11 +570,8 @@ class ManageGradesPage(QObject):
             values = gtline.values
             # Add grades, etc.
             for j, dci in enumerate(grade_table.column_info):
-
-#TODO: switch to QTableWidgetItem, need to handle display values and paste
                 v = self.get_display_value(values[j], dci)
                 item = QTableWidgetItem(v)
-#                item = TableItem(v)
                 item.setBackground(self.colour_cache(dci.COLOUR))
                 item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 tw.setItem(i, j, item)
@@ -671,10 +628,6 @@ class ManageGradesPage(QObject):
             self.display_cell(r, c, v)
         self._pending_changes[r] = {}
         self._timer.start(0)
-
-#    @Slot(int,int)
-#    def on_grade_table_cellActivated(self, row, col):
-#        print("§on_grade_table_cellActivated:", row, col)
 
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
