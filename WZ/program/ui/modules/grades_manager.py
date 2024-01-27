@@ -1,7 +1,7 @@
 """
 ui/modules/grades_manager.py
 
-Last updated:  2024-01-26
+Last updated:  2024-01-27
 
 Front-end for managing grade reports.
 
@@ -44,7 +44,7 @@ import json
 from ui.ui_base import (
     load_ui,
     ### QtWidgets:
-    QWidget,
+    QTableWidget,
     QTableWidgetItem,
     QStyledItemDelegate,
     QLineEdit,
@@ -54,12 +54,9 @@ from ui.ui_base import (
     ### QtCore:
     QObject,
     Qt,
-    QEvent,
     QTimer,
     Slot,
     QPoint,
-    QAbstractListModel,
-    QModelIndex,
     ### other
     APP,
 #    SHOW_CONFIRM,
@@ -90,131 +87,19 @@ UPDATE_PAUSE = 1000     # time between cell edit and db update in ms
 
 
 #TODO:
-# 1) Move group data table back to QTableWidget.
-# 2) Tidying.
+# 1) Write to group data.
+# 2) Set grade list.
+# 3) Add missing funtions.
+# 3) Tidying.
 
-
-class GroupDataDelegate(QStyledItemDelegate):
-    """A delegate for the group-data table.
-    Pop-up editors are handled in the method <createEditor>, which then
-    returns no cell editor, everything being done within this method.
-    """
-    def __init__(self, parent):
-        super().__init__(parent)
-        self._calendar = Calendar()
-
-    def createEditor(self, parent, option, index):
-        r = index.row()
-        tw = self.parent()
-        model = tw.model()
-        value = model.data(index, Qt.ItemDataRole.EditRole)
-        dtype = model.data_type(r)
-        if dtype == "DATE":
-            y = tw.rowViewportPosition(r)
-            self._calendar.move(parent.mapToGlobal(QPoint(0, y)))
-            v = self._calendar.open(value)
-            if v is not None and v != value:
-                #print("§saving:", value, "->", v)
-                model.setData(index, v, Qt.ItemDataRole.EditRole)
-            return None
-#TODO: other types?
-        return super().createEditor(parent, option, index)
-
-
-class GroupDataModel(QAbstractListModel):
-    def set_data(self, dci_list):
-        print("§set group data:", dci_list)
-        self.beginResetModel()
-        self.data_list = dci_list
-        self.endResetModel()
-
-#?
-    def data_type(self, row: int) -> str:
-        return self.data_list[row].TYPE
-
-    def rowCount(self, parent: QModelIndex):
-        return len(self.data_list)
-
-    def data(self,
-        index: QModelIndex,
-        role: Qt.ItemDataRole = Qt.ItemDataRole.DisplayRole
-    ):
-        row = index.row()
-#TODO:
-        if role == Qt.ItemDataRole.DisplayRole:
-            return '*' + self.data_list[row].DATA["default"]
-
-        elif role == Qt.ItemDataRole.EditRole:
-            return self.data_list[row].DATA["default"]
-
-        #elif role == Qt.FontRole:
-        #    if row == 0 and col == 0:  # change font only for cell(0,0)
-        #        bold_font = QFont()
-        #        bold_font.setBold(True)
-        #        return bold_font
-
-        #elif role == Qt.BackgroundRole:
-        #    if row == 1 and col == 2:  # change background only for cell(1,2)
-        #        return QBrush(Qt.red)
-
-        elif role == Qt.TextAlignmentRole:
-            return Qt.Alignment.AlignCenter
-        #    # change text alignment only for cell(1,1)
-        #    if row == 1 and col == 1:
-        #        return Qt.AlignRight | Qt.AlignVCenter
-
-        #elif role == Qt.CheckStateRole:
-        #    if row == 1 and col == 0:  # add a checkbox to cell(1,0)
-        #        return Qt.Checked
-
-        return None
-
-    def setData(self, index, value, role):
-        if role != Qt.ItemDataRole.EditRole:
-            return False
-        # save value from editor
-        self.data_list[index.row()].DATA["default"] = value
-#TODO: save to database, adjust grade table?
-        # for presentation purposes only:
-        #result = repr(value)
-        #self.editCompleted.emit(result)
-        return True
-
-    def flags(self, index):
-        return Qt.ItemFlag.ItemIsEditable | super().flags(index)
-
-    def headerData(self, section: int, orientation, role):
-        if (
-            role == Qt.DisplayRole
-            and orientation == Qt.Orientation.Vertical
-        ):
-            return self.data_list[section].LOCAL
-        return None
-
-
-#TODO: Not needed any more?
-'''
-class EscapeKeyEventFilter(QObject):
-    """Implement an event filter to catch escape-key presses.
-    """
-    def __init__(self, widget, callback):
-        super().__init__()
-        widget.installEventFilter(self)
-        self._widget = widget
-        self._callback = callback
-
-    def eventFilter(self, obj: QWidget, event: QEvent) -> bool:
-        if event.type() == QEvent.Type.KeyPress:
-            key = event.key()
-            if key == Qt.Key.Key_Escape:
-                #print("§escape")
-                self._callback()
-                #return True
-        # otherwise standard event processing
-        return False
-'''
 
 class GradeTableDelegate(QStyledItemDelegate):
+    """Base class for table delegates using <DelegateColumnInfo> instances
+    to determine behaviour. It handles the cell types relevant for the
+    grades manager.
+    The handling of the underlying data is done by the object passed as
+    <data_proxy>.
+    """
     def __init__(self, table_widget, data_proxy):
         self._table = data_proxy
         super().__init__(parent = table_widget)
@@ -230,9 +115,32 @@ class GradeTableDelegate(QStyledItemDelegate):
         self._list_choice = ListChoice()
         self._editor = QLineEdit()
 
+    def setup(self, grade_list: list[str]):
+        """This is specific to a table with grades.
+        Call this when initializing the table for a new group, or at least
+        when the valid grades change.
+        If using the delegate for another table, this can be overridden
+        or ignored. That could, however, cause the attributes which are
+        set here to remain unset, which will cause problems if there
+        should be any grade cells in the table.
+        """
+        self._min_grade_width = self._max_width(grade_list) + self._m_width
+        self._grade_validator = ListValidator(grade_list)
+
+    def write_cell(self, row: int, col: int, val: str):
+        """Use this to manage setting table values. It allows the
+        cell value to be displayed in a customized manner.
+        """
+        dci = self._table.get_dci(row, col)
+        if dci.TYPE == "DATE" and val:
+            val = print_date(val, trap = False) or "???"
+        elif dci.validate(val):
+            val = "??"
+        self.parent().item(row, col).setText(val)
+
     def createEditor(self, parent, option, index):
         row, col = index.row(), index.column()
-        dci = self._table.get_column_info(col)
+        dci = self._table.get_dci(row, col)
         value = self._table.read(row, col)
         # The QTableWidget holds the "display" values, so to get the
         # underlying "actual" values, <self._table> is used.
@@ -281,51 +189,22 @@ class GradeTableDelegate(QStyledItemDelegate):
         set in <createEditor>.
         """
         pass
-        print("§setEditorData ... or, rather, not!")
+        #print("§setEditorData ... or, rather, not!")
 
     def destroyEditor(self, editor,  index):
         """Reimplement <destroyEditor> to do nothing because the editors
         are retained.
         """
         pass
-        print("§destroyEditor ... or, rather, not!")
+        #print("§destroyEditor ... or, rather, not!")
 
     def setModelData(self, editor, model, index):
         """Reimplement to write to back-end data table.
         """
+        # The "editor" must be an object whose value is available via
+        # the "text" method – like a QLineEdit.
         print("§setModelData:", index.row(), index.column(), editor.text())
         self._table.write(index.row(), index.column(), editor.text())
-
-        '''
-        # Use "properties" to get the value
-        metaobject = editor.metaObject()
-        #print("%%1:", dir(metaobject))
-        for i in range(metaobject.propertyCount()):
-            metaproperty = metaobject.property(i)
-            if metaproperty.isUser():
-                name = metaproperty.name()
-                #print("%%name:", name)
-                #print("%%value:", editor.property(name))
-                #print("%%user:", metaproperty.isUser())
-                text = editor.property(name)
-        model.setData(index, text, Qt.ItemDataRole.EditRole)
-        '''
-
-    def setup(self):
-        """Call this when initializing a table for a new group.
-        """
-        glist = self._table.get_grade_list()
-        self._min_grade_width = self._max_width(glist) + self._m_width
-        self._grade_validator = ListValidator(glist)
-        tw = self.parent() # the table widget, NOT the same as <parent>!
-        for i in range(tw.columnCount()):
-            dci = self._table.get_column_info(i)
-            w = self._column_width(dci)
-            if w >= 0:
-                tw.setColumnWidth(i, w)
-                tw.showColumn(i)
-            else:
-                tw.hideColumn(i)
 
     def _column_width(self, dci) -> int:
         """Return the minimum width for the column.
@@ -365,6 +244,69 @@ class GradeTableDelegate(QStyledItemDelegate):
         return w
 
 
+class GroupDataProxy(QObject):
+    def __init__(self, table_widget: QTableWidget):
+        super().__init__()
+        self.table = table_widget
+
+    def get_dci(self, row, col) -> DelegateColumnInfo:
+        """This provides the <DelegateColumnInfo> instance relevant for
+        the given cell.
+        """
+        assert col == 0
+        return self.dci_list[row]
+
+    def set_data(self, dci_list: list[DelegateColumnInfo]):
+        self.dci_list = dci_list
+        self.table.clear()
+        self.table.setRowCount(len(dci_list))
+        self.table.setVerticalHeaderLabels(
+            [dci.LOCAL for dci in dci_list]
+        )
+        delegate = self.table.itemDelegate()
+        for r in range(len(dci_list)):
+            item = QTableWidgetItem()
+            item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.table.setItem(r, 0, item)
+            delegate.write_cell(r, 0, self.read(r, 0))
+
+    def read(self, row: int, col: int, copy_internal: bool = True) -> str:
+        assert col == 0
+        if copy_internal:
+            return self.dci_list[row].DATA["default"]
+        else:
+            return self.table.item(row, col).text()
+
+#TODO!
+    def write(self, row: int, col: int, val: str) -> bool:
+        assert col == 0
+        dci = self.dci_list[row]
+        print("§CHANGED group-data:", row, col, val, dci)
+        # Set data in underlying table
+#?        dci = self.get_column_info(col)
+        bad_field = dci.validate(val, write = True)
+        if bad_field:
+            REPORT_ERROR(T("WRITE_GROUP_VALUE_ERROR",
+                field = bad_field,
+                value = val
+            ))
+            return False
+        # Set cell in gui table
+        self.table.itemDelegate().write_cell(row, col, val)
+
+#--
+        return False
+
+        self.dci_list[row].DATA["default"] = val
+
+#TODO: There are presumably also grade entries which need updating if
+# they have the old value ...!
+
+        # Update database
+        print("§§§TODO")
+        return True
+
+
 class ListValidator(QValidator):
     def __init__(self, values: list[str], parent = None):
         super().__init__(parent)
@@ -390,20 +332,21 @@ class ManageGradesPage(QObject):
         return qc
 
     def __init__(self, parent = None):
-        self._colours = {}
         super().__init__()
+        self._colours = {}
         self.ui = load_ui("grades.ui", parent, self)
         # group-data table
         dtw = self.ui.date_table
-        model = GroupDataModel(dtw)
-        dtw.setItemDelegate(GroupDataDelegate(dtw))
-        model.set_data([])
-        # Apply the model to the list view
-        dtw.setModel(model)
+        self.group_data_proxy = GroupDataProxy(dtw)
+        dtw.setItemDelegate(GradeTableDelegate(
+            table_widget = dtw, data_proxy = self.group_data_proxy
+        ))
         # grade-table
         tw = self.ui.grade_table
-        delegate = GradeTableDelegate(table_widget = tw, data_proxy = self)
-        tw.setItemDelegate(delegate)
+        self._delegate = GradeTableDelegate(
+            table_widget = tw, data_proxy = self
+        )
+        tw.setItemDelegate(self._delegate)
         self.event_filter = CopyPasteEventFilter(self)
         headerView = RotatedHeaderView()
         tw.setHorizontalHeader(headerView)
@@ -436,6 +379,7 @@ class ManageGradesPage(QObject):
         # filter. These are lists of tuples:
         #    (db-primary-key, short form, full name)
         self.db = get_database()
+#TODO: What about scrapping the teachers list from <report_data>?
         self.report_info = report_data(GRADES = True)[0] # only for the classes
         ## Set up widgets
         self.suppress_handlers = True
@@ -455,10 +399,10 @@ class ManageGradesPage(QObject):
 
     ### grade-table "proxy" ###
 
-    def get_grade_list(self) -> list[str]:
-        return list(self.grade_table.grade_map)
-
-    def get_column_info(self, col: int) -> DelegateColumnInfo:
+    def get_dci(self, row, col) -> DelegateColumnInfo:
+        """This provides the <DelegateColumnInfo> instance relevant for
+        the given cell.
+        """
         return self.grade_table.column_info[col]
 
     def read(self, row: int, col: int, copy_internal: bool = True) -> str:
@@ -470,7 +414,7 @@ class ManageGradesPage(QObject):
     def write(self, row: int, col: int, val: str) -> bool:
         print("§CHANGED:", row, col, val)
         # Set data in underlying table
-        dci = self.get_column_info(col)
+        dci = self.get_dci(row, col)
         bad_field = dci.validate(val, write = True)
         if bad_field:
             REPORT_ERROR(T("WRITE_VALUE_ERROR",
@@ -481,7 +425,7 @@ class ManageGradesPage(QObject):
             return False
         self.grade_table.write(row, col, val)
         # Set cell in gui table
-        self.display_cell(row, col, val)
+        self._delegate.write_cell(row, col, val)
         # Trigger row calculation with database update
         try:
             self._pending_changes[row][col] = val
@@ -501,20 +445,6 @@ class ManageGradesPage(QObject):
 
     ### actions ###
 
-    def display_cell(self, row: int, col: int, val: str):
-        print("TODO: display_cell")
-        dci = self.get_column_info(col)
-        v = self.get_display_value(val, dci)
-        item = self.ui.grade_table.item(row, col)
-        item.setText(v)
-
-    def get_display_value(self, val, dci) -> str:
-        if dci.TYPE == "DATE" and val:
-            return print_date(val, trap = False) or "???"
-        elif dci.validate(val):
-            return "??"
-        return val
-
     def fill_group_list(self):
         self.ui.combo_group.clear()
         i = self.ui.combo_occasion.currentIndex()
@@ -533,11 +463,7 @@ class ManageGradesPage(QObject):
         o_item = self.occasions[o]
         self.class_group = o_item[1][i]
         self.occasion = o_item[0]
-        #print("§on_combo_group_currentIndexChanged:",
-        #    repr(self.occasion), self.class_group
-        #)
         tw = self.ui.grade_table
-        dtw = self.ui.date_table
         # Check that there are no pending database updates for grades
         for r, cd in self._pending_changes.items():
             if cd:
@@ -556,7 +482,7 @@ class ManageGradesPage(QObject):
                 # Add to group-data table
                 dtdata.append(dci)
         ## Initialize group-data table
-        dtw.model().set_data(dtdata)
+        self.group_data_proxy.set_data(dtdata)
         ## Initialize grade table
         tw.clear()
         tw.setColumnCount(len(headers))
@@ -564,17 +490,26 @@ class ManageGradesPage(QObject):
         tw.setRowCount(len(vheaders))
         tw.setHorizontalHeaderLabels(headers)
         tw.setVerticalHeaderLabels(vheaders)
-        tw.itemDelegate().setup()
-        ## Fill the grade table
-        for i, gtline in enumerate(grade_table.lines):
+        ## Set up the grade table ...
+        self._delegate.setup(list(self.grade_table.grade_map))
+        # First the column widths
+        for c, dci in enumerate(grade_table.column_info):
+            w = self._delegate._column_width(dci)
+            if w >= 0:
+                tw.setColumnWidth(c, w)
+                tw.showColumn(c)
+            else:
+                tw.hideColumn(c)
+        # Now the individual cells
+        for r, gtline in enumerate(grade_table.lines):
             values = gtline.values
             # Add grades, etc.
-            for j, dci in enumerate(grade_table.column_info):
-                v = self.get_display_value(values[j], dci)
-                item = QTableWidgetItem(v)
+            for c, dci in enumerate(grade_table.column_info):
+                item = QTableWidgetItem()
                 item.setBackground(self.colour_cache(dci.COLOUR))
                 item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                tw.setItem(i, j, item)
+                tw.setItem(r, c, item)
+                self._delegate.write_cell(r, c, values[c])
         self.suppress_handlers = False
 #TODO: This is a fix for a visibility problem (gui refresh)
         for w in APP.topLevelWindows():
@@ -625,7 +560,7 @@ class ManageGradesPage(QObject):
             return
         for c, v in self.grade_table.calculate_row(r).items():
             # Write to display table
-            self.display_cell(r, c, v)
+            self._delegate.write_cell(r, c, v)
         self._pending_changes[r] = {}
         self._timer.start(0)
 

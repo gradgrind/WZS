@@ -23,6 +23,30 @@ from ui.ui_base import (
 )
 from tables.table_utilities import TSV2Table, pasteFit, html2Table
 
+'''
+# A custom ItemDelegate can reimplement the data-writing after an
+# edit. The default method does something like this to cope with
+# various possible editor widgets, each having a different means
+# of access to their data:
+    def setModelData(self, editor, model, index):
+        """Reimplement to write to back-end data table.
+        """
+        # Use "properties" to get the value
+        metaobject = editor.metaObject()
+        #print("%%1:", dir(metaobject))
+        for i in range(metaobject.propertyCount()):
+            metaproperty = metaobject.property(i)
+            if metaproperty.isUser():
+                name = metaproperty.name()
+                #print("%%name:", name)
+                #print("%%value:", editor.property(name))
+                #print("%%user:", metaproperty.isUser())
+                text = editor.property(name)
+        model.setData(index, text, Qt.ItemDataRole.EditRole)
+'''
+
+
+
 
 class RotatedHeaderView(QHeaderView):
     """Rotate header items by 90°.
