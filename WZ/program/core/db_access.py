@@ -1,7 +1,7 @@
 """
 core/db_access.py
 
-Last updated:  2024-01-22
+Last updated:  2024-01-29
 
 Helper functions for accessing the database.
 
@@ -124,12 +124,21 @@ class Database:
         alias "rowid", so the outward-facing name of this column
         is not important.
         """
-        cur = self.query(
+        self.transaction(
             f"update {table} set {field} = ? where rowid = ?",
             (value, rowid)
         )
+
+    def transaction(self, sql: str, data: dict|tuple = None) -> id:
+        """Run a "query", close cursor, commit.
+        Return the "lastrowid", the id-field of the changed record, which
+        is useful for new records.
+        """
+        cur = self.query(sql, data)
         cur.close()
+        id = cur.lastrowid
         self.commit()
+        return id
 
     def update_fields(self,
         table: str,
@@ -146,12 +155,10 @@ class Database:
             flist.append(f"{f} = ?")
             vlist.append(v)
         vlist.append(rowid)
-        cur = self.query(
+        self.transaction(
             f"update {table} set {', '.join(flist)} where rowid = ?",
             vlist
         )
-        cur.close()
-        self.commit()
 
     def insert(self, table: str, fields: list[str], values: list[str|int]
     ) -> int:
@@ -161,24 +168,18 @@ class Database:
         slots = ", ".join('?' for f in fields)
         if len(values) != len(fields):
             REPORT_CRITICAL("Bug: mismatched arguments to Database.insert")
-        cur = self.query(
+        return self.transaction(
             f"insert into {table} ({flist}) values ({slots})",
             values
         )
-        id = cur.lastrowid
-        cur.close()
-        self.commit()
-        return id
 
     def delete(self, table: str, rowid: int):
         """Remove the row with the given id from the given table.
         """
-        cur = self.query(
+        self.transaction(
             f"delete from {table} where rowid=?",
             (rowid,)
         )
-        cur.close()
-        self.commit()
 
     def table(self, name: str):# -> db_Table:
         try:
@@ -378,7 +379,6 @@ class db_Table:
         self.db.update(self.table, rowid, ftype.field0, value)
         ## Set the memory cell
         setattr(record, ftype.field, newmap)
-
 
     def update_cells(self, rowid: int, **fields: dict[str, str|int]) -> bool:
         """Update fields of a table record. The values should already be

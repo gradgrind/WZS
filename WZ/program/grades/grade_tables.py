@@ -1,5 +1,5 @@
 """
-grades/grade_tables.py - last updated 2024-01-26
+grades/grade_tables.py - last updated 2024-01-28
 
 Manage grade tables.
 
@@ -643,14 +643,17 @@ class GradeTable:
                 gr = gmap.get(s_id) or ""
                 if (not gr):
                     if "S" in dci.FLAGS:
-                        # Get value from student's data
+                        # Get value from student's EXTRA data
                         try:
                             gr = stdata.EXTRA[s_id]
                         except KeyError:
-                            try:
-                                gr = getattr(stdata, s_id)
-                            except AttributeError:
-                                pass
+                            pass
+                    elif "s" in dci.FLAGS:
+                        # Get value from student's main data
+                        try:
+                            gr = getattr(stdata, s_id)
+                        except AttributeError:
+                            pass
                     elif "C" in dci.FLAGS:
                         try:
                             gr = dci.DATA["default"]
@@ -735,33 +738,6 @@ class GradeTable:
                 line.grades.grades_id = new_id
         return calculated_cols
 
-#TODO: --?
-    def _validate(self, col: int, value: str, write: bool = False
-    ) -> Optional[str]:
-        """Checks that the value is valid for the given column.
-        Return the LOCAL name if invalid, <None> if valid.
-        """
-        dci = self.column_info[col]
-        ctype = dci.TYPE
-        ok = True
-        if ctype == "GRADE":
-#            if value not in self.grade_map: # dci.DATA["valid"]?
-            if value not in dci.DATA["valid"]:
-                ok = False
-        elif ctype == "CHOICE":
-            if value not in dci.DATA:
-                ok = False
-        elif ctype == "DATE":
-            if isodate(value) is None:
-                ok = False
-        elif ctype[-1] == "!":
-            ok = not write
-        # Other column types are not checked
-        #print("§validate:", dci.LOCAL, ctype, value, "-->", ok)
-        if ok:
-            return None
-        return dci.LOCAL
-
 
 def get_calendar_date(name: str, occasion: str, group: str
 ) -> tuple[str, str]:
@@ -770,9 +746,15 @@ def get_calendar_date(name: str, occasion: str, group: str
     dname = name.split("_", 1)[1]
     key0 = f".{dname}/{occasion}/*"
     key = key0.replace("*", group)
-    d = cdates.get(key)
-    if d is None:
-        return (cdates.get(key0) or "", key0)
+    try:
+        d = cdates[key]
+    except KeyError:
+        # value specific to occasion + group not available
+        try:
+            d = cdates[key0]
+        except KeyError:
+            # default value for occasion not available
+            return ("", key0)
     return (d, key)
 
 

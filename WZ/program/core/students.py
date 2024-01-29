@@ -1,5 +1,5 @@
 """
-core/students.py - last updated 2024-01-21
+core/students.py - last updated 2024-01-29
 
 Manage students data.
 
@@ -76,6 +76,7 @@ class Students(db_Table):
                 DB_FIELD_TEXT("DATE_ENTRY"),
                 DB_FIELD_TEXT("DATE_EXIT"),
                 DB_FIELD_TEXT("BIRTHPLACE"),
+                DB_FIELD_TEXT("GROUPS"),
                 DB_FIELD_JSON("EXTRA", schema = EXTRA_SCHEMA)
             )
             return True
@@ -145,6 +146,25 @@ if __name__ == "__main__":
     students = Students(db)
     #for s in students.student_list(23, "R"):
     #    print("  --", s)
+
+    '''
+    for rec in students.records:
+        x = rec.EXTRA
+        for k, v in x.items():
+            print(" --", rec.Class.CLASS, rec.id, k, v)
+        try:
+            g = x.pop("GROUPS")
+        except KeyError:
+            pass
+        else:
+            if g:
+                db.update("STUDENTS", rec.id, "GROUPS", g)
+        for k, v in x.items():
+            flist = ["Student_id", "KEY", "VALUE"]
+            vlist = [rec.id, k, v]
+            db.insert("STUDENT_EXTRA", flist, vlist)
+    quit(2)
+    '''
 
     #students.update_json_cell(415, "EXTRA", LEVEL="Gym", SEX="w")
     #print("§§§", slist[-1])

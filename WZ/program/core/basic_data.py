@@ -1,5 +1,5 @@
 """
-core/basic_data.py - last updated 2024-01-22
+core/basic_data.py - last updated 2024-01-29
 
 Configuration and other basic data dependent on the database.
 
@@ -50,6 +50,7 @@ from core.base import (
     DATAPATH,
     REPORT_INFO,
     REPORT_ERROR,
+    REPORT_CRITICAL,
 )
 from core.db_access import (
     Database,
@@ -60,8 +61,6 @@ from core.db_access import (
 )
 
 __DB = None # the current database, set in "get_database"
-# "CONFIG" is a {key: value} configuration mapping for the current database
-#CONFIG: dict[str, Any] = {}
 REPORT_SPLITTER = '#'
 REPORT_ALL_NAMES = '*'
 SUBJECT_SPLITTER = '*'
@@ -117,67 +116,95 @@ def get_database():
 
 
 class _CONFIG:
+    __slots__ = ("_map",)
+    __table = "__CONFIG__"
+    _create = f"""CREATE TABLE {__table} (
+        id      INTEGER PRIMARY KEY NOT NULL,
+        KEY     TEXT    UNIQUE NOT NULL,
+        VALUE   TEXT    NOT NULL,
+        COMMENT TEXT    NOT NULL
+    )
+    STRICT;
+    """
     def __init__(self):
         self._map = {}
 
     def init(self, db):
         self._map.clear()
-        for rec in db.table("__CONFIG__").records:
-            self._map[rec.KEY] = rec.VALUE
-        self.DECIMAL_PLACES = int(self._map.pop("DECIMAL_PLACES"))
-        self.DECIMAL_ZERO = 10**-(self.DECIMAL_PLACES + 1)
+        comments = {}
+        self._map["__COMMENTS__"] = comments
+        for key, val, comment in db.select(
+            f"KEY, VALUE, COMMENT from {self.__table}"
+        ):
+            comments[key] = comment
+            self._map[key] = val
+        #print("\§CONFIG:", self._map)
 
     def __getattr__(self, key) -> Any:
+        if key == "DECIMAL_PLACES":
+            return int(self._map["DECIMAL_PLACES"])
+        if key == "DECIMAL_ZERO":
+            return 10**-(self.DECIMAL_PLACES + 1)
         return self._map[key]
 #+
 CONFIG = _CONFIG()
 
 
 class _CALENDAR:
+    __slots__ = ("_map",)
+    __table = "__CALENDAR__"
+    _create = f"""CREATE TABLE {__table} (
+        id      INTEGER PRIMARY KEY NOT NULL,
+        KEY     TEXT    UNIQUE NOT NULL,
+        DATE1   TEXT    NOT NULL,
+        DATE2   TEXT    NOT NULL,
+        COMMENT TEXT    NOT NULL
+    )
+    STRICT;
+    """
+
     def __init__(self):
         self._map = {}
 
     def init(self, db):
         self._map.clear()
-        hols = []
-        cstmap = {}
-        reports = {}
-        self._map["__HOLIDAYS__"] = hols
-        self._map["__CUSTOM__"] = cstmap
-        self._map["__REPORTS__"] = reports
-        for rec in db.table("__CALENDAR__").records:
-            key = rec.KEY
-            d1, d2 = rec.DATE1, rec.DATE2
-            if not d1:
-                continue
-            val = None
-            if d2:
-                if d2 == "X":
-                    # Only the first "date" is relevant, but it won't
-                    # be checked, to allow other formats, etc.
-                    val = d1
-                else:
-                    if isodate(d2) is None:
-                        REPORT_ERROR(T("BAD_DATE", key = key, date = d2))
-                        continue
-            if val is None:
-                if isodate(d1) is None:
-                    REPORT_ERROR(T("BAD_DATE", key = key, date = d1))
-                    continue
-                val = (d1, d2) if d2 else d1
-            key0 = key[0]
-            if key0 == '_':
-                # Holidays
-                hols.append(val)
-            elif key0 == '*':
-                # "Custom" values
-                cstmap[key[1:]] = val
-            elif key0 == '.':
-                # Date for reports, etc.
-                reports[key] = val
-            else:
-                self._map[key] = val
+        self._map["__HOLIDAYS__"] = {}
+        self._map["__CUSTOM__"] = {}
+        self._map["__REPORTS__"] = {}
+        records = {}
+        self._map["__RECORDS__"] = records
+        for key, d1, d2, comment in db.select(
+            f"KEY, DATE1, DATE2, COMMENT from {self.__table}"
+        ):
+            records[key] = [d1, d2, comment]
+            self.set_key(key, d1, d2)
         #print("§CALENDAR:", self._map)
+
+    def set_key(self, key, d1, d2):
+        val = None
+        if d2:
+            if d2 == "X":
+                # Only the first "date" is relevant, but it won't
+                # be checked, to allow other formats, etc.
+                val = d1
+            else:
+                if isodate(d2) is None:
+                    REPORT_ERROR(T("BAD_DATE", key = key, date = d2))
+                    return
+        if val is None:
+            if isodate(d1) is None:
+                REPORT_ERROR(T("BAD_DATE", key = key, date = d1))
+                return
+            val = (d1, d2) if d2 else d1
+        key0 = key[0]
+        if key0 == '_':
+            self._map["__HOLIDAYS__"][key] = val
+        elif key0 == '*':
+            self._map["__CUSTOM__"][key] = val
+        elif key0 == '.':
+            self._map["__REPORTS__"][key] = val
+        else:
+            self._map[key] = val
 
     def __getattr__(self, key) -> Any:
         return self._map[key]
@@ -188,6 +215,78 @@ class _CALENDAR:
             for f, val in self._map.items()
             if isinstance(val, str)
         }
+
+    def update(self,
+        KEY: str,
+        DATE1: str = None,
+        DATE2: str = None,
+        COMMENT: str = None,
+    ):
+        """Update or extend database table.
+        """
+        db = get_database()
+        try:
+            old_value = self._map["__RECORDS__"][KEY]
+        except KeyError:
+            ## new record
+            if (
+                (DATE1 is None or DATE2 is None or COMMENT is None)
+                or DATE2 != "X" and (
+                    not isodate(DATE1) or (DATE2 and not isodate(DATE2))
+                )
+            ):
+                REPORT_CRITICAL(
+                    "Bug in basic_data::_CALENDAR.update, got bad data:\n"
+                    f"  DATE1: {repr(DATE1)}\n"
+                    f"  DATE2: {repr(DATE2)}\n"
+                    f"  COMMENT: {repr(COMMENT)}"
+                )
+            flist = ["KEY", "DATE1", "DATE2", "COMMENT"]
+            vlist = [KEY, DATE1, DATE2, COMMENT]
+            self._map["__RECORDS__"][KEY] = [DATE1, DATE2, COMMENT]
+            db.insert(self.__table, flist, vlist)
+            self.set_key(KEY, DATE1, DATE2)
+        else:
+            ## existing record
+            d1, d2, comment = old_value
+            flist, vlist = [], []
+            if DATE2 is None:
+                DATE2 = d2
+            else:
+                if DATE2 != "X":
+                    if DATE1 is None and not isodate(d1):
+                        REPORT_CRITICAL(
+                            "Bug: basic_data::_CALENDAR.update."
+                            f" New DATE2 ({DATE2}) is incompatible with"
+                            f" existing DATE1 ({d1})"
+                        )
+                    if DATE2 and not isodate(DATE2):
+                        REPORT_CRITICAL(
+                            "Bug: basic_data::_CALENDAR.update"
+                            f" got bad DATE2 ({DATE2})"
+                        )
+                flist.append("DATE2")
+                vlist.append(DATE2)
+                old_value[1] = DATE2
+            if DATE1 is not None:
+                if DATE2 != "X" and not isodate(DATE1):
+                    REPORT_CRITICAL(
+                        "Bug: basic_data::_CALENDAR.update"
+                        f" got bad DATE1 ({DATE1})"
+                    )
+                flist.append("DATE1")
+                vlist.append(DATE1)
+                old_value[0] = DATE1
+            if COMMENT is not None:
+                flist.append("COMMENT")
+                vlist.append(COMMENT)
+                old_value[2] = COMMENT
+            vlist.append(KEY)
+            db.transaction(
+                f"update {self.__table} set {', '.join(flist)} where KEY = ?",
+                vlist
+            )
+            self.set_key(KEY, old_value[0], old_value[1])
 #+
 CALENDAR = _CALENDAR()
 
@@ -234,47 +333,6 @@ def fix_is_zero(value: float) -> bool:
     abs(value) < CONFIG.DECIMAL_ZERO
 
 
-class Config(db_Table):
-    table = "__CONFIG__"
-
-    @classmethod
-    def init(cls) -> bool:
-        if cls.fields is None:
-            cls.init_fields(
-                DB_PK(),
-                DB_FIELD_TEXT("KEY", unique = True),
-                DB_FIELD_TEXT("VALUE"),
-                DB_FIELD_TEXT("COMMENT"),
-            )
-            return True
-        return False
-
-    #    def __init__(self, db: Database):
-    #        self.init()
-    #        super().__init__(db)
-#+
-DB_TABLES["__CONFIG__"] = Config
-
-
-class Calendar(db_Table):
-    table = "__CALENDAR__"
-
-    @classmethod
-    def init(cls) -> bool:
-        if cls.fields is None:
-            cls.init_fields(
-                DB_PK(),
-                DB_FIELD_TEXT("KEY", unique = True),
-                DB_FIELD_TEXT("DATE1"),
-                DB_FIELD_TEXT("DATE2"),
-                DB_FIELD_TEXT("COMMENT"),
-            )
-            return True
-        return False
-#+
-DB_TABLES["__CALENDAR__"] = Calendar
-
-
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
 
 if __name__ == "__main__":
@@ -283,11 +341,14 @@ if __name__ == "__main__":
     db = get_database()
 
     print("\n?CONFIG:")
-    print(f"  SCHOOL: {repr(CONFIG.SCHOOL)}")
-    print(f"  DECIMAL_SEP: {repr(CONFIG.DECIMAL_SEP)}")
-    print(f"  DECIMAL_PLACES: {repr(CONFIG.DECIMAL_PLACES)}")
+    comments = CONFIG._map.pop("__COMMENTS__")
+    for k, v in CONFIG._map.items():
+        print(" --", k, "::", repr(v), "//", comments.get(k))
+
+    print(f"\n  DECIMAL_PLACES: {repr(CONFIG.DECIMAL_PLACES)}")
     print(f"  DECIMAL_ZERO: {repr(CONFIG.DECIMAL_ZERO)}")
 
+    print("\n ======= print_fix =======")
     print("§N 6.789@3:", print_fix(6.789, 3))
     print("§N 6.780@3:", print_fix(6.780, 3))
     print("§N 6.700@3:", print_fix(6.700, 3))

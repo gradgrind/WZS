@@ -1,7 +1,7 @@
 """
 ui/modules/grades_manager.py
 
-Last updated:  2024-01-27
+Last updated:  2024-01-28
 
 Front-end for managing grade reports.
 
@@ -75,7 +75,7 @@ from core.base import (
     REPORT_ERROR,
     REPORT_CRITICAL,
 )
-from core.basic_data import get_database, CONFIG
+from core.basic_data import get_database, CONFIG, CALENDAR
 from core.dates import print_date
 from core.list_activities import report_data
 from grades.grade_tables import GradeTable, DelegateColumnInfo
@@ -89,8 +89,8 @@ UPDATE_PAUSE = 1000     # time between cell edit and db update in ms
 #TODO:
 # 1) Write to group data.
 # 2) Set grade list.
-# 3) Add missing funtions.
-# 3) Tidying.
+# 3) Add missing functions.
+# 4) Tidying.
 
 
 class GradeTableDelegate(QStyledItemDelegate):
@@ -245,9 +245,10 @@ class GradeTableDelegate(QStyledItemDelegate):
 
 
 class GroupDataProxy(QObject):
-    def __init__(self, table_widget: QTableWidget):
+    def __init__(self, table_widget: QTableWidget, grade_table_proxy):
         super().__init__()
         self.table = table_widget
+        self.grade_table_proxy = grade_table_proxy
 
     def get_dci(self, row, col) -> DelegateColumnInfo:
         """This provides the <DelegateColumnInfo> instance relevant for
@@ -283,7 +284,6 @@ class GroupDataProxy(QObject):
         dci = self.dci_list[row]
         print("§CHANGED group-data:", row, col, val, dci)
         # Set data in underlying table
-#?        dci = self.get_column_info(col)
         bad_field = dci.validate(val, write = True)
         if bad_field:
             REPORT_ERROR(T("WRITE_GROUP_VALUE_ERROR",
@@ -294,15 +294,28 @@ class GroupDataProxy(QObject):
         # Set cell in gui table
         self.table.itemDelegate().write_cell(row, col, val)
 
+#+++++++++++
 #--
         return False
 
-        self.dci_list[row].DATA["default"] = val
-
+        dci = self.dci_list[row]
+        dci.DATA["default"] = val
+        flags = dci.FLAGS
+        if "C" in flags:
+            # This is a calendar field, update it there
+            CALENDAR.update(dci.DATA["calendar_key"], val)
+        elif "S" in flags:
+            pass
+#TODO: This is more complicated, the field could be direct or in EXTRA
+# (any other possibilities?). EXTRA field entries might get an extra flag?
 #TODO: There are presumably also grade entries which need updating if
 # they have the old value ...!
 
         # Update database
+# Would need to know which column, to use grade_table.write ... and
+# how do I get at grade_table??? ...
+        #! via <self.grade_table_proxy>
+# Perhaps the column should be a DATA field ("column"?!).
         print("§§§TODO")
         return True
 
@@ -337,7 +350,7 @@ class ManageGradesPage(QObject):
         self.ui = load_ui("grades.ui", parent, self)
         # group-data table
         dtw = self.ui.date_table
-        self.group_data_proxy = GroupDataProxy(dtw)
+        self.group_data_proxy = GroupDataProxy(dtw, self)
         dtw.setItemDelegate(GradeTableDelegate(
             table_widget = dtw, data_proxy = self.group_data_proxy
         ))

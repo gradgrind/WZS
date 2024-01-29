@@ -1,5 +1,5 @@
 """
-core/dates.py - last updated 2024-01-23
+core/dates.py - last updated 2024-01-29
 
 Manage date-related information.
 
@@ -141,29 +141,19 @@ def migrate_calendar(new_year: str = None
     y0, y1 = CALENDAR.ACCOUNTING_YEAR
     y0 = y0.split('-', 1)[0]
     y1 = y1.split('-', 1)[0]
-    dy = 1 if new_year is None else int(new_year) - y
+    dy = int(new_year) - y if new_year else 1
     ny0 = str(int(y0) + dy)
     ny1 = str(int(y1) + dy)
-    db = get_database()
-    cal = db.table("__CALENDAR__")
     changes = []
-    for rec in cal.records:
-        ddb = {}
-        d1 = rec.DATE1
+    for key, val in CALENDAR.__RECORDS__.items():
+        d1, d2, c = val
         if d1:
-            d_y, d_md = d1.split('-', 1)
-            if d_y == y0:
-                ddb["DATE1"] = f"{ny0}-{d_md}"
-            elif d_y == y1:
-                ddb["DATE1"] = f"{ny1}-{d_md}"
-        d2 = rec.DATE2
-        if d2:
-            d_y, d_md = d2.split('-', 1)
-            if d_y == y0:
-                ddb["DATE2"] = f"{ny0}-{d_md}"
-            elif d_y == y1:
-                ddb["DATE2"] = f"{ny1}-{d_md}"
-        changes.append((rec.id, rec.KEY, ddb))
+            _d = d1.replace(y0, "$0$").replace(y1, "$1$")
+            d1 = _d.replace("$0$", ny0).replace("$1$", ny1)
+        if d2 and d2 != "X":
+            _d = d2.replace(y0, "$0$").replace(y1, "$1$")
+            d2 = _d.replace("$0$", ny0).replace("$1$", ny1)
+        changes.append((key, d1, d2))
     return changes
 
 

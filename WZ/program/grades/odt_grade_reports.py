@@ -378,7 +378,7 @@ if __name__ == "__main__":
     _o = "1. Halbjahr"
     _cg = "12G.R"
     _cg = "12G.G"
-    _cg = "13"
+    #_cg = "13"
     #_cg = "11G"
     outdir = DATAPATH(f"{_o}/{_cg}".replace(" ", "_"), "working_data")
     print("§outdir", outdir)
