@@ -1,5 +1,5 @@
 """
-core/students.py - last updated 2024-01-29
+core/students.py - last updated 2024-01-30
 
 Manage students data.
 
@@ -41,8 +41,8 @@ from core.db_access import (
     db_Table,
     DB_PK,
     DB_FIELD_TEXT,
-    DB_FIELD_JSON,
     DB_FIELD_REFERENCE,
+    DB_FIELD_JSON,
 )
 from core.classes import Classes
 
@@ -77,7 +77,7 @@ class Students(db_Table):
                 DB_FIELD_TEXT("DATE_EXIT"),
                 DB_FIELD_TEXT("BIRTHPLACE"),
                 DB_FIELD_TEXT("GROUPS"),
-                DB_FIELD_JSON("EXTRA", schema = EXTRA_SCHEMA)
+                DB_FIELD_JSON("__EXTRA__", schema = EXTRA_SCHEMA),
             )
             return True
         return False
@@ -98,7 +98,7 @@ class Students(db_Table):
             v = getattr(data, fname)
             if isinstance(v, str):
                 d[fname] = v
-        d.update(data.EXTRA)
+        d.update(data.__EXTRA__)
         d["NAME"] = self.get_name(data)
         d["FULLNAME"] = self.get_fullname(data)
         return d
@@ -127,7 +127,7 @@ class Students(db_Table):
         slist = []
         for data in self.records:
             if data.Class.id == class_id:
-                if group and group not in data.EXTRA["GROUPS"].split():
+                if group and group not in data.GROUPS.split():
                     continue
                 slist.append(data)
         return slist
@@ -148,8 +148,9 @@ if __name__ == "__main__":
     #    print("  --", s)
 
     '''
+    from core.db_access import to_json
     for rec in students.records:
-        x = rec.EXTRA
+        x = rec.__EXTRA__
         for k, v in x.items():
             print(" --", rec.Class.CLASS, rec.id, k, v)
         try:
@@ -159,15 +160,9 @@ if __name__ == "__main__":
         else:
             if g:
                 db.update("STUDENTS", rec.id, "GROUPS", g)
-        for k, v in x.items():
-            flist = ["Student_id", "KEY", "VALUE"]
-            vlist = [rec.id, k, v]
-            db.insert("STUDENT_EXTRA", flist, vlist)
+            db.update("STUDENTS", rec.id, "__EXTRA__", to_json(x))
     quit(2)
     '''
-
-    #students.update_json_cell(415, "EXTRA", LEVEL="Gym", SEX="w")
-    #print("§§§", slist[-1])
 
     classes = Classes(db)
     for cid, CLASS, NAME in classes.class_list():

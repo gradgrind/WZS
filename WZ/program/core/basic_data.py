@@ -1,5 +1,5 @@
 """
-core/basic_data.py - last updated 2024-01-29
+core/basic_data.py - last updated 2024-01-30
 
 Configuration and other basic data dependent on the database.
 
@@ -55,9 +55,6 @@ from core.base import (
 from core.db_access import (
     Database,
     DB_TABLES,
-    db_Table,
-    DB_PK,
-    DB_FIELD_TEXT,
 )
 
 __DB = None # the current database, set in "get_database"
@@ -192,10 +189,13 @@ class _CALENDAR:
                     REPORT_ERROR(T("BAD_DATE", key = key, date = d2))
                     return
         if val is None:
-            if isodate(d1) is None:
-                REPORT_ERROR(T("BAD_DATE", key = key, date = d1))
+            if isodate(d1):
+                val = (d1, d2) if d2 else d1
+            else:
+                if d1:
+                    REPORT_ERROR(T("BAD_DATE", key = key, date = d1))
+                # If (also) <d1> is empty, this entry will be ignored
                 return
-            val = (d1, d2) if d2 else d1
         key0 = key[0]
         if key0 == '_':
             self._map["__HOLIDAYS__"][key] = val

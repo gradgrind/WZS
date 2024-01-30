@@ -1,5 +1,5 @@
 """
-grades/grade_tables.py - last updated 2024-01-28
+grades/grade_tables.py - last updated 2024-01-30
 
 Manage grade tables.
 
@@ -249,7 +249,7 @@ def students_grade_info(
     #:: {student_id: {{subject_id: { teacher_id, ... }}, ... } ... }
     for pdata in plist:
         #print("§pdata:", pdata)
-        gfield = pdata.EXTRA.get("GROUPS") or ""
+        gfield = pdata.GROUPS
         ags = allags.copy()
         if gfield:
             for g in gfield.split():
@@ -351,8 +351,13 @@ def grade_table_data(
                         student = pname,
                     ))
                 gmap[s_id] = NO_GRADE
-        if "LEVEL" not in pgrades:
-            gmap["LEVEL"] = pdata.EXTRA.get("LEVEL") or ""
+
+#TODO: Can I get rid of this???
+#        if "LEVEL" not in pgrades:
+#            try:
+#                gmap["LEVEL"] = pdata.LEVEL
+#            except AttributeError:
+#                gmap["LEVEL"] = ""
         # Fetch non-grade items from <pgrades>
         for k, v in pgrades.items():
             try:
@@ -643,13 +648,7 @@ class GradeTable:
                 gr = gmap.get(s_id) or ""
                 if (not gr):
                     if "S" in dci.FLAGS:
-                        # Get value from student's EXTRA data
-                        try:
-                            gr = stdata.EXTRA[s_id]
-                        except KeyError:
-                            pass
-                    elif "s" in dci.FLAGS:
-                        # Get value from student's main data
+                        # Get value from student's data
                         try:
                             gr = getattr(stdata, s_id)
                         except AttributeError:

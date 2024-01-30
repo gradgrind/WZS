@@ -1,5 +1,5 @@
 """
-text/odt_support.py - last updated 2024-01-09
+text/odt_support.py - last updated 2024-01-30
 
 Support simple editing of odt-files (for LibreOffice) as templates.
 
@@ -227,7 +227,7 @@ if __name__ == "__main__":
         "LEVEL": "My level",
         "SCHOOL": "My School",
         "SCHOOL_YEAR": "2024",
-        "EXTRA": "Not included",
+#?        "EXTRA": "Not included",
     }
 
     odt, m, u = write_ODT_template(filepath, fields)

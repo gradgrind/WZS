@@ -1,7 +1,7 @@
 """
 core/db_access.py
 
-Last updated:  2024-01-29
+Last updated:  2024-01-30
 
 Helper functions for accessing the database.
 
@@ -313,6 +313,13 @@ class db_Table:
                 setattr(fmap, ftype.field, v)
             id2index[row[0]] = len(records)
             records.append(fmap)
+            try:
+                extra = fmap.__EXTRA__
+            except AttributeError:
+                pass
+            else:
+                for k, v in extra.items():
+                    setattr(fmap, k, v)
             #print("§row:", fmap)
 
     def __getitem__(self, rowid: int):
@@ -327,10 +334,29 @@ class db_Table:
         Also the memory-based data structure will be updated.
         Return <True> if successful.
         """
+        try:
+            # Get the field type
+            ftype = self.field2type[field]
+        except KeyError:
+            if "__EXTRA__" not in self.field2type:
+                REPORT_CRITICAL(
+                    f"Bug: Attempt to update non-existent field ({field})"
+                    f" in table {self.table}"
+                )
+            # Write to json field __EXTRA__
+            # Only support string values
+            if type(value) != str:
+                REPORT_CRITICAL(
+                    f"Bug: Writing non-string value to field {field}"
+                    f" of table {self.table}:\n  {repr(value)}"
+                )
+            self.update_json_cell(rowid, "__EXTRA__", **{field: value})
+            # This is the special bit: the field is also written to the
+            # row record
+            setattr(self[id], value)
+            return True
+
         ## Check validity of value
-        # Get the field type
-        ftype = self.field2type[field]
-        # Check validity of value
         v, e = ftype.validate(self.db, value)
         if e:
             REPORT_ERROR(T("UPDATE_VALIDATION_FAILED",
@@ -387,6 +413,8 @@ class db_Table:
         Also the memory-based data structure will be updated.
         Return <True> if successful.
         """
+#TODO: add __EXTRA__ support?
+
         ## Check validity of values
         cells_db = []
         cells_mem = []
@@ -418,6 +446,8 @@ class db_Table:
         the parameter <id> should be set.
         Return a list containing the rowids of the inserted records.
         """
+#TODO: add __EXTRA__ support?
+
         ids = []
         for rec in records:
             flist, vlist = [], []
