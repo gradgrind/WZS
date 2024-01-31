@@ -1,7 +1,7 @@
 """
 ui/modules/grades_manager.py
 
-Last updated:  2024-01-28
+Last updated:  2024-01-31
 
 Front-end for managing grade reports.
 
@@ -77,7 +77,7 @@ from core.base import (
 )
 from core.basic_data import get_database, CONFIG, CALENDAR
 from core.dates import print_date
-from core.list_activities import report_data
+from core.list_activities import class_report_data
 from grades.grade_tables import GradeTable, DelegateColumnInfo
 from grades.ods_template import BuildGradeTable
 
@@ -151,10 +151,10 @@ class GradeTableDelegate(QStyledItemDelegate):
             y = tw.rowViewportPosition(row)
             x = tw.columnViewportPosition(col)
             self._list_choice.move(parent.mapToGlobal(QPoint(x, y)))
-            v = self._list_choice.open(dci.DATA, value)
+            v = self._list_choice.open(dci.DATA["__CHOICE__"], value)
             if v is not None and v != value:
                 #print("§saving:", value, "->", v)
-                self._table.write(row, col, v)
+                self._table.write_dp(row, col, v)
             return None
         if ctype == "TEXT":
             y = tw.rowViewportPosition(row)
@@ -163,7 +163,7 @@ class GradeTableDelegate(QStyledItemDelegate):
             v = self._text_editor.open(value)
             if v is not None and v != value:
                 #print("§saving:", value, "->", v)
-                self._table.write(row, col, v)
+                self._table.write_dp(row, col, v)
             return None
         if ctype == "DATE":
             y = tw.rowViewportPosition(row)
@@ -172,7 +172,7 @@ class GradeTableDelegate(QStyledItemDelegate):
             v = self._calendar.open(value)
             if v is not None and v != value:
                 #print("§saving:", value, "->", v)
-                self._table.write(row, col, v)
+                self._table.write_dp(row, col, v)
             return None
 #TODO: other types?
         e = self._editor
@@ -204,7 +204,7 @@ class GradeTableDelegate(QStyledItemDelegate):
         # The "editor" must be an object whose value is available via
         # the "text" method – like a QLineEdit.
         print("§setModelData:", index.row(), index.column(), editor.text())
-        self._table.write(index.row(), index.column(), editor.text())
+        self._table.write_dp(index.row(), index.column(), editor.text())
 
     def _column_width(self, dci) -> int:
         """Return the minimum width for the column.
@@ -222,7 +222,7 @@ class GradeTableDelegate(QStyledItemDelegate):
         if ctype == "COMPOSITE!":
             return self._min_grade_width + self._m_width
         if ctype == "CHOICE":
-            return self._max_width(dci.DATA) + self._m_width * 2
+            return self._max_width(dci.DATA["__CHOICE__"]) + self._m_width * 2
         if ctype == "DATE":
             return self._min_date_width
         if ctype == "TEXT":
@@ -274,12 +274,14 @@ class GroupDataProxy(QObject):
     def read(self, row: int, col: int, copy_internal: bool = True) -> str:
         assert col == 0
         if copy_internal:
-            return self.dci_list[row].DATA["default"]
+            return self.dci_list[row].DATA.get("default") or ""
         else:
             return self.table.item(row, col).text()
 
-#TODO!
-    def write(self, row: int, col: int, val: str) -> bool:
+    def write_dp(self, row: int, col: int, val: str) -> bool:
+        """Write to a group data field, and thus also (potentially) to the
+        corresponding grade table cells.
+        """
         assert col == 0
         dci = self.dci_list[row]
         print("§CHANGED group-data:", row, col, val, dci)
@@ -293,30 +295,22 @@ class GroupDataProxy(QObject):
             return False
         # Set cell in gui table
         self.table.itemDelegate().write_cell(row, col, val)
-
-#+++++++++++
-#--
-        return False
-
-        dci = self.dci_list[row]
+        # Update related items, including database
+        val0 = dci.DATA.get("default") or ""
         dci.DATA["default"] = val
-        flags = dci.FLAGS
-        if "C" in flags:
-            # This is a calendar field, update it there
-            CALENDAR.update(dci.DATA["calendar_key"], val)
-        elif "S" in flags:
-            pass
-#TODO: This is more complicated, the field could be direct or in EXTRA
-# (any other possibilities?). EXTRA field entries might get an extra flag?
-#TODO: There are presumably also grade entries which need updating if
-# they have the old value ...!
-
-        # Update database
-# Would need to know which column, to use grade_table.write ... and
-# how do I get at grade_table??? ...
-        #! via <self.grade_table_proxy>
-# Perhaps the column should be a DATA field ("column"?!).
-        print("§§§TODO")
+        if val != val0:
+            if "C" in dci.FLAGS:
+                # This is a calendar field, update it there
+                CALENDAR.update(dci.DATA["calendar_key"], val)
+            try:
+                col = dci.DATA["column"]
+            except KeyError:
+                pass
+            else:
+                r_changes = self.grade_table_proxy.update_all(col, val, val0)
+                for r, changes in r_changes:
+                    for c, v in changes.items():
+                        self.table.itemDelegate().write_cell(r, c, v)
         return True
 
 
@@ -392,8 +386,7 @@ class ManageGradesPage(QObject):
         # filter. These are lists of tuples:
         #    (db-primary-key, short form, full name)
         self.db = get_database()
-#TODO: What about scrapping the teachers list from <report_data>?
-        self.report_info = report_data(GRADES = True)[0] # only for the classes
+        self.report_info = class_report_data(GRADES = True)
         ## Set up widgets
         self.suppress_handlers = True
         # Set up the "occasions" choice.
@@ -424,8 +417,8 @@ class ManageGradesPage(QObject):
         else:
             return self.ui.grade_table.item(row, col).text()
 
-    def write(self, row: int, col: int, val: str) -> bool:
-        print("§CHANGED:", row, col, val)
+    def write_dp(self, row: int, col: int, val: str) -> bool:
+        #print("§CHANGED:", row, col, val)
         # Set data in underlying table
         dci = self.get_dci(row, col)
         bad_field = dci.validate(val, write = True)
@@ -436,7 +429,7 @@ class ManageGradesPage(QObject):
                 value = val
             ))
             return False
-        self.grade_table.write(row, col, val)
+        self.grade_table.write_gt(row, col, val)
         # Set cell in gui table
         self._delegate.write_cell(row, col, val)
         # Trigger row calculation with database update
@@ -455,6 +448,10 @@ class ManageGradesPage(QObject):
     # Needed for the copy-paste facility
     def selectedRanges(self):
         return self.ui.grade_table.selectedRanges()
+
+    def update_all(self, col: int, val: str, val0: str
+    ) -> list[tuple[int, dict[int, str]]]:
+        return self.grade_table.update_all(col, val, val0)
 
     ### actions ###
 
@@ -490,10 +487,11 @@ class ManageGradesPage(QObject):
         headers = []    # grade-table column headers
         dtdata = []     # Underlying data for group-data table
         for dci in grade_table.column_info:
-            headers.append(dci.LOCAL)
             if "*" in dci.FLAGS:
                 # Add to group-data table
+                dci.DATA["column"] = len(headers)
                 dtdata.append(dci)
+            headers.append(dci.LOCAL)
         ## Initialize group-data table
         self.group_data_proxy.set_data(dtdata)
         ## Initialize grade table

@@ -1,5 +1,5 @@
 """
-grades/grade_tables.py - last updated 2024-01-30
+grades/grade_tables.py - last updated 2024-01-31
 
 Manage grade tables.
 
@@ -429,7 +429,7 @@ class DelegateColumnInfo:
             if value not in self.DATA["valid"]:
                 ok = False
         elif ctype == "CHOICE":
-            if value not in self.DATA:
+            if value not in self.DATA["__CHOICE__"]:
                 ok = False
         elif ctype == "DATE":
             if isodate(value) is None:
@@ -467,9 +467,36 @@ class GradeTable:
 #TODO: trap index error?
         return self.lines[row].values[column]
 
-    def write(self, row: int, column: int, value: str):
+    def write_gt(self, row: int, column: int, value: str):
+        """Write to the table memory cell.
+        Note that the GRADES database table is not updated. For that to
+        happen, a later call to <calculate_row> is needed.
+        """
 #TODO: trap index error?
-        self.lines[row].values[column] = value
+        line = self.lines[row]
+        line.values[column] = value
+        dci = self.column_info[column]
+        if "S" in dci.FLAGS:
+            # Update entry in STUDENTS
+            students = get_database().table("STUDENTS")
+            students.update_cell(line.student_id, dci.NAME, value)
+
+    def update_all(self, col: int, val: str, val0: str = None
+    ) -> list[tuple[int, dict[int, str]]]:
+        #print("§update_all: TODO", col, val, val0)
+        extra_changes = []
+        for r, line in enumerate(self.lines):
+            value0 = line.values[col]
+            # Don't update if the existing (non-null) value differs
+            # from the previous group value, or if the existing value
+            # is the same as the new value.
+            if value0 and (value0 != val0 or value0 == val):
+                continue
+            self.write_gt(r, col, val)
+            # Update the database GRADES table, accumulate follow-on
+            # changes (there probably aren't any, but just in case ...)
+            extra_changes.append((r, self.calculate_row(r)))
+        return extra_changes
 
     def __init__(self,
         occasion: str,

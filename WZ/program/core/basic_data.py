@@ -1,5 +1,5 @@
 """
-core/basic_data.py - last updated 2024-01-30
+core/basic_data.py - last updated 2024-01-31
 
 Configuration and other basic data dependent on the database.
 
@@ -229,23 +229,26 @@ class _CALENDAR:
             old_value = self._map["__RECORDS__"][KEY]
         except KeyError:
             ## new record
+            d2 = DATE2 or ""
+            c = COMMENT or ""
             if (
-                (DATE1 is None or DATE2 is None or COMMENT is None)
-                or DATE2 != "X" and (
-                    not isodate(DATE1) or (DATE2 and not isodate(DATE2))
+                not DATE1
+                or d2 != "X" and (
+                    not isodate(DATE1) or (d2 and not isodate(d2))
                 )
             ):
                 REPORT_CRITICAL(
                     "Bug in basic_data::_CALENDAR.update, got bad data:\n"
+                    f"  KEY: {repr(KEY)}\n"
                     f"  DATE1: {repr(DATE1)}\n"
                     f"  DATE2: {repr(DATE2)}\n"
                     f"  COMMENT: {repr(COMMENT)}"
                 )
             flist = ["KEY", "DATE1", "DATE2", "COMMENT"]
-            vlist = [KEY, DATE1, DATE2, COMMENT]
-            self._map["__RECORDS__"][KEY] = [DATE1, DATE2, COMMENT]
+            vlist = [KEY, DATE1, d2, c]
+            self._map["__RECORDS__"][KEY] = [DATE1, d2, c]
             db.insert(self.__table, flist, vlist)
-            self.set_key(KEY, DATE1, DATE2)
+            self.set_key(KEY, DATE1, d2)
         else:
             ## existing record
             d1, d2, comment = old_value
@@ -265,7 +268,7 @@ class _CALENDAR:
                             "Bug: basic_data::_CALENDAR.update"
                             f" got bad DATE2 ({DATE2})"
                         )
-                flist.append("DATE2")
+                flist.append("DATE2 = ?")
                 vlist.append(DATE2)
                 old_value[1] = DATE2
             if DATE1 is not None:
@@ -274,11 +277,11 @@ class _CALENDAR:
                         "Bug: basic_data::_CALENDAR.update"
                         f" got bad DATE1 ({DATE1})"
                     )
-                flist.append("DATE1")
+                flist.append("DATE1 = ?")
                 vlist.append(DATE1)
                 old_value[0] = DATE1
             if COMMENT is not None:
-                flist.append("COMMENT")
+                flist.append("COMMENT = ?")
                 vlist.append(COMMENT)
                 old_value[2] = COMMENT
             vlist.append(KEY)

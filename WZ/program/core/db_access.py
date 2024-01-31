@@ -1,7 +1,7 @@
 """
 core/db_access.py
 
-Last updated:  2024-01-30
+Last updated:  2024-01-31
 
 Helper functions for accessing the database.
 
@@ -353,7 +353,7 @@ class db_Table:
             self.update_json_cell(rowid, "__EXTRA__", **{field: value})
             # This is the special bit: the field is also written to the
             # row record
-            setattr(self[id], value)
+            setattr(self[rowid], field, value)
             return True
 
         ## Check validity of value

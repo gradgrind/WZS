@@ -1,7 +1,7 @@
 """
 core/list_activities.py
 
-Last updated:  2024-01-05
+Last updated:  2024-01-30
 
 Present information on activities for teachers and classes/groups.
 The information is formatted in pdf documents using the reportlab
@@ -820,7 +820,7 @@ def make_class_table_pdf(with_comments = True):
     return pdf
 
 
-def report_data(GRADES = False) -> tuple[
+def report_data(GRADES: bool = False) -> tuple[
     # class-based report info
     dict[str, list[
         tuple[db_TableRow, Optional[tuple[str, str]], str, list[db_TableRow]]
@@ -892,6 +892,17 @@ def report_data(GRADES = False) -> tuple[
             t_list.append((sbj, report_title_signed, cglist))
 
     return c_reports, t_reports
+
+#TODO: Do I really need the teacher result from <report_data()>?
+def class_report_data(GRADES: bool = False) -> dict[str, list[
+    tuple[
+        db_TableRow,
+        Optional[tuple[str, str]],
+        str,
+        list[db_TableRow]]
+    ]
+]:
+    return report_data(GRADES)[0]
 
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
