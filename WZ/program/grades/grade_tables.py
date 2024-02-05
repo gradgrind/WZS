@@ -1,5 +1,5 @@
 """
-grades/grade_tables.py - last updated 2024-01-31
+grades/grade_tables.py - last updated 2024-02-05
 
 Manage grade tables.
 
@@ -36,7 +36,7 @@ T = Tr("grades.grade_tables")
 
 ### +++++
 
-from typing import Any, Optional, NamedTuple
+from typing import Optional, NamedTuple
 import json
 from colorsys import rgb_to_hls, hls_to_rgb
 
@@ -59,7 +59,7 @@ from core.db_access import (
 from core.basic_data import CALENDAR, get_database, CONFIG, isodate
 from core.classes import GROUP_ALL, class_group_split_with_id
 from core.students import Students
-from core.list_activities import report_data
+from core.list_activities import class_report_data
 import local
 
 NO_GRADE = '/'
@@ -81,34 +81,6 @@ class Grades(db_Table):
             )
             return True
         return False
-
-#TODO: deprecated
-    def grades_occasion_group(self,
-        occasion: str,
-        class_group: str,
-    ) -> dict[int, dict[int, str]]:
-        """Return a mapping with an entry for each student in the group
-        who has an entry for the given occasion.
-        The values are mappings: str(subject-id) -> grade
-        NOTE that the grade mapping can include also non-grade elements,
-        like DATE_ISSUE and LEVEL (this LEVEL should be used rather than
-        that of the student as the latter might have changed after this
-        set of reports).
-        """
-        REPORT_WARNING(
-            "<Grades.grades_occasion_group> is deprecated."
-            " Use <Grades.grades_for_occasion_group> instead, noting"
-            " the different returned structure."
-        )
-        return {
-            rec.Student.id: rec.GRADE_MAP
-            for rec in self.records
-            if (
-                rec.OCCASION == occasion
-                and rec.CLASS_GROUP == class_group
-#                and rec.TAG == tag
-            )
-        }
 
     class GradeMap:
         __slots__ = (
@@ -172,7 +144,7 @@ def subject_map(
     group: str = GROUP_ALL,
     report_info = None,
 ) -> tuple[dict, dict]:
-    """<report_info> is class-info from <report_data()[0]>.
+    """<report_info> is class-info from <class_report_data()>.
     Return subject information for the given class-group, as a mapping:
         {subject-id: {atomic-group-id: {set of teacher-ids}}}
     """
@@ -183,11 +155,11 @@ def subject_map(
     g_atoms = group_info[group].atomic_group_set
     #print("§g_atoms:", g_atoms)
     ## No-pupil- and no-teacher-groups are not filtered out by
-    ## <report_data()>, but the course editor shouldn't let them be
+    ## <class_report_data()>, but the course editor shouldn't let them be
     ## declared as having reports.
     smap = {}
     if not report_info:
-        report_info = report_data(GRADES = True)[0]
+        report_info = class_report_data(GRADES = True)
     for s in report_info[class_id]:
         ## Filter subjects on group as well as class.
         #: s = (sbj, report_info, GROUP_TAG, tlist)
@@ -274,108 +246,6 @@ def students_grade_info(
     return (slist, plist, p_subjects)
 
 
-def grade_table_data(
-    occasion: str,
-    class_group: str,
-    report_info = None,     # class-info from <report_data()[0]>
-    grades = None
-) -> tuple[
-    dict[str, str],
-    list[db_TableRow], # list of "SUBJECTS" entries
-    list[dict[str, Any]]
-]:
-    """Collect the information necessary for grade input for the given group.
-    If grades are supplied, include these.
-    Return the general information fields, the subject list and the
-    pupil list (with grade information).
-    """
-    class_id, group = class_group_split_with_id(class_group)
-    if not group:
-        REPORT_CRITICAL(
-            "Bug: Null group passed to grade_tables::grade_table_info"
-        )
-    info = {
-        "+1": CALENDAR.SCHOOL_YEAR, # e.g. "2024"
-        "+2": class_group,          # e.g. "12G.R"
-        "+3": occasion              # e.g. "2. Halbjahr", "Abitur", etc.
-    }
-    #print("§info:", info)
-
-    ## Get the subject data for this group
-    smap = subject_map(class_id, group, report_info)
-    ## ... and the student data
-    subject_list, plist, p_subjects = students_grade_info(
-        class_id, group, smap
-    )
-
-    ## Collect students
-    student_list = []
-    for pdata in plist:
-        #print("§pdata:", pdata)
-        pmap = {}
-        student_list.append(pmap)
-        pmap["id"] = pdata.id
-        pname = pdata._table.get_name(pdata)
-        pmap["NAME"] = pname
-        pmap["SORTNAME"] = pdata.SORTNAME
-        ## Write NO_GRADE where no teachers are available (based on group).
-        ## Otherwise write grades, if supplied.
-        if grades:
-            try:
-                pgrades = grades[pdata.id]
-            except KeyError:
-                pgrades = {}
-        else:
-            pgrades = {}
-        sbjdata = p_subjects[pdata.id]
-        #print("\n§1:", subject_list)
-        #print("\n:§2:", sbjdata)
-        gmap = {}
-        pmap["GRADES"] = gmap
-        tlist = []
-        pmap["TEACHERS"] = tlist
-        for sbj in subject_list:
-            s_id = str(sbj.id)
-            gr = pgrades.get(s_id) or ""
-            tset = sbjdata[sbj.id]
-            tlist.append(tset)
-            if tset:
-                # There is a set of teachers
-                gmap[s_id] = gr
-            else:
-                # No teachers
-                if gr and gr != NO_GRADE:
-                    REPORT_WARNING(T("UNEXPECTED_GRADE",
-                        grade = gr,
-                        subject = sbj.NAME,
-                        student = pname,
-                    ))
-                gmap[s_id] = NO_GRADE
-
-#TODO: Can I get rid of this???
-#        if "LEVEL" not in pgrades:
-#            try:
-#                gmap["LEVEL"] = pdata.LEVEL
-#            except AttributeError:
-#                gmap["LEVEL"] = ""
-        # Fetch non-grade items from <pgrades>
-        for k, v in pgrades.items():
-            try:
-                # Test for subject key
-                id = int(k)
-                if k not in gmap:
-                    REPORT_WARNING(T("UNEXPECTED_SUBJECT",
-                        grade = gr,
-                        subject = get_database().table["SUBJECTS"][id].NAME,
-                        student = pname,
-                    ))
-            except ValueError:
-                gmap[k] = v
-    #for s in student_list:
-    #    print("\n %%%", s)
-    return (info, subject_list, student_list)
-
-
 def grade_scale(class_group: str) -> str:
     gscale = json.loads(CONFIG.GRADE_SCALE)
     return gscale.get(class_group) or gscale.get('*')
@@ -385,10 +255,6 @@ def valid_grade_map(gscale: str) -> dict[str, tuple[str, str]]:
     grade_map = { g0: (g1, g2) for g0, g1, g2 in glist }
     #print("§grade_map:", grade_map)
     return grade_map
-
-
-
-
 
 
 class DelegateColumnInfo:
@@ -454,7 +320,6 @@ def hex_colour_adjust(colour: str, factor: float):
     return "#" + "".join(f"{int(i * 255 + 0.5):02X}" for i in rgb)
 
 
-#TODO: Use this INSTEAD of <grade_table_data>?
 class GradeTable:
     class GradeTableLine(NamedTuple):
         student_id: int
@@ -502,11 +367,10 @@ class GradeTable:
         occasion: str,
         class_group: str,
         report_info = None,    #type???
+        with_grades: bool = True,
     ):
-        # <report_info> is class-info obtained by calling <report_data()>
-        # and taking the first of the pair of results.
-#TODO: Do I really need the second result anywhere? It might be less
-# confusing if it was scrapped ...
+        # <report_info> is class-info obtained by calling
+        # <class_report_data()>.
         # If <report_info> is not supplied, it will be fetched by the call
         # to <subject_map()>. Providing the possibility of passing it in as
         # a parameter means this data can be cached externally.
@@ -516,14 +380,6 @@ class GradeTable:
             REPORT_CRITICAL(
                 "Bug: Null group passed to GradeTable"
             )
-
-#TODO: Is this really the right place for this???
-        self.info = {   # for external grade table
-            "+1": CALENDAR.SCHOOL_YEAR, # e.g. "2024"
-            "+2": class_group,          # e.g. "12G.R"
-            "+3": occasion              # e.g. "2. Halbjahr", "Abitur", etc.
-        }
-
         self.occasion = occasion
         self.class_group = class_group
         ## Get the subject data for this group
@@ -532,11 +388,13 @@ class GradeTable:
         subject_list, student_list, p_subjects = students_grade_info(
             class_id, group, smap
         )
-        ## ... and any existing grade data
-        grades = db.table("GRADES").grades_for_occasion_group(
-            occasion, class_group
-        )
-#TODO: Possibility of NOT including grades?
+        ## ... and any existing grade data, if desired
+        if with_grades:
+            grades = db.table("GRADES").grades_for_occasion_group(
+                occasion, class_group
+            )
+        else:
+            grades = {}
 
         ## Set up grade arithmetic and validation
         gscale = grade_scale(class_group)
@@ -715,7 +573,8 @@ class GradeTable:
                 teacher_sets = tlist,
             ))
             #print("§GradeTableLine:", lines[-1])
-            self.calculate_row(i)
+            if with_grades:
+                self.calculate_row(i)
 
     def calculate_row(self, row: int) -> dict[int, str]:
         #print("\n§calculate_row", row)
@@ -790,8 +649,8 @@ if __name__ == "__main__":
     db = get_database()
 
     ctable = db.table("CLASSES")
-#TODO: Does report_data() need caching?
-    c_reports, t_reports = report_data(GRADES = True)
+#TODO: Does class_report_data() need caching?
+    c_reports = class_report_data(GRADES = True)
     for c, items in c_reports.items():
         print("\n***", ctable[c].CLASS)
         for item in items:

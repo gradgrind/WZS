@@ -1,5 +1,5 @@
 """
-grades/odt_grade_reports.py - last updated 2024-01-24
+grades/odt_grade_reports.py - last updated 2024-02-05
 
 Use odt-documents (ODF / LibreOffice) as templates for grade reports.
 
@@ -38,18 +38,15 @@ T = Tr("grades.odt_grade_reports")
 
 import json
 
-from core.base import DATAPATH, REPORT_ERROR, REPORT_WARNING
+from core.base import DATAPATH, REPORT_ERROR
 from core.basic_data import get_database, CONFIG, CALENDAR
-from core.dates import today, print_date
+from core.dates import print_date
 from core.classes import class_group_split
 from core.subjects import Subjects
 from text.odt_support import write_ODT_template
 from grades.grade_tables import (
     GradeTable,
     NO_GRADE,
-#    grade_table_data,
-#    grade_scale,
-#    valid_grade_map,
 )
 from grades.odf_support import libre_office, merge_pdf
 import local
@@ -377,7 +374,7 @@ if __name__ == "__main__":
 
     _o = "1. Halbjahr"
     _cg = "12G.R"
-    _cg = "12G.G"
+    #_cg = "12G.G"
     #_cg = "13"
     #_cg = "11G"
     outdir = DATAPATH(f"{_o}/{_cg}".replace(" ", "_"), "working_data")

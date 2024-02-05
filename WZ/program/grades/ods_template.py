@@ -1,5 +1,5 @@
 """
-grades/ods_template.py - last updated 2024-01-11
+grades/ods_template.py - last updated 2024-02-05
 
 Use ods-tables (ODF / LibreOffice) as templates for grade tables.
 
@@ -39,7 +39,7 @@ T = Tr("grades.ods_template")
 import json
 
 from core.base import DATAPATH, REPORT_ERROR, REPORT_WARNING
-from core.basic_data import CONFIG
+from core.basic_data import CONFIG, CALENDAR
 from core.dates import today
 from tables.ods_support import (
     substitute_zip_content,
@@ -48,7 +48,7 @@ from tables.ods_support import (
     ODS_Handler,
     ODS_reader,
 )
-from grades.grade_tables import grade_table_data
+from grades.grade_tables import GradeTable
 
 ### -----
 
@@ -61,7 +61,7 @@ def readGradeTable(filepath: str):
     s_names = {}
     s_col = []
     for i, row in enumerate(ODS_reader(filepath)):
-        #print(f"{i:03d}:", row)
+        #print(f"§§§ {i:03d}:", row)
         id = row[0]
         if not id:
             continue
@@ -73,7 +73,16 @@ def readGradeTable(filepath: str):
             for j in range(1, len(row)):
                 stag = row[j]
                 if stag:
-                    s_col.append((int(stag), j))
+#TODO: This version includes all "named" columns, the subjects are <str>
+# values. Non-subject columns (like "LEVEL") would be included but might
+# get the wrong local name – which might be in a different row.
+#                    s_col.append((stag, j))
+# This version uses <int> values for the subjects and doesn't include
+# other columns (like "LEVEL").
+                    try:
+                        s_col.append((int(stag), j))
+                    except ValueError:
+                        pass
         elif id == '§+':
             # Subject line
             if s_names:
@@ -110,15 +119,12 @@ class BuildGradeTable:
         #             str,                        # group tag
         #             list[db_TableRow]           # TEACHERS record
         #   ]
-        grades: dict = None
+        with_grades: bool = False
     ):
         self.row_count = 0
-#        self.min_cols = 0   # will be set to the index of the last cell, + 1
         self.hidden_rows = []
         self.hidden_columns = [0]
         self.subject_keys = {}
-#        self.max_col = 0
-#        self.student_index = 0
         self.subject_id_row = 0
         self.subject_name_row = 0
         self.start_col = 0
@@ -139,13 +145,17 @@ class BuildGradeTable:
             group = class_group
         )
 
-        self.info, self.subject_list, self.student_list = grade_table_data(
+        self.grade_table = GradeTable(
             occasion = occasion,
             class_group = class_group,
             report_info = report_info,
-            grades = grades,
+            with_grades = with_grades,
         )
-
+        self.info = {
+            "+1": CALENDAR.SCHOOL_YEAR, # e.g. "2024"
+            "+2": class_group,          # e.g. "12G.R"
+            "+3": occasion              # e.g. "2. Halbjahr", "Abitur", etc.
+        }
         self.ods = substitute_zip_content(
             self.template_file,
             process = self.process_xml
@@ -218,22 +228,33 @@ class BuildGradeTable:
             REPORT_ERROR(T("NO_STUDENT_ROW"))
             return {}
         # Add rows for students, get row list
-        needed = len(self.student_list) - 1
+        student_list = self.grade_table.lines
+        needed = len(student_list) - 1
         rows = ODS_Handler.add_rows(elements, self.start_row, needed)
         # Add columns for subjects
-        cells = rows[self.subject_id_row]["children"]
-        needed = self.start_col + len(self.subject_list) - len(cells)
+        cells = rows[self.subject_id_row]["children"] 
+        subject_list = []
+        val_col = []
+        for i, dci in enumerate(self.grade_table.column_info):
+            s_id = dci.NAME
+            try:
+                val_col.append(self.subject_keys[s_id])
+            except KeyError:
+                val_col.append(0)
+            if dci.TYPE == "GRADE":
+                subject_list.append((dci.NAME, dci.LOCAL, i))
+        needed = self.start_col + len(subject_list) - len(cells)
         if needed > 0:
             ODS_Handler.append_columns(elements, needed)
         # Enter subject data
         cells1 = rows[self.subject_name_row]["children"]
-        i = self.start_col
-        for sbj in self.subject_list:
-            s_id = str(sbj.id)
-            self.subject_keys[s_id] = i
-            ODS_Handler.set_cell_text(cells[i], s_id)
-            ODS_Handler.set_cell_text(cells1[i], sbj.NAME)
-            i += 1
+        c = self.start_col
+        for s_id, s_name, i in subject_list:
+            val_col[i] = c
+            self.subject_keys[s_id] = c
+            ODS_Handler.set_cell_text(cells[c], s_id)
+            ODS_Handler.set_cell_text(cells1[c], s_name)
+            c += 1
         # Set the date
         cells = rows[0]["children"]
         i = len(cells)
@@ -243,16 +264,16 @@ class BuildGradeTable:
                 ODS_Handler.set_cell_text(cells[i], today())
                 break
         # Enter student data
-        if self.student_list:
+        if student_list:
             i = self.start_row
-            for stdata in self.student_list:
+            for stdata in student_list:
                 cells = rows[i]["children"]
-                ODS_Handler.set_cell_text(cells[0], str(stdata['id']))
-                ODS_Handler.set_cell_text(cells[1], stdata['NAME'])
-                for s, g in stdata["GRADES"].items():
-                    gi = self.subject_keys.get(s)
-                    if gi:
-                        ODS_Handler.set_cell_text(cells[gi], g)
+                ODS_Handler.set_cell_text(cells[0], str(stdata.student_id))
+                ODS_Handler.set_cell_text(cells[1], stdata.student_name)
+                for j, val in enumerate(stdata.values):
+                    c = val_col[j]
+                    if c and val:
+                        ODS_Handler.set_cell_text(cells[c], val)
                 i += 1
         return {
             "hidden_rows": self.hidden_rows,
@@ -287,9 +308,7 @@ if __name__ == "__main__":
 
 #    quit(2)
 
-    gt = BuildGradeTable("1. Halbjahr", "12G.R",
-#        grades = {434: {6: "1+", 12: "4"}}
-    )
+    gt = BuildGradeTable("1. Halbjahr", "12G.R", with_grades = True)
     filepath = os.path.join(
         os.path.dirname(gt.template_file),
         gt.output_file_name
