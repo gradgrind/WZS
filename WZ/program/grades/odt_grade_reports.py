@@ -1,5 +1,5 @@
 """
-grades/odt_grade_reports.py - last updated 2024-02-05
+grades/odt_grade_reports.py - last updated 2024-02-06
 
 Use odt-documents (ODF / LibreOffice) as templates for grade reports.
 
@@ -167,6 +167,24 @@ _GRADE_REPORT_CHOICE = {
 
 #TODO: generate pdfs, move configs to CONFIG
 
+
+#TODO: How to get templates in a configurable way ...
+# First seek possibilities for class, then occasion. There could then be
+# a list of report types and their templates?
+# In any case, given class-group and occasion, there needs to be a list of
+# report types. If there are wild cards, there would need to be priority
+# of group or occasion, to avoid potential conflicts.
+# It could be done as mappings:
+#   occasion -> {class-group -> [(type, template)]}
+# Look at new db table GRADE_REPORT_CONFIG. '*' is used as a wildcard –
+# allowing a year to be specified rather than a specific class. Would this
+# allow me to avoid extra local code?
+# Maybe I should allow all classes for every occasion, but have an extra group
+# selector, in case it is needed? The default would be "whole class".
+# There would be a problem where there are different categories (grade scales,
+# etc) within a class - there should probably be the possibility to restrict
+# some classes to particular groups (maybe within the class selector?). That
+# might make the group selector a bit redundant?
 
 def get_template(occasion: str, class_group: str) -> str:
     occ_group_key = json.loads(CONFIG.GRADE_REPORTS)

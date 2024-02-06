@@ -1,5 +1,5 @@
 """
-core/classes.py - last updated 2024-01-01
+core/classes.py - last updated 2024-02-06
 
 Manage class data.
 
@@ -47,7 +47,7 @@ from core.db_access import (
     DB_FIELD_JSON,
     DB_FIELD_REFERENCE,
 )
-from core.basic_data import get_database
+from core.basic_data import get_database, CONFIG
 from core.rooms import Rooms
 
 GROUP_ALL = "*"
@@ -65,7 +65,8 @@ class DIV_Error(Exception):
     """
 
 #TODO: Add configuration option and code to support schools with
-# no class divisions.
+# no class divisions? Or is support already adequate?
+
 def format_class_group(c: str, g: str) -> str:
     """Make a full class-group descriptor from the class and the possibly
     null ("") group.
@@ -73,7 +74,7 @@ def format_class_group(c: str, g: str) -> str:
     if g:
         if g == GROUP_ALL:
             return c
-        return f"{c}.{g}"
+        return f"{c}{CONFIG.CLASS_GROUP_SEP}{g}"
     return f"({c})"
 #+
 def class_group_split(class_group: str) -> tuple[str, str]:
@@ -84,7 +85,7 @@ def class_group_split(class_group: str) -> tuple[str, str]:
         assert class_group.endswith(")")
         return (class_group.strip("()"), "")
     try:
-        class_group, g = class_group.split(".", 1)
+        class_group, g = class_group.split(CONFIG.CLASS_GROUP_SEP, 1)
     except ValueError:
         g = GROUP_ALL
     return (class_group, g)
@@ -139,6 +140,7 @@ class Classes(db_Table):
             cls.init_fields(
                 DB_PK(),
                 DB_FIELD_TEXT("CLASS", unique = True),
+                DB_FIELD_TEXT("YEAR"),
                 DB_FIELD_TEXT("NAME", unique = True),
                 DB_FIELD_REFERENCE("Classroom", target = Rooms.table),
                 DB_FIELD_JSON(
