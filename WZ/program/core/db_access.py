@@ -1,7 +1,7 @@
 """
 core/db_access.py
 
-Last updated:  2024-01-31
+Last updated:  2024-02-07
 
 Helper functions for accessing the database.
 
@@ -321,6 +321,12 @@ class db_Table:
                 for k, v in extra.items():
                     setattr(fmap, k, v)
             #print("§row:", fmap)
+        self.setup()
+
+    def setup(self):
+        """This should be overridden by subclasses needing more setting up.
+        """
+        pass
 
     def __getitem__(self, rowid: int):
         """Return the record with the given id.

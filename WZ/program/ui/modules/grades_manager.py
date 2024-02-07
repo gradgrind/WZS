@@ -151,7 +151,7 @@ class GradeTableDelegate(QStyledItemDelegate):
             y = tw.rowViewportPosition(row)
             x = tw.columnViewportPosition(col)
             self._list_choice.move(parent.mapToGlobal(QPoint(x, y)))
-            v = self._list_choice.open(dci.DATA["__CHOICE__"], value)
+            v = self._list_choice.open(dci.DATA["__ITEMS__"], value)
             if v is not None and v != value:
                 #print("§saving:", value, "->", v)
                 self._table.write_dp(row, col, v)
@@ -222,14 +222,7 @@ class GradeTableDelegate(QStyledItemDelegate):
         if ctype == "COMPOSITE!":
             return self._min_grade_width + self._m_width
         if ctype == "CHOICE":
-            try:
-                choices = dci.DATA["__CHOICE__"]
-            except KeyError:
-                choices = self._table.get_choices(dci.NAME)
-                dci.DATA["__CHOICE__"] = choices
-#TODO!!! This seems to be not working properly – it looks like the dci is not
-# recreated (i.e. with empty __CHOICE__) when a new table is selected.
-# Look at GradeTable, this is where the dcis are set up.
+            choices = dci.DATA["__ITEMS__"]
             return self._max_width(choices) + self._m_width * 2
         if ctype == "DATE":
             return self._min_date_width
@@ -398,11 +391,10 @@ class ManageGradesPage(QObject):
         ## Set up widgets
         self.suppress_handlers = True
         # Set up the "occasions" choice.
-        grc = self.db.table("GRADE_REPORT_CONFIG")
-        self.grade_report_config = grc.read_template_info()
+        grc = self.db.table("GRADE_REPORT_CONFIG")._template_info
         self.occasions = [
-            (o, sorted(self.grade_report_config[o], reverse = True))
-            for o in sorted(self.grade_report_config)
+            (o, sorted(grc[o], reverse = True))
+            for o in sorted(grc)
         ]
         self.ui.combo_occasion.clear()
         self.ui.combo_occasion.addItems(p[0] for p in self.occasions)
@@ -418,16 +410,6 @@ class ManageGradesPage(QObject):
         the given cell.
         """
         return self.grade_table.column_info[col]
-
-    def get_choices(self, name):
-        if name == "REPORT_TYPE":
-            cgmap = self.grade_report_config[self.occasion]
-            return ["-"] + [c[0] for c in cgmap[self.class_group]]
-        else:
-            REPORT_CRITICAL(
-                "Bug in grade column config:"
-                f"Column {name} has no choices."
-            )
 
     def read(self, row: int, col: int, copy_internal: bool = True) -> str:
         if copy_internal:

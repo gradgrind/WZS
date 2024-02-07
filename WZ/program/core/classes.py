@@ -1,5 +1,5 @@
 """
-core/classes.py - last updated 2024-02-06
+core/classes.py - last updated 2024-02-07
 
 Manage class data.
 
@@ -151,10 +151,6 @@ class Classes(db_Table):
             )
             return True
         return False
-
-#    def __init__(self, db: Database):
-#        self.init()
-#        super().__init__(db)
 
     def class_list(self, skip_null: bool = True):
         """Return an ordered list of classes.

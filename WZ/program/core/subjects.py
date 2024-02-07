@@ -1,5 +1,5 @@
 """
-core/subjects.py - last updated 2024-01-08
+core/subjects.py - last updated 2024-02-07
 
 Manage subjects data.
 
@@ -62,10 +62,6 @@ class Subjects(db_Table):
             )
             return True
         return False
-
-#    def __init__(self, db: Database):
-#        self.init()
-#        super().__init__(db)
 
     def subject_list(self, skip_null: bool = True):
         """Return an ordered list of subjects.

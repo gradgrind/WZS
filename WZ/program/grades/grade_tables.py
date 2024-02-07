@@ -87,8 +87,9 @@ class GradeTemplates(db_Table):
             return True
         return False
 
-    def read_template_info(self):
+    def setup(self):
         tmap = {}
+        self._template_info = tmap
         for rec in self.records:
             occ = rec.OCCASION
             cg = rec.CLASS_GROUP
@@ -105,7 +106,6 @@ class GradeTemplates(db_Table):
                     cgmap[cg] = [val]
                 else:
                     tlist.append(val)
-        return tmap
 #+
 DB_TABLES[GradeTemplates.table] = GradeTemplates
 
@@ -339,7 +339,7 @@ class DelegateColumnInfo:
             if value not in self.DATA["valid"]:
                 ok = False
         elif ctype == "CHOICE":
-            if value not in self.DATA["__CHOICE__"]:
+            if value not in self.DATA["__ITEMS__"]:
                 ok = False
         elif ctype == "DATE":
             if isodate(value) is None:
@@ -446,6 +446,7 @@ class GradeTable:
         self.grade_arithmetic = local.grades.GradeArithmetic(self.grade_map)
 
         ### Collect the columns
+        report_types = db.table("GRADE_REPORT_CONFIG")._template_info
         headers = []
         col_dci = []       # collect <DelegateColumnInfo> objects
         self.column_info = col_dci
@@ -533,9 +534,10 @@ class GradeTable:
                     components.append(col)
                     dci.COLOUR = d_colour
                 if not components:
-                    REPORT_WARNING(T("COMPOSITE_WITHOUT_COMPONENTS",
-                        subject = rec.NAME
-                    ))
+                    if rec.LOCAL:
+                        REPORT_WARNING(T("COMPOSITE_WITHOUT_COMPONENTS",
+                            subject = rec.LOCAL
+                        ))
                     continue
                 if rec.LOCAL:
                     all_grade_cols.add(len(headers))
@@ -543,6 +545,19 @@ class GradeTable:
                     dci = DelegateColumnInfo(rec)
                 else:
                     continue
+
+            elif ctype == "CHOICE":
+                try:
+                    clist = rec.DATA["__CHOICE__"]
+                except KeyError:
+                    if rec.NAME == "REPORT_TYPE":
+                        clist = ["-"] + sorted(
+                            r[0]
+                            for r in report_types[occasion][class_group]
+                        )
+                        print("§REPORT TYPES:", clist)
+                dci = DelegateColumnInfo(rec)
+                dci.DATA["__ITEMS__"] = clist
 
             elif rec.LOCAL:
                 dci = DelegateColumnInfo(rec)

@@ -1,5 +1,5 @@
 """
-core/teachers.py - last updated 2024-01-06
+core/teachers.py - last updated 2024-02-07
 
 Manage teacher data.
 
@@ -63,10 +63,6 @@ class Teachers(db_Table):
             )
             return True
         return False
-
-#    def __init__(self, db: Database):
-#        self.init()
-#        super().__init__(db)
 
     @staticmethod
     def get_name(data):

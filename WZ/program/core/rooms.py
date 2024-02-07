@@ -1,5 +1,5 @@
 """
-core/rooms.py - last updated 2024-01-06
+core/rooms.py - last updated 2024-02-07
 
 Manage rooms data.
 
@@ -63,10 +63,6 @@ class Rooms(db_Table):
             )
             return True
         return False
-
-#    def __init__(self, db: Database):
-#        self.init()
-#        super().__init__(db)
 
 DB_TABLES[Rooms.table] = Rooms
 
