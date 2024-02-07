@@ -1,5 +1,5 @@
 """
-grades/grade_tables.py - last updated 2024-02-05
+grades/grade_tables.py - last updated 2024-02-07
 
 Manage grade tables.
 
@@ -65,6 +65,50 @@ import local
 NO_GRADE = '/'
 
 ### -----
+
+#TODO: After editing this table, the grades manager would need reloading
+# (resetting occasion and class-group) because the combo box selectors could
+# have changed. Presumably, when loading a grade table, one should check the
+# validity of the report-type values for each student.
+
+class GradeTemplates(db_Table):
+    table = "GRADE_REPORT_CONFIG"
+
+    @classmethod
+    def init(cls) -> bool:
+        if cls.fields is None:
+            cls.init_fields(
+                DB_PK(),
+                DB_FIELD_TEXT("OCCASION"),
+                DB_FIELD_TEXT("CLASS_GROUP"),
+                DB_FIELD_TEXT("REPORT_TYPE"),
+                DB_FIELD_TEXT("TEMPLATE"),
+            )
+            return True
+        return False
+
+    def read_template_info(self):
+        tmap = {}
+        for rec in self.records:
+            occ = rec.OCCASION
+            cg = rec.CLASS_GROUP
+            tp = f"GRADE_REPORTS/{rec.TEMPLATE}"
+            val = (rec.REPORT_TYPE, tp, rec.id)
+            try:
+                cgmap = tmap[occ]
+            except KeyError:
+                tmap[occ] = {cg: [val]}
+            else:
+                try:
+                    tlist = cgmap[cg]
+                except KeyError:
+                    cgmap[cg] = [val]
+                else:
+                    tlist.append(val)
+        return tmap
+#+
+DB_TABLES[GradeTemplates.table] = GradeTemplates
+
 
 class Grades(db_Table):
     table = "GRADES"

@@ -1,7 +1,7 @@
 """
 ui/modules/grades_manager.py
 
-Last updated:  2024-01-31
+Last updated:  2024-02-07
 
 Front-end for managing grade reports.
 
@@ -222,7 +222,15 @@ class GradeTableDelegate(QStyledItemDelegate):
         if ctype == "COMPOSITE!":
             return self._min_grade_width + self._m_width
         if ctype == "CHOICE":
-            return self._max_width(dci.DATA["__CHOICE__"]) + self._m_width * 2
+            try:
+                choices = dci.DATA["__CHOICE__"]
+            except KeyError:
+                choices = self._table.get_choices(dci.NAME)
+                dci.DATA["__CHOICE__"] = choices
+#TODO!!! This seems to be not working properly – it looks like the dci is not
+# recreated (i.e. with empty __CHOICE__) when a new table is selected.
+# Look at GradeTable, this is where the dcis are set up.
+            return self._max_width(choices) + self._m_width * 2
         if ctype == "DATE":
             return self._min_date_width
         if ctype == "TEXT":
@@ -390,16 +398,16 @@ class ManageGradesPage(QObject):
         ## Set up widgets
         self.suppress_handlers = True
         # Set up the "occasions" choice.
-        self.ui.combo_occasion.clear()
+        grc = self.db.table("GRADE_REPORT_CONFIG")
+        self.grade_report_config = grc.read_template_info()
         self.occasions = [
-            (k, v.split())
-            for k, v in json.loads(CONFIG.GRADE_OCCASION).items()
+            (o, sorted(self.grade_report_config[o], reverse = True))
+            for o in sorted(self.grade_report_config)
         ]
-        self.occasions.sort()
+        self.ui.combo_occasion.clear()
         self.ui.combo_occasion.addItems(p[0] for p in self.occasions)
         self.ui.combo_occasion.setCurrentIndex(-1)
         self.fill_group_list()
-
         # Activate the window
         self.suppress_handlers = False
 
@@ -410,6 +418,16 @@ class ManageGradesPage(QObject):
         the given cell.
         """
         return self.grade_table.column_info[col]
+
+    def get_choices(self, name):
+        if name == "REPORT_TYPE":
+            cgmap = self.grade_report_config[self.occasion]
+            return ["-"] + [c[0] for c in cgmap[self.class_group]]
+        else:
+            REPORT_CRITICAL(
+                "Bug in grade column config:"
+                f"Column {name} has no choices."
+            )
 
     def read(self, row: int, col: int, copy_internal: bool = True) -> str:
         if copy_internal:
@@ -466,13 +484,9 @@ class ManageGradesPage(QObject):
         elif olist:
             self.ui.combo_group.setCurrentIndex(0)
 
-    def set_group(self):
+    def set_group(self, class_group):
         self.suppress_handlers = True
-        o = self.ui.combo_occasion.currentIndex()
-        i = self.ui.combo_group.currentIndex()
-        o_item = self.occasions[o]
-        self.class_group = o_item[1][i]
-        self.occasion = o_item[0]
+        self.class_group = class_group
         tw = self.ui.grade_table
         # Check that there are no pending database updates for grades
         for r, cd in self._pending_changes.items():
@@ -534,14 +548,18 @@ class ManageGradesPage(QObject):
         if self.suppress_handlers: return
         self.suppress_handlers = True
         self.fill_group_list()
+#TODO: clear content views (no occasion/group selected)
+        self.occasion, self._groups = self.occasions[i]
+        print("§SET occasion:", self.occasion)
         self.suppress_handlers = False
-        if self.ui.combo_group.currentIndex() >= 0:
-            self.set_group()
+        i = self.ui.combo_group.currentIndex()
+        if i >= 0:
+            self.set_group(self._groups[i])
 
     @Slot(int)
     def on_combo_group_currentIndexChanged(self, i):
         if self.suppress_handlers: return
-        self.set_group()
+        self.set_group(self._groups[i])
 
     @Slot()
     def on_pb_grade_input_table_clicked(self):

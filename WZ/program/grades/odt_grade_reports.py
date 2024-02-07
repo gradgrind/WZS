@@ -1,5 +1,5 @@
 """
-grades/odt_grade_reports.py - last updated 2024-02-06
+grades/odt_grade_reports.py - last updated 2024-02-07
 
 Use odt-documents (ODF / LibreOffice) as templates for grade reports.
 
@@ -40,6 +40,12 @@ import json
 
 from core.base import DATAPATH, REPORT_ERROR
 from core.basic_data import get_database, CONFIG, CALENDAR
+from core.db_access import (
+    DB_TABLES,
+    db_Table,
+    DB_PK,
+    DB_FIELD_TEXT,
+)
 from core.dates import print_date
 from core.classes import class_group_split
 from core.subjects import Subjects
@@ -185,6 +191,14 @@ _GRADE_REPORT_CHOICE = {
 # etc) within a class - there should probably be the possibility to restrict
 # some classes to particular groups (maybe within the class selector?). That
 # might make the group selector a bit redundant?
+# Next idea: Maybe without wildcards. Each entry must be configured before
+# using it. A helpful configuration dialog might be able to make this useable
+# without too much stress, perhaps configuring several classes/groups at the
+# same time?
+
+# See table "GRADE_REPORT_CONFIG" (grade_tables)
+
+
 
 def get_template(occasion: str, class_group: str) -> str:
     occ_group_key = json.loads(CONFIG.GRADE_REPORTS)
