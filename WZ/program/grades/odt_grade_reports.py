@@ -36,18 +36,9 @@ T = Tr("grades.odt_grade_reports")
 
 ### +++++
 
-import json
-
 from core.base import DATAPATH, REPORT_ERROR
 from core.basic_data import get_database, CONFIG, CALENDAR
-from core.db_access import (
-    DB_TABLES,
-    db_Table,
-    DB_PK,
-    DB_FIELD_TEXT,
-)
 from core.dates import print_date
-from core.classes import class_group_split
 from core.subjects import Subjects
 from text.odt_support import write_ODT_template
 from grades.grade_tables import (
@@ -59,226 +50,16 @@ import local
 
 ### -----
 
-#TODO: Allow for "no report" ("-") to be chosen, perhaps as default for the
-# REPORT_TYPE field.
-
-#TODO ...
-_GRADE_REPORT_TEMPLATE = {
-    "SEK_I": {
-        "PATH": "GRADE_REPORTS/SekI",
-        "FIELDS": [
-            ["DATE_ISSUE", "Ausstellungsdatum"],
-        ]
-    },
-    "SEK_I_ABGANG": {
-        "PATH": "GRADE_REPORTS/SekI-Abgang",
-        "FIELDS": [
-            ["DATE_ISSUE", "Ausstellungsdatum"],
-        ]
-    },
-    "SEK_I_ABSCHLUSS": {
-        "PATH": "GRADE_REPORTS/SekI-Abschluss",
-        "FIELDS": [
-            ["DATE_ISSUE", "Ausstellungsdatum"],
-        ]
-    },
-    "SEK_I_ZWISCHEN": {
-        "PATH": "GRADE_REPORTS/SekI-Zwischenzeugnis",
-        "FIELDS": [
-            ["DATE_ISSUE", "Ausstellungsdatum"],
-        ]
-    },
-    "SEK_II_ABGANG_12": {
-        "PATH": "GRADE_REPORTS/SekII-12-Abgang",
-        "FIELDS": [
-            ["DATE_ISSUE", "Ausstellungsdatum"],
-        ]
-    },
-    "SEK_II_ABGANG_13": {
-        "PATH": "GRADE_REPORTS/SekII-13-Abgang",
-        "FIELDS": [
-            ["DATE_ISSUE", "Ausstellungsdatum"],
-        ]
-    },
-    "SEK_II_1": {
-        "PATH": "GRADE_REPORTS/SekII-12_1",
-        "FIELDS": [
-            ["DATE_ISSUE", "Ausstellungsdatum"],
-        ]
-    },
-    "SEK_II": {
-        "PATH": "GRADE_REPORTS/SekII-12",
-        "FIELDS": [
-            ["DATE_ISSUE", "Ausstellungsdatum"],
-        ]
-    },
-    "SEK_II_13": {
-        "PATH": "GRADE_REPORTS/SekII-13_1",
-        "FIELDS": [
-            ["DATE_ISSUE", "Ausstellungsdatum"],
-        ]
-    },
-    "Orientierung": {
-        "PATH": "GRADE_REPORTS/Orientierung",
-        "FIELDS": [
-            ["DATE_ISSUE", "Ausstellungsdatum"],
-        ]
-    },
-    "Abitur": {
-        "PATH": "GRADE_REPORTS/Abitur",
-        "FIELDS": [
-            ["DATE_ISSUE", "Ausstellungsdatum"],
-        ]
-    },
-    "Fachhochschulreife": {
-        "PATH": "GRADE_REPORTS/Fachhochschulreife",
-        "FIELDS": [
-            ["DATE_ISSUE", "Ausstellungsdatum"],
-        ]
-    },
-    "Kein_Abitur": {
-        "PATH": "GRADE_REPORTS/Abitur_nicht_bestanden",
-        "FIELDS": [
-            ["DATE_ISSUE", "Ausstellungsdatum"],
-        ]
-    },
-}
-print("§_GRADE_REPORT_TEMPLATE:", json.dumps(_GRADE_REPORT_TEMPLATE,
-    ensure_ascii = False, separators = (',', ':')))
-
-#####++++++++++++++++++++++++++++++++++++++++
-
-_GRADE_REPORT_CHOICE = {
-    "1. Halbjahr": {
-        "12G.R": {
-            "DATE_ISSUE": ["DATE_Halbjahr_1", "student>group"]
-# Alternatives to "student>group": "student", "group"
-        }
-    },
-
-}
-
-# Actually, all reports have DATE_ISSUE, so it wouldn't need to be
-# declared anywhere else. There is only the question of where the
-# value comes from.
-
-# I possibly also need the class's year part (for "Jahrgang" slots).
-
-# In Sek II the students need to have an entry date for the
-# "Qualifikationsphase". Although this is a group thing, it might be
-# sensible to allow an override, just in case ... (it's one of those
-# unclearly defined things in the "Verordnung").
-
-#####++++++++++++++++++++++++++++++++++++++++
-
-#TODO: generate pdfs, move configs to CONFIG
-
-
-#TODO: How to get templates in a configurable way ...
-# First seek possibilities for class, then occasion. There could then be
-# a list of report types and their templates?
-# In any case, given class-group and occasion, there needs to be a list of
-# report types. If there are wild cards, there would need to be priority
-# of group or occasion, to avoid potential conflicts.
-# It could be done as mappings:
-#   occasion -> {class-group -> [(type, template)]}
-# Look at new db table GRADE_REPORT_CONFIG. '*' is used as a wildcard –
-# allowing a year to be specified rather than a specific class. Would this
-# allow me to avoid extra local code?
-# Maybe I should allow all classes for every occasion, but have an extra group
-# selector, in case it is needed? The default would be "whole class".
-# There would be a problem where there are different categories (grade scales,
-# etc) within a class - there should probably be the possibility to restrict
-# some classes to particular groups (maybe within the class selector?). That
-# might make the group selector a bit redundant?
-# Next idea: Maybe without wildcards. Each entry must be configured before
-# using it. A helpful configuration dialog might be able to make this useable
-# without too much stress, perhaps configuring several classes/groups at the
-# same time?
-
-# See table "GRADE_REPORT_CONFIG" (grade_tables)
-
-
-
-def get_template(occasion: str, class_group: str) -> str:
-    occ_group_key = json.loads(CONFIG.GRADE_REPORTS)
-    try:
-        occmap = occ_group_key[occasion]
-    except KeyError:
-        REPORT_ERROR(T("OCCASION_NO_TEMPLATES", occasion = occasion))
-        return ""
-    try:
-        tkey = occmap[class_group]
-    except KeyError:
-        try:
-            tkey = occmap["*"]
-        except KeyError:
-            REPORT_ERROR(T("GROUP_NO_TEMPLATES",
-                occasion = occasion,
-                group = class_group
-            ))
-            return ""
-#TODO--
-    gtemplates = _GRADE_REPORT_TEMPLATE
-    tpath = gtemplates[tkey]["PATH"]
-#TODO++
-    #gtemplates = json.loads(CONFIG.GRADE_REPORT_TEMPLATE)
-    #tpath = gtemplates[tkey]["PATH"]
-    template_file = DATAPATH(tpath, "TEMPLATES")
-    if not template_file.endswith(".odt"):
-        template_file = f"{template_file}.odt"
-    print("§template:", template_file)
-    return template_file
-
-
-#    # Suggestion for the output file name
-#    output_file_name = T("GRADE_REPORT",
-#        occasion = occasion.replace(" ", "_"),
-#        group = class_group
-#    )
-
-#TODO: This should be in CONFIG somehow ...
-FIELD_MAPPING = {
-    "LEVEL": {"HS": "Hauptschule", "RS": "Realschule", "Gym": "Gymnasium"},
-    "SEX": {"m": "Herr", "w": "Frau"},
-    "OCCASION": {
-        "2. Halbjahr": "1. und 2. Halbjahr",
-        "$": "",
-    }
-}
-
-#???
-REPORT_FIELD_MAPPING = {
-    "LEVEL": {
-        "*/*": {"HS": "Hauptschule", "RS": "Realschule", "Gym": "Gymnasium"},
-#        "occasion/class_group": {},
-        # first look up occasion + class_group, then just occasion,
-        # then just class_group, then default
-
-        }
-
-# ...
-}
-
-# OR put it all in a local module? together with the basic stuff below?
-
 
 def make_grade_reports(
     occasion: str,
     class_group: str,
-    report_info: dict[str, list] = None, # <report_data()[0]>
-    # The list items are:
-    #   tuple[    db_TableRow,                # SUBJECTS record
-    #             Optional[tuple[str, str]],  # title, signature
-    #             list[db_TableRow]           # TEACHERS record
-    #   ]
-#?
-    grades: dict = None
 ):
     def special(key):
         """Enter the subjects and grades in the template.
         """
-#TODO: Handle subject keys ...
+#TODO: Handle subject keys ... (where subjects are fixed in the template
+# so that the grade slots need specially coded keys).
         nonlocal g_pending
         #print("§SPECIAL:", key)
         if key.startswith("$"):
@@ -321,33 +102,36 @@ def make_grade_reports(
         return None
 
     db = get_database()
-    ## Get template
-    template_file = get_template(occasion, class_group)
-    if not template_file:
-        return []
-
     ## Get grades
     grade_table = GradeTable(occasion, class_group)
     grade_map = grade_table.grade_map
-
+    ## For students' data:
     students = db.table("STUDENTS")
-
-    c, g = class_group_split(class_group)
-
+    ## Report templates:
+    _tinfo = db.table("GRADE_REPORT_CONFIG")._template_info
+    template_info = {
+        ti[0]: ti[1]
+        for ti in _tinfo[occasion][class_group]
+    }
+    #print("\n§template_info:", template_info)
+    ## Process each student
     results = []
     for line in grade_table.lines:
         st_id = line.student_id
         fields = {
             "SCHOOL": CONFIG.SCHOOL,
             "OCCASION": occasion,
-            "CLASS": c,
         }
         fields.update(students.all_string_fields(st_id))
+        cl_data = students[st_id].Class
+        fields["CLASS"] = cl_data.CLASS
+        fields["CLASS_YEAR"] = cl_data.YEAR
+        fields["CLASS_NAME"] = cl_data.NAME
         values = line.values
         subject_map = {}
         for i, dci in enumerate(grade_table.column_info):
             if dci.TYPE == "GRADE":
-                print("???", dci)
+                #print("???", dci)
                 s = dci.DATA["SORTING"]
                 v = values[i]
                 if v == NO_GRADE:
@@ -359,14 +143,23 @@ def make_grade_reports(
                     subject_map[s] = [val]
             else:
                 fields[dci.NAME] = values[i]
-        print("§SUBJECT_MAP:", subject_map)
+        # Get template file
+        try:
+            tfile = template_info[fields["REPORT_TYPE"]]
+            if not tfile:
+                continue
+        except KeyError:
+            continue
+        template_file = DATAPATH(tfile, "TEMPLATES")
+        if not template_file.endswith(".odt"):
+            template_file = f"{template_file}.odt"
+        #print("\n§template:", template_file)
+        #print("§SUBJECT_MAP:", subject_map)
         for k, v in subject_map.items():
             v.reverse()
-        print("§SUBJECT_MAP_REVERSED:", subject_map)
-
+        #print("§SUBJECT_MAP_REVERSED:", subject_map)
         fields.update(CALENDAR.all_string_fields())
-        print("\n§FIELDS:", fields)
-
+        #print("\n§FIELDS:", fields)
         # Make adjustments for specialities of the region or school-type
         local.reports.local_fields(fields)
         # Convert dates
@@ -377,10 +170,10 @@ def make_grade_reports(
                         dateformat = CONFIG.GRADE_DATE_FORMAT
                     except KeyError:
                         dateformat = None
-                    print("§dateformat:", dateformat, val)
+                    #print("§dateformat:", dateformat, val)
                     val = print_date(val, dateformat)
                 fields[f] = val
-        print("\n$$$", fields)
+        #print("\n$$$", fields)
 
         g_pending = None
         odt, m, u = write_ODT_template(template_file, fields, special)
@@ -394,8 +187,8 @@ def make_grade_reports(
 
         results.append((odt, fields["SORTNAME"]))
 
-        print("\n§MISSING:", m)
-        print("\n§USED:", u)
+        #print("\n§MISSING:", m)
+        #print("\n§USED:", u)
 
     return results
 

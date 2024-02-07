@@ -555,7 +555,7 @@ class GradeTable:
                             r[0]
                             for r in report_types[occasion][class_group]
                         )
-                        print("§REPORT TYPES:", clist)
+                        #print("§REPORT TYPES:", clist)
                 dci = DelegateColumnInfo(rec)
                 dci.DATA["__ITEMS__"] = clist
 
