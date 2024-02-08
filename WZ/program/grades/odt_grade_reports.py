@@ -1,5 +1,5 @@
 """
-grades/odt_grade_reports.py - last updated 2024-02-07
+grades/odt_grade_reports.py - last updated 2024-02-08
 
 Use odt-documents (ODF / LibreOffice) as templates for grade reports.
 
@@ -145,7 +145,8 @@ def make_grade_reports(
                 fields[dci.NAME] = values[i]
         # Get template file
         try:
-            tfile = template_info[fields["REPORT_TYPE"]]
+            ttype = fields["REPORT_TYPE"]
+            tfile = template_info[ttype]
             if not tfile:
                 continue
         except KeyError:
@@ -185,7 +186,7 @@ def make_grade_reports(
         if xs_subjects:
             REPORT_ERROR(T("EXCESS_SUBJECTS", slist = "\n".join(xs_subjects)))
 
-        results.append((odt, fields["SORTNAME"]))
+        results.append((odt, fields["SORTNAME"], ttype))
 
         #print("\n§MISSING:", m)
         #print("\n§USED:", u)
@@ -207,7 +208,7 @@ if __name__ == "__main__":
     pdf_dir = os.path.join(outdir, "pdf")
     os.makedirs(pdf_dir, exist_ok = True)
     odt_list = []
-    for odt, sname in make_grade_reports(_o, _cg):
+    for odt, sname, ttype in make_grade_reports(_o, _cg):
         outpath = os.path.join(outdir, sname) + ".odt"
         with open(outpath, 'bw') as fh:
             fh.write(odt)

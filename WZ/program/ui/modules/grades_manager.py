@@ -56,9 +56,11 @@ from ui.ui_base import (
     Slot,
     QPoint,
     ### other
-    APP,
+#    APP,
 #    SHOW_CONFIRM,
+    OPEN_FILE,
     SAVE_FILE,
+    PROCESS,
 )
 from ui.rotated_table_header import RotatedHeaderView
 from ui.table_support import (
@@ -69,6 +71,7 @@ from ui.table_support import (
 )
 
 from core.base import (
+    DATAPATH,
     REPORT_INFO,
     REPORT_ERROR,
     REPORT_CRITICAL,
@@ -77,18 +80,13 @@ from core.basic_data import get_database, CONFIG, CALENDAR
 from core.dates import print_date
 from core.list_activities import class_report_data
 from grades.grade_tables import GradeTable, DelegateColumnInfo
-from grades.ods_template import BuildGradeTable
+from grades.ods_template import BuildGradeTable, readGradeTable
+from grades.odt_grade_reports import make_grade_reports
+from grades.odf_support import libre_office, merge_pdf
 
 UPDATE_PAUSE = 1000     # time between cell edit and db update in ms
 
 ### -----
-
-
-#TODO:
-# 1) Write to group data.
-# 2) Set grade list.
-# 3) Add missing functions.
-# 4) Tidying.
 
 
 class GradeTableDelegate(QStyledItemDelegate):
@@ -553,11 +551,75 @@ class ManageGradesPage(QObject):
         gt.save(fpath)
         REPORT_INFO(T("SAVED_GRADE_TABLE", path = fpath))
 
+    def make_reports(self, show_output: bool):
+        """This is a lengthy process which should be run in a "PROCESS".
+        """
+        # Set paths. If necessary, create folders
+        outdir = DATAPATH(
+            f"{self.occasion}/{self.class_group}".replace(" ", "_"),
+            "working_data"
+        )
+        #print("§outdir", outdir)
+        pdf_dir = os.path.join(outdir, "pdf")
+        os.makedirs(pdf_dir, exist_ok = True)
+        # Create odt files
+        odt_lists = {}
+        REPORT_INFO(T("MAKE_ODT"))
+        for odt, sname, ttype in make_grade_reports(
+            self.occasion, self.class_group
+        ):
+            outpath = os.path.join(outdir, sname) + ".odt"
+            with open(outpath, 'bw') as fh:
+                fh.write(odt)
+            REPORT_INFO(f" --> ({ttype}) {outpath}")
+            try:
+                odt_lists[ttype].append(outpath)
+            except KeyError:
+                odt_lists[ttype] = [outpath]
+        # Clear pdf folder
+        for f in os.listdir(pdf_dir):
+            os.remove(os.path.join(pdf_dir, f))
+        # Convert odt files to pdf
+        pdf_paths = []
+        for ttype, odt_list in odt_lists.items():
+            REPORT_INFO(T("MAKE_PDF", n = len(odt_list), rtype = ttype))
+            libre_office(odt_list, pdf_dir, show_output = show_output)
+            pdf_list = []
+            for f in odt_list:
+                f0 = os.path.basename(f).rsplit('.', 1)[0]
+                f1 = os.path.join(pdf_dir, f"{f0}.pdf")
+                if not os.path.isfile(f1):
+                    REPORT_ERROR(T("PDF_GEN_FAILED", fname = f0))
+                    continue
+                pdf_list.append(f1)
+            # Merge the resulting files to a single pdf
+            if not pdf_list:
+                continue
+            REPORT_INFO(T("MERGE_REPORTS", n = len(pdf_list), rtype = ttype))
+            pdfname = T("GRADE_REPORT",
+                occasion = self.occasion.replace(" ", "_"),
+                group = self.class_group,
+                rtype = ttype,
+            )
+            pdf_path = SAVE_FILE(
+                f'{T("pdf_file")} (*.pdf)',
+                start = f"{pdfname}.pdf",
+                title = T("SAVE_REPORTS", rtype = ttype),
+            )
+            if not pdf_path:
+                continue
+            if not pdf_path.endswith(".pdf"):
+                pdf_path += ".pdf"
+            merge_pdf(pdf_list, pdf_path)
+            pdf_paths.append(pdf_path)
+        for p in pdf_paths:
+            REPORT_INFO(T("SAVED_REPORTS", path = p))
+
     ### slots ###
 
     @Slot()
     def on_edit_groups_clicked(self):
-#TODO
+#TODO: occasion + group editor (popup)
         print("§on_edit_groups_clicked")
 
     @Slot(int)
@@ -566,7 +628,7 @@ class ManageGradesPage(QObject):
         self.suppress_handlers = True
         self.fill_group_list()
         self.occasion, self._groups = self.occasions[i]
-        print("§SET occasion:", self.occasion)
+        #print("§SET occasion:", self.occasion)
         self.suppress_handlers = False
         i = self.ui.combo_group.currentIndex()
         if i >= 0:
@@ -591,11 +653,66 @@ class ManageGradesPage(QObject):
     def on_pb_read_grade_table_clicked(self):
 #TODO
         print("§on_pb_read_grade_table_clicked")
+#+++++++++++
+
+        #
+        fpath = OPEN_FILE(
+            f'{T("ods_file")} (*.ods)',
+            #start = ?,
+            title = T("GET_GRADE_TABLE"),
+        )
+        if not fpath:
+            return
+        info, s_names, grades = readGradeTable(fpath)
+
+        print("\n§info:", info)
+        print("\n§SUBJECTS:", s_names)
+        for p_id, pgrades in grades.items():
+            print("\n§PID:", p_id, pgrades)
+
+
+        try:
+            key = "+1"
+            if info[key][1] != CALENDAR.SCHOOL_YEAR:
+                REPORT_ERROR(T("BAD_INFO",
+                    key = info[key][0],
+                    val = info[key][1],
+                    path = fpath,
+                ))
+                return
+            key = "+2"
+            if info[key][1] != self.class_group:
+                REPORT_ERROR(T("BAD_INFO",
+                    key = info[key][0],
+                    val = info[key][1],
+                    path = fpath,
+                ))
+                return
+            key = "+3"
+            if info[key][1] != self.occasion:
+                REPORT_ERROR(T("BAD_INFO",
+                    key = info[key][0],
+                    val = info[key][1],
+                    path = fpath,
+                ))
+                return
+        except KeyError:
+            REPORT_ERROR(T("MISSING_INFO",
+                key = key,
+                val = T(f"Tr_{key}")
+            ))
+
+
+
+
 
     @Slot()
     def on_pb_make_reports_clicked(self):
-#TODO
-        print("§on_pb_make_reports_clicked")
+        PROCESS(
+            self.make_reports,
+            title = T("MAKE_REPORTS"),
+            show_output = self.ui.cb_extra_info.isChecked()
+        )
 
     @Slot()
     def update_db(self):

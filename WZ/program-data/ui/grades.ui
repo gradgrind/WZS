@@ -385,6 +385,9 @@ li.checked::marker { content: &quot;\2612&quot;; }
                <bold>false</bold>
               </font>
              </property>
+             <property name="toolTip">
+              <string>unter normalen Umständen sind diese Infos nicht besonders nützlich ...</string>
+             </property>
              <property name="text">
               <string>zusätzliche Infos anzeigen</string>
              </property>

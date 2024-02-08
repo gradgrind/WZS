@@ -1,5 +1,5 @@
 """
-grades/ods_template.py - last updated 2024-02-05
+grades/ods_template.py - last updated 2024-02-08
 
 Use ods-tables (ODF / LibreOffice) as templates for grade tables.
 
@@ -297,7 +297,6 @@ if __name__ == "__main__":
     from core.basic_data import get_database
     db = get_database()
 
-#TODO:
     filepath = DATAPATH("test_read_grades.ods", "working_data")
     print(f"*** READ GRADE TABLE {filepath}")
     info, s_names, grades = readGradeTable(filepath)
@@ -306,28 +305,19 @@ if __name__ == "__main__":
     for p_id, pgrades in grades.items():
         print("\n§PID:", p_id, pgrades)
 
-#    quit(2)
+    #quit(2)
 
     gt = BuildGradeTable("1. Halbjahr", "12G.R", with_grades = True)
-    filepath = os.path.join(
-        os.path.dirname(gt.template_file),
-        gt.output_file_name
-    )
+    filepath = DATAPATH(gt.output_file_name, "working_data")
     gt.save(filepath)
     print(" -->", filepath)
 
     gt = BuildGradeTable("1. Halbjahr", "12G.G")
-    filepath = os.path.join(
-        os.path.dirname(gt.template_file),
-        gt.output_file_name
-    )
+    filepath = DATAPATH(gt.output_file_name, "working_data")
     gt.save(filepath)
     print(" -->", filepath)
 
     gt = BuildGradeTable("1. Halbjahr", "11G")
-    filepath = os.path.join(
-        os.path.dirname(gt.template_file),
-        gt.output_file_name
-    )
+    filepath = DATAPATH(gt.output_file_name, "working_data")
     gt.save(filepath)
     print(" -->", filepath)
