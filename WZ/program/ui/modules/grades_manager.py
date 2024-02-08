@@ -1,7 +1,7 @@
 """
 ui/modules/grades_manager.py
 
-Last updated:  2024-02-07
+Last updated:  2024-02-08
 
 Front-end for managing grade reports.
 
@@ -38,8 +38,6 @@ from core.base import Tr
 T = Tr("ui.modules.grades_manager")
 
 ### +++++
-
-import json
 
 from ui.ui_base import (
     load_ui,
@@ -386,6 +384,7 @@ class ManageGradesPage(QObject):
         # Set up lists of classes, teachers and subjects for the course
         # filter. These are lists of tuples:
         #    (db-primary-key, short form, full name)
+        self.clear_display()
         self.db = get_database()
         self.report_info = class_report_data(GRADES = True)
         ## Set up widgets
@@ -402,6 +401,11 @@ class ManageGradesPage(QObject):
         self.fill_group_list()
         # Activate the window
         self.suppress_handlers = False
+
+    def clear_display(self):
+        self.ui.grade_info.clear()
+        self.ui.grade_table.setRowCount(0)
+        self.ui.date_table.setRowCount(0)
 
     ### grade-table "proxy" ###
 
@@ -488,6 +492,10 @@ class ManageGradesPage(QObject):
                 dci.DATA["column"] = len(headers)
                 dtdata.append(dci)
             headers.append(dci.LOCAL)
+        ## Show grade info
+        self.ui.grade_info.setMarkdown(
+            getattr(CONFIG, f"GRADE_INFO_{self.grade_table.grade_scale}")
+        )
         ## Initialize group-data table
         self.group_data_proxy.set_data(dtdata)
         ## Initialize grade table
@@ -530,13 +538,14 @@ class ManageGradesPage(QObject):
         if self.suppress_handlers: return
         self.suppress_handlers = True
         self.fill_group_list()
-#TODO: clear content views (no occasion/group selected)
         self.occasion, self._groups = self.occasions[i]
         print("§SET occasion:", self.occasion)
         self.suppress_handlers = False
         i = self.ui.combo_group.currentIndex()
         if i >= 0:
             self.set_group(self._groups[i])
+        else:
+            self.clear_display()
 
     @Slot(int)
     def on_combo_group_currentIndexChanged(self, i):

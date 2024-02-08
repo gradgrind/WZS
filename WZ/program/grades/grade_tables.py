@@ -1,5 +1,5 @@
 """
-grades/grade_tables.py - last updated 2024-02-07
+grades/grade_tables.py - last updated 2024-02-08
 
 Manage grade tables.
 
@@ -441,8 +441,8 @@ class GradeTable:
             grades = {}
 
         ## Set up grade arithmetic and validation
-        gscale = grade_scale(class_group)
-        self.grade_map = valid_grade_map(gscale)
+        self.grade_scale = grade_scale(class_group)
+        self.grade_map = valid_grade_map(self.grade_scale)
         self.grade_arithmetic = local.grades.GradeArithmetic(self.grade_map)
 
         ### Collect the columns

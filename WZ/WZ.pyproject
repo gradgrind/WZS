@@ -46,7 +46,6 @@
         "program/local/__init__.py",
         "program/local/niwa/grades.py",
         "program/local/niwa/reports.py",
-        "program/grades/odf_support.py",
-        "program/ui/modules/grades_manager_xp.py"
+        "program/grades/odf_support.py"
     ]
 }
