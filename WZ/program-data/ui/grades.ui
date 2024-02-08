@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>929</width>
-    <height>819</height>
+    <height>780</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -102,6 +102,42 @@
       <widget class="QComboBox" name="combo_group">
        <property name="sizeAdjustPolicy">
         <enum>QComboBox::AdjustToContents</enum>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="horizontalSpacer_3">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeType">
+        <enum>QSizePolicy::Fixed</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>20</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QToolButton" name="edit_groups">
+       <property name="toolTip">
+        <string>Anlässe und Gruppen bearbeiten</string>
+       </property>
+       <property name="text">
+        <string/>
+       </property>
+       <property name="icon">
+        <iconset>
+         <normaloff>../icons/icon_settings2.svg</normaloff>../icons/icon_settings2.svg</iconset>
+       </property>
+       <property name="iconSize">
+        <size>
+         <width>22</width>
+         <height>22</height>
+        </size>
        </property>
       </widget>
      </item>
@@ -314,51 +350,17 @@ li.checked::marker { content: &quot;\2612&quot;; }
          </widget>
         </item>
         <item>
-         <layout class="QHBoxLayout" name="horizontalLayout_3">
-          <item>
-           <spacer name="horizontalSpacer_4">
-            <property name="orientation">
-             <enum>Qt::Horizontal</enum>
-            </property>
-            <property name="sizeHint" stdset="0">
-             <size>
-              <width>40</width>
-              <height>20</height>
-             </size>
-            </property>
-           </spacer>
-          </item>
-          <item>
-           <widget class="QToolButton" name="lesson_sub">
-            <property name="toolTip">
-             <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Unterrichtsstunde vom Element entfernen. Die letzte Stunde kann auf diese Weise nicht entfernt werden, dafür muss der Kurs (bzw. alle Kurse) vom Element getrennt werden. &lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-            </property>
-            <property name="icon">
-             <iconset>
-              <normaloff>../icons/icon_remove.svg</normaloff>../icons/icon_remove.svg</iconset>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QToolButton" name="lesson_add">
-            <property name="toolTip">
-             <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Unterrichtsstunde zum Element hinzufügen&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-            </property>
-            <property name="icon">
-             <iconset>
-              <normaloff>../icons/icon_new.svg</normaloff>../icons/icon_new.svg</iconset>
-            </property>
-           </widget>
-          </item>
-         </layout>
-        </item>
-        <item>
          <widget class="QGroupBox" name="groupBox_2">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
             <horstretch>0</horstretch>
             <verstretch>0</verstretch>
            </sizepolicy>
+          </property>
+          <property name="font">
+           <font>
+            <bold>true</bold>
+           </font>
           </property>
           <property name="title">
            <string>Zeugnisse erstellen</string>
@@ -378,6 +380,11 @@ li.checked::marker { content: &quot;\2612&quot;; }
            </property>
            <item>
             <widget class="QCheckBox" name="cb_extra_info">
+             <property name="font">
+              <font>
+               <bold>false</bold>
+              </font>
+             </property>
              <property name="text">
               <string>zusätzliche Infos anzeigen</string>
              </property>
@@ -388,6 +395,11 @@ li.checked::marker { content: &quot;\2612&quot;; }
            </item>
            <item>
             <widget class="QPushButton" name="pb_make_reports">
+             <property name="font">
+              <font>
+               <bold>false</bold>
+              </font>
+             </property>
              <property name="text">
               <string>erstellen</string>
              </property>

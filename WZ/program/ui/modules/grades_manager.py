@@ -404,8 +404,11 @@ class ManageGradesPage(QObject):
 
     def clear_display(self):
         self.ui.grade_info.clear()
-        self.ui.grade_table.setRowCount(0)
         self.ui.date_table.setRowCount(0)
+        self.ui.frame_r.setDisabled(True)
+        self.ui.grade_table.setDisabled(True)
+        self.ui.grade_table.setRowCount(0)
+        self.ui.grade_table.setColumnCount(0)
 
     ### grade-table "proxy" ###
 
@@ -526,12 +529,36 @@ class ManageGradesPage(QObject):
                 tw.setItem(r, c, item)
                 self._delegate.write_cell(r, c, values[c])
         self.suppress_handlers = False
+        self.ui.frame_r.setDisabled(False)
+        self.ui.grade_table.setDisabled(False)
 #TODO: This is a fix for a visibility problem (gui refresh)
-        for w in APP.topLevelWindows():
-            if w.isVisible():
-                w.show()
+#        for w in APP.topLevelWindows():
+#            if w.isVisible():
+#                w.show()
+
+    def save_grade_table(self, with_grades: bool):
+        gt = BuildGradeTable(
+            self.occasion,
+            self.class_group,
+            with_grades = with_grades
+        )
+        fpath = SAVE_FILE(
+            f'{T("ods_file")} (*.ods)',
+            start = gt.output_file_name
+        )#, title=)
+        if not fpath:
+            return
+        if not fpath.endswith(".ods"):
+            fpath += ".ods"
+        gt.save(fpath)
+        REPORT_INFO(T("SAVED_GRADE_TABLE", path = fpath))
 
     ### slots ###
+
+    @Slot()
+    def on_edit_groups_clicked(self):
+#TODO
+        print("§on_edit_groups_clicked")
 
     @Slot(int)
     def on_combo_occasion_currentIndexChanged(self, i):
@@ -554,17 +581,21 @@ class ManageGradesPage(QObject):
 
     @Slot()
     def on_pb_grade_input_table_clicked(self):
-        gt = BuildGradeTable(self.occasion, self.class_group)
-        fpath = SAVE_FILE(
-            f'{T("ods_file")} (*.ods)',
-            start = gt.output_file_name
-        )#, title=)
-        if not fpath:
-            return
-        if not fpath.endswith(".ods"):
-            fpath += ".ods"
-        gt.save(fpath)
-        REPORT_INFO(T("SAVED_GRADE_TABLE", path = fpath))
+        self.save_grade_table(with_grades = False)
+
+    @Slot()
+    def on_pb_make_grade_table_clicked(self):
+        self.save_grade_table(with_grades = True)
+
+    @Slot()
+    def on_pb_read_grade_table_clicked(self):
+#TODO
+        print("§on_pb_read_grade_table_clicked")
+
+    @Slot()
+    def on_pb_make_reports_clicked(self):
+#TODO
+        print("§on_pb_make_reports_clicked")
 
     @Slot()
     def update_db(self):
