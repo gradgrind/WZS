@@ -1,7 +1,7 @@
 """
 ui/ui_base.py
 
-Last updated:  2024-01-06
+Last updated:  2024-02-09
 
 Support stuff for the GUI: application initialization, dialogs, etc.
 
@@ -954,7 +954,12 @@ class __Reporter(QDialog):
 
     def newtext(self, mtype, text):
         try:
-            ttype = T(mtype)
+            ttype = {
+                "CRITICAL": T("CRITICAL"),
+                "ERROR": T("ERROR"),
+                "WARNING": T("WARNING"),
+                "INFO": T("INFO"),
+            }[mtype]
         except:
             ttype = mtype or ""
         text = text or ""

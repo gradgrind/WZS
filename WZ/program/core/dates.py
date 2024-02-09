@@ -1,5 +1,5 @@
 """
-core/dates.py - last updated 2024-01-29
+core/dates.py - last updated 2024-02-09
 
 Manage date-related information.
 
@@ -253,15 +253,3 @@ if __name__ == "__main__":
     print("\nNew calendar:")
     for l in migrate_calendar():
         print(" $$", l)
-
-    quit(1)
-
-    new_year = Dates.next_year()
-    print(
-        f"\n\nCalendar for {new_year}:\n"
-        + Dates.migrate_calendar(save=False)
-    )
-
-    t = Tr("core.base")
-    print("§translate1:", t("MISSING_LAST_DAY"))
-    print("§translate2:", t("BAD_DATE", date = "2023.12.17"))

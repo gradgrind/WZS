@@ -1,7 +1,7 @@
 """
 core/list_activities.py
 
-Last updated:  2024-01-30
+Last updated:  2024-02-09
 
 Present information on activities for teachers and classes/groups.
 The information is formatted in pdf documents using the reportlab
@@ -165,7 +165,7 @@ def make_teacher_table_xlsx(activities):
         db.add_ws(ws=tname)
         sheet = db.ws(ws=tname)
         for col_id, field in enumerate(headers, start=1):
-            sheet.update_index(row=1, col=col_id, val=T(field))
+            sheet.update_index(row=1, col=col_id, val=_T(field))
         # Add data to spreadsheet table
         row_id = 2
         pay_total = 0.0
@@ -226,7 +226,7 @@ def make_class_table_xlsx(activities):
         db.add_ws(ws=c)
         sheet = db.ws(ws=c)
         for col_id, field in enumerate(headers, start=1):
-            sheet.update_index(row=1, col=col_id, val=T(field))
+            sheet.update_index(row=1, col=col_id, val=_T(field))
         row_id = 2
         for data in items:
             # Allocate the lessons to the minimal subgroups
@@ -448,14 +448,14 @@ def make_teacher_table_pay(with_comments = True):
     headers = []
     colwidths = []
 # Get column sizes from CONFIG?
-    for h, w in (
-        ("H_group",             20),
-        ("H_subject",           60),
-        ("H_room",              25),
-        ("H_units",             30),
-        ("H_pay",               20),
+    for h, t, w in (
+        ("H_group",     T("H_group"),   20),
+        ("H_subject",   T("H_subject"), 60),
+        ("H_room",      T("H_room"),    25),
+        ("H_units",     T("H_units"),   30),
+        ("H_pay",       T("H_pay"),     20),
     ):
-        headers.append(T(h))
+        headers.append(t)
         colwidths.append(w)
     pdf = FPDF()
     pdf.set_left_margin(20)
@@ -628,17 +628,17 @@ def make_teacher_table_pay(with_comments = True):
 def make_class_table_pdf(with_comments = True):
     headers = []
     colwidths = []
-    for h, w in (
+    for h, t, w in (
         ## Column widths in mm (for A4 portrait)
 # Sizes -> CONFIG? Maybe not, why should these be configurable?
 # Maybe a "low" level config?
-        ("H_subject",           75),
-        ("H_group",             20),
-        ("H_teacher",           25),
-        ("H_units",             30),
-        ("H_lessons",           20),
+        ("H_subject",   T("H_subject"), 75),
+        ("H_group",     T("H_group"),   20),
+        ("H_teacher",   T("H_teacher"), 25),
+        ("H_units",     T("H_units"),   30),
+        ("H_lessons",   T("H_lessons"), 20),
     ):
-        headers.append(T(h))
+        headers.append(t)
         colwidths.append(w)
     db = get_database()
     lesson_units = db.table("LESSON_UNITS")
@@ -697,7 +697,7 @@ def make_class_table_pdf(with_comments = True):
                 first_row_as_headings = False,
             ) as table:
                 row = table.row()
-                row.cell(T("total_lessons", align = "LEFT"))
+                row.cell(T("total_lessons"), align = "LEFT")
                 for g, n in g_n_list:
                     row.cell(f"{g}: {n}")
                 if len(g_n_list) == 1:

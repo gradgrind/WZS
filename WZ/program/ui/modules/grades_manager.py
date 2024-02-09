@@ -1,7 +1,7 @@
 """
 ui/modules/grades_manager.py
 
-Last updated:  2024-02-08
+Last updated:  2024-02-09
 
 Front-end for managing grade reports.
 
@@ -669,8 +669,6 @@ class ManageGradesPage(QObject):
         print("\n§SUBJECTS:", s_names)
         for p_id, pgrades in grades.items():
             print("\n§PID:", p_id, pgrades)
-
-
         try:
             key = "+1"
             if info[key][1] != CALENDAR.SCHOOL_YEAR:
@@ -697,14 +695,12 @@ class ManageGradesPage(QObject):
                 ))
                 return
         except KeyError:
-            REPORT_ERROR(T("MISSING_INFO",
-                key = key,
-                val = T(f"Tr_{key}")
-            ))
-
-
-
-
+            tkey = {
+                "+1": T("SCHOOL_YEAR"),
+                "+2": T("CLASS_GROUP"),
+                "+3": T("OCCASION"),
+            }[key]
+            REPORT_ERROR(T("MISSING_INFO", key = key, val = tkey))
 
     @Slot()
     def on_pb_make_reports_clicked(self):
