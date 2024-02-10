@@ -704,5 +704,5 @@ if __name__ == "__main__":
 
     widget = ManageGradesPage()
     widget.enter()
-    widget.ui.resize(1000, 550)
+    widget.ui.resize(0, 0)
     run(widget.ui)

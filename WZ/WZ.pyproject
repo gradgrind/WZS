@@ -47,6 +47,7 @@
         "program/local/niwa/grades.py",
         "program/local/niwa/reports.py",
         "program/grades/odf_support.py",
-        "program/check_translations.py"
+        "program/check_translations.py",
+        "program/ui/dialogs/dialog_edit_grade_table_selection.py"
     ]
 }
