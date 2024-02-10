@@ -1,10 +1,12 @@
 """
 ui/modules/grades_manager.py
 
-Last updated:  2024-02-09
+Last updated:  2024-02-10
 
 Front-end for managing grade reports.
 
+#TODO:
+    - editor for occasion/group lists
 
 =+LICENCE=============================
 Copyright 2024 Michael Towers
@@ -80,7 +82,7 @@ from core.basic_data import get_database, CONFIG, CALENDAR
 from core.dates import print_date
 from core.list_activities import class_report_data
 from grades.grade_tables import GradeTable, DelegateColumnInfo
-from grades.ods_template import BuildGradeTable, readGradeTable
+from grades.ods_template import BuildGradeTable, inputGradeTable
 from grades.odt_grade_reports import make_grade_reports
 from grades.odf_support import libre_office, merge_pdf
 
@@ -304,10 +306,7 @@ class GroupDataProxy(QObject):
             except KeyError:
                 pass
             else:
-                r_changes = self.grade_table_proxy.update_all(col, val, val0)
-                for r, changes in r_changes:
-                    for c, v in changes.items():
-                        self.table.itemDelegate().write_cell(r, c, v)
+                self.grade_table_proxy.update_col(col, val, val0)
         return True
 
 
@@ -454,11 +453,17 @@ class ManageGradesPage(QObject):
     def selectedRanges(self):
         return self.ui.grade_table.selectedRanges()
 
-    def update_all(self, col: int, val: str, val0: str
-    ) -> list[tuple[int, dict[int, str]]]:
-        return self.grade_table.update_all(col, val, val0)
+    def update_col(self, col: int, val: str, val0: str):
+        r_changes = self.grade_table.update_all(col, val, val0)
+        for r, changes in r_changes:
+            for c, v in changes.items():
+                self._delegate.write_cell(r, c, v)
+        self.set_modified()
 
     ### actions ###
+
+    def set_modified(self):
+        self.ui.last_modified.setText(self.grade_table.modified)
 
     def fill_group_list(self):
         self.ui.combo_group.clear()
@@ -529,6 +534,7 @@ class ManageGradesPage(QObject):
         self.suppress_handlers = False
         self.ui.frame_r.setDisabled(False)
         self.ui.grade_table.setDisabled(False)
+        self.set_modified()
 #TODO: This is a fix for a visibility problem (gui refresh)
 #        for w in APP.topLevelWindows():
 #            if w.isVisible():
@@ -651,56 +657,16 @@ class ManageGradesPage(QObject):
 
     @Slot()
     def on_pb_read_grade_table_clicked(self):
-#TODO
-        print("§on_pb_read_grade_table_clicked")
-#+++++++++++
-
-        #
         fpath = OPEN_FILE(
             f'{T("ods_file")} (*.ods)',
             #start = ?,
             title = T("GET_GRADE_TABLE"),
         )
-        if not fpath:
-            return
-        info, s_names, grades = readGradeTable(fpath)
-
-        print("\n§info:", info)
-        print("\n§SUBJECTS:", s_names)
-        for p_id, pgrades in grades.items():
-            print("\n§PID:", p_id, pgrades)
-        try:
-            key = "+1"
-            if info[key][1] != CALENDAR.SCHOOL_YEAR:
-                REPORT_ERROR(T("BAD_INFO",
-                    key = info[key][0],
-                    val = info[key][1],
-                    path = fpath,
-                ))
-                return
-            key = "+2"
-            if info[key][1] != self.class_group:
-                REPORT_ERROR(T("BAD_INFO",
-                    key = info[key][0],
-                    val = info[key][1],
-                    path = fpath,
-                ))
-                return
-            key = "+3"
-            if info[key][1] != self.occasion:
-                REPORT_ERROR(T("BAD_INFO",
-                    key = info[key][0],
-                    val = info[key][1],
-                    path = fpath,
-                ))
-                return
-        except KeyError:
-            tkey = {
-                "+1": T("SCHOOL_YEAR"),
-                "+2": T("CLASS_GROUP"),
-                "+3": T("OCCASION"),
-            }[key]
-            REPORT_ERROR(T("MISSING_INFO", key = key, val = tkey))
+        if fpath:
+            r_changes = inputGradeTable(fpath, self.grade_table)
+            for r, changes in r_changes:
+                for c, v in changes.items():
+                    self._delegate.write_cell(r, c, v)
 
     @Slot()
     def on_pb_make_reports_clicked(self):
@@ -725,6 +691,7 @@ class ManageGradesPage(QObject):
         for c, v in self.grade_table.calculate_row(r).items():
             # Write to display table
             self._delegate.write_cell(r, c, v)
+        self.set_modified()
         self._pending_changes[r] = {}
         self._timer.start(0)
 

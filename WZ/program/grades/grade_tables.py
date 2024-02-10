@@ -1,5 +1,5 @@
 """
-grades/grade_tables.py - last updated 2024-02-08
+grades/grade_tables.py - last updated 2024-02-10
 
 Manage grade tables.
 
@@ -426,6 +426,11 @@ class GradeTable:
             )
         self.occasion = occasion
         self.class_group = class_group
+        self.tstag = f"GRADES:{self.occasion}#{self.class_group}"
+        try:
+            self.modified, _ = db.table("TIMESTAMPS")._timestamps[self.tstag]
+        except KeyError:
+            self.modified = ""
         ## Get the subject data for this group
         smap = subject_map(class_id, group, report_info)
         ## ... and the student data
@@ -636,6 +641,9 @@ class GradeTable:
                 self.calculate_row(i)
 
     def calculate_row(self, row: int) -> dict[int, str]:
+        """Calculate those fields in the current row which depend on others.
+        Return a mappping {column -> value} of resulting changes.
+        """
         #print("\n§calculate_row", row)
         line = self.lines[row]
         values = line.values
@@ -680,6 +688,10 @@ class GradeTable:
                     "GRADE_MAP": to_json(grades),
                 }])[0]
                 line.grades.grades_id = new_id
+            # Set the change timestamp in the database.
+            # The front end must know about it, too ...
+            db = get_database()
+            self.modified = db.table("TIMESTAMPS").set(self.tstag)
         return calculated_cols
 
 

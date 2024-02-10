@@ -1,5 +1,5 @@
 """
-core/dates.py - last updated 2024-02-09
+core/dates.py - last updated 2024-02-10
 
 Manage date-related information.
 
@@ -48,6 +48,12 @@ from core.basic_data import (
     ISOTIME,
     isodate,
 )
+from core.db_access import (
+    DB_TABLES,
+    db_Table,
+    DB_PK,
+    DB_FIELD_TEXT,
+)
 
 class DataError(Exception):
     pass
@@ -57,6 +63,45 @@ class DataError(Exception):
 # available (in a platform-independent way) without zero-padding.
 
 ### -----
+
+
+class Timestamps(db_Table):
+    table = "TIMESTAMPS"
+
+    @classmethod
+    def init(cls) -> bool:
+        if cls.fields is None:
+            cls.init_fields(
+                DB_PK(),
+                DB_FIELD_TEXT("TAG", unique = True),
+                DB_FIELD_TEXT("TIME"),
+            )
+            return True
+        return False
+
+    def setup(self):
+        tmap = {}
+        self._timestamps = tmap
+        for rec in self.records:
+            tmap[rec.TAG] = (rec.TIME, rec.id)
+
+    def set(self, tag: str) -> str:
+        t = timestamp()
+        try:
+            #print("§set timestamp:", tag, self._timestamps[tag])
+            _, id = self._timestamps[tag]
+        except KeyError:
+            ids = self.add_records([{"TAG": tag, "TIME": t}])
+            if ids:
+                self._timestamps[tag] = (t, ids[0])
+                return t
+        else:
+            if self.update_cell(id, "TIME", t):
+                self._timestamps[tag] = (t, id)
+                return t
+        return ""
+#+
+DB_TABLES[Timestamps.table] = Timestamps
 
 
 def print_date(date: str, date_format: str = None, trap: bool = True

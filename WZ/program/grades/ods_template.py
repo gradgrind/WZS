@@ -1,5 +1,5 @@
 """
-grades/ods_template.py - last updated 2024-02-08
+grades/ods_template.py - last updated 2024-02-10
 
 Use ods-tables (ODF / LibreOffice) as templates for grade tables.
 
@@ -50,11 +50,17 @@ from tables.ods_support import (
 )
 from grades.grade_tables import GradeTable
 
+GRADE_TABLE_INFO = (
+    ("+1", T("SCHOOL_YEAR")),
+    ("+2", T("CLASS_GROUP")),
+    ("+3", T("OCCASION")),
+)
+
 ### -----
 
 
 def readGradeTable(filepath: str):
-    """Read the grade information from the given ods file.
+    """Read the grade information, etc., from the given ods file.
     """
     info = {}
     grades = {}
@@ -108,6 +114,80 @@ def readGradeTable(filepath: str):
     return (info, s_names, grades)
 
 
+def inputGradeTable(filepath: str, grade_table: GradeTable
+) -> list[tuple[int, dict[int, str]]]:
+    """Read a table of grades (from a spreadsheet).
+    Enter the grades into the given "GradeTable", checking the info-fields
+    and subjects.
+    Return a list of changes resulting from the insertions, including those
+    resulting from the row calculations.
+    """
+    info, s_names, grades = readGradeTable(filepath)
+    #print("\n§info:", info)
+    #print("\n§SUBJECTS:", s_names)
+    #for p_id, pgrades in grades.items():
+    #    print("\n§PID:", p_id, pgrades)
+    ## Check the info-fields
+    try:
+        key, trkey = GRADE_TABLE_INFO[0]
+        if info[key][1] != CALENDAR.SCHOOL_YEAR:
+            REPORT_ERROR(T("BAD_INFO",
+                key = info[key][0],
+                val = info[key][1],
+                path = filepath,
+            ))
+            return
+        key, trkey = GRADE_TABLE_INFO[1]
+        if info[key][1] != grade_table.class_group:
+            REPORT_ERROR(T("BAD_INFO",
+                key = info[key][0],
+                val = info[key][1],
+                path = filepath,
+            ))
+            return
+        key, trkey = GRADE_TABLE_INFO[2]
+        if info[key][1] != grade_table.occasion:
+            REPORT_ERROR(T("BAD_INFO",
+                key = info[key][0],
+                val = info[key][1],
+                path = filepath,
+            ))
+            return
+    except KeyError:
+        REPORT_ERROR(T("MISSING_INFO", key = key, trkey = trkey))
+        return
+    ## Check that the input subjects match those in the "GradeTable"
+    sset = set(s_names)
+    keymap = []     # map subject-id to table column
+    for c, dci in enumerate(grade_table.column_info):
+        if dci.TYPE == "GRADE":
+            s_id = int(dci.NAME)
+            try:
+                sset.remove(s_id)
+            except KeyError:
+                REPORT_WARNING(T("INPUT_SUBJECT_MISSING",
+                    subject = dci.LOCAL
+                ))
+                continue
+            keymap.append((s_id, c))
+    if sset:
+        REPORT_WARNING(T("INPUT_SUBJECTS_EXCESS",
+            subjects = ', '.join(s_names[s_id] for s_id in sset)
+        ))
+    changes = []
+    for r, line in enumerate(grade_table.lines):
+        st_id = line.student_id
+        gmap = grades[st_id]
+        chdict = {}
+        for s_id, c in keymap:
+            val = gmap[s_id]
+            chdict[c] = val
+            grade_table.write_gt(r, c, val)
+        chdict.update(grade_table.calculate_row(r))
+        changes.append((r, chdict))
+    return changes
+
+
 class BuildGradeTable:
     def __init__(self,
         occasion: str,
@@ -152,9 +232,9 @@ class BuildGradeTable:
             with_grades = with_grades,
         )
         self.info = {
-            "+1": CALENDAR.SCHOOL_YEAR, # e.g. "2024"
-            "+2": class_group,          # e.g. "12G.R"
-            "+3": occasion              # e.g. "2. Halbjahr", "Abitur", etc.
+            GRADE_TABLE_INFO[0][0]: CALENDAR.SCHOOL_YEAR, # e.g. "2024"
+            GRADE_TABLE_INFO[1][0]: class_group,          # e.g. "12G.R"
+            GRADE_TABLE_INFO[2][0]: occasion    # e.g. "2. Halbjahr", etc.
         }
         self.ods = substitute_zip_content(
             self.template_file,
@@ -206,10 +286,10 @@ class BuildGradeTable:
         elif c0:
             ## Should be an info line
             try:
-                text = self.info[c0]
+                text = self.info.pop(c0)
             except KeyError:
                 text = None
-                REPORT_WARNING(T("MISSING_INFO", key = c0))
+                REPORT_WARNING(T("UNEXPECTED_INFO", key = c0))
             ODS_Handler.set_cell_text(cells[2], text)
         self.row_count += 1
         return True
@@ -227,6 +307,14 @@ class BuildGradeTable:
         if not self.start_row:
             REPORT_ERROR(T("NO_STUDENT_ROW"))
             return {}
+        if self.info:
+            REPORT_ERROR(T("MISSING_INFO_FIELDS",
+                fields = ", ".join(
+                    f"{k} ({trk})"
+                    for k, trk in GRADE_TABLE_INFO
+                    if k in self.info
+                )
+            ))
         # Add rows for students, get row list
         student_list = self.grade_table.lines
         needed = len(student_list) - 1
@@ -307,6 +395,7 @@ if __name__ == "__main__":
 
     #quit(2)
 
+    print("\n ***** Build Grade Input Tables *****")
     gt = BuildGradeTable("1. Halbjahr", "12G.R", with_grades = True)
     filepath = DATAPATH(gt.output_file_name, "working_data")
     gt.save(filepath)

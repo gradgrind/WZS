@@ -1,5 +1,5 @@
 """
-check_translations.py - last updated 2024-02-09
+check_translations.py - last updated 2024-02-10
 
 Update the translations file by parsing all source files, copying
 information from the old translations file.
@@ -44,7 +44,7 @@ def get_old_translations(filepath):
         comment_prefixes = (';',)
     )
     cp.optionxform = str    # to stop case conversion for options
-    cp.read(TRANSLATIONS_FILE, encoding = "utf-8")
+    cp.read(filepath, encoding = "utf-8")
     fmt = Formatter()
     for sec in sorted(cp.sections()):
         #print(sec)
@@ -56,8 +56,6 @@ def get_old_translations(filepath):
             #print(f'  - {o}: {keys}')
             omap[o] = (keys, trtext)
     # The comments are filtered out
-    #with open("Translations2.ini", "w", encoding = "utf-8") as fh:
-    #    cp.write(fh)
     return trmap
 
 
@@ -169,7 +167,7 @@ class Visitor(ast.NodeVisitor):
             f"*** ERROR in {self._file}:\n  line {line}: {message}"
         )
 
-def write_translation(trmap):
+def write_translation(filepath, trmap):
     cp = ConfigParser(
         interpolation = None,
         delimiters = ('=',),
@@ -184,9 +182,7 @@ def write_translation(trmap):
             if not tr:
                 tr = "TODO " + " ".join(f'{{{x}}}' for x in keys)
             cp[sec][k] = tr
-
-#TODO: Where to save the new file? Backup the old one?
-    with open(os.path.join("Translations2.ini", "w", encoding = "utf-8") as fh:
+    with open(filepath, "w", encoding = "utf-8") as fh:
         cp.write(fh)
 
 
@@ -194,8 +190,9 @@ def write_translation(trmap):
 
 
 if __name__ == "__main__":
-    print("\n  ***** Old Translations *****")
-    trmap = get_old_translations(TRANSLATIONS_FILE)
+    ifile = TRANSLATIONS_FILE
+    print(f"\n  ***** Old Translations ({ifile}) *****")
+    trmap = get_old_translations(ifile)
     for s in sorted(trmap):
         print("\n§:", s)
         omap = trmap[s]
@@ -212,7 +209,8 @@ if __name__ == "__main__":
             print(f"   -- {k}:", omap[k])
             keys, tr, f, l = omap[k]
 
-    write_translation(ntran)
+    ofile = os.path.join(os.path.dirname(ifile), "New_Translations.ini")
+    write_translation(ofile, ntran)
 
     print("\n ***************************************************")
     for e in elist:
