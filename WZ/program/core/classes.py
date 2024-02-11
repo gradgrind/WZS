@@ -1,5 +1,5 @@
 """
-core/classes.py - last updated 2024-02-07
+core/classes.py - last updated 2024-02-11
 
 Manage class data.
 
@@ -67,19 +67,24 @@ class DIV_Error(Exception):
 #TODO: Add configuration option and code to support schools with
 # no class divisions? Or is support already adequate?
 
-def format_class_group(c: str, g: str) -> str:
+def format_class_group(c: str, g: str, whole_class: str = None) -> str:
     """Make a full class-group descriptor from the class and the possibly
     null ("") group.
+    If <whole_class> is supplied, it will be used instead of <GROUP_ALL>.
     """
+    if whole_class is None:
+        whole_class = GROUP_ALL
+    if g == whole_class:
+        return c
     if g:
-        if g == GROUP_ALL:
-            return c
         return f"{c}{CONFIG.CLASS_GROUP_SEP}{g}"
     return f"({c})"
 #+
-def class_group_split(class_group: str) -> tuple[str, str]:
+def class_group_split(class_group: str, whole_class: str = None
+) -> tuple[str, str]:
     """Split a full group descriptor (class.group, etc.) into class and
     group.
+    If <whole_class> is supplied, it will be used instead of <GROUP_ALL>.
     """
     if class_group.startswith("("):
         assert class_group.endswith(")")
@@ -87,7 +92,7 @@ def class_group_split(class_group: str) -> tuple[str, str]:
     try:
         class_group, g = class_group.split(CONFIG.CLASS_GROUP_SEP, 1)
     except ValueError:
-        g = GROUP_ALL
+        g = GROUP_ALL if whole_class is None else whole_class
     return (class_group, g)
 #+
 def class_group_split_with_id(class_group: str) -> tuple[int, str]:

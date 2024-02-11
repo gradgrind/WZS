@@ -1,7 +1,7 @@
 """
 ui/table_support.py
 
-Last updated:  2024-01-26
+Last updated:  2024-02-11
 
 Support for table widgets, extending their capabilities.
 
@@ -238,9 +238,9 @@ class ListChoice(QDialog):
         lw.setFixedSize(w, h)
         self.resize(0, 0)
         self.listwidget.setCurrentRow(row)
-        p = self.parent()
-        if p:
-            self.move(p.mapToGlobal(QPoint(0, 0)))
+#        p = self.parent()
+#        if p:
+#            self.move(p.mapToGlobal(QPoint(0, 0)))
         self.exec()
         return self.result
 
@@ -284,9 +284,9 @@ class TextEditor(QDialog):
         self.te.setPlainText(self.text0)
         self.suppress_handlers = False
         self.changed()
-        p = self.parent()
-        if p:
-            self.move(p.mapToGlobal(QPoint(0, 0)))
+#        p = self.parent()
+#        if p:
+#            self.move(p.mapToGlobal(QPoint(0, 0)))
         self.exec()
         return self.result
 

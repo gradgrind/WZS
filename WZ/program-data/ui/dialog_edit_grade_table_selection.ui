@@ -287,7 +287,7 @@
      <item>
       <layout class="QVBoxLayout" name="verticalLayout_3">
        <item>
-        <widget class="QTableWidget" name="tableWidget">
+        <widget class="QTableWidget" name="report_table">
          <property name="minimumSize">
           <size>
            <width>400</width>
@@ -352,7 +352,7 @@
           </spacer>
          </item>
          <item>
-          <widget class="QToolButton" name="pb_remove_group_2">
+          <widget class="QToolButton" name="pb_remove_report">
            <property name="toolTip">
             <string>aktuellen Kurs löschen </string>
            </property>
@@ -363,7 +363,7 @@
           </widget>
          </item>
          <item>
-          <widget class="QToolButton" name="pb_new_group_2">
+          <widget class="QToolButton" name="pb_new_report">
            <property name="toolTip">
             <string>einen neuen Kurs zur Tabelle hinzufügen</string>
            </property>

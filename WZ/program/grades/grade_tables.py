@@ -1,5 +1,5 @@
 """
-grades/grade_tables.py - last updated 2024-02-10
+grades/grade_tables.py - last updated 2024-02-11
 
 Manage grade tables.
 
@@ -93,8 +93,7 @@ class GradeTemplates(db_Table):
         for rec in self.records:
             occ = rec.OCCASION
             cg = rec.CLASS_GROUP
-            tp = f"GRADE_REPORTS/{rec.TEMPLATE}"
-            val = (rec.REPORT_TYPE, tp, rec.id)
+            val = (rec.REPORT_TYPE, rec.TEMPLATE, rec.id)
             try:
                 cgmap = tmap[occ]
             except KeyError:

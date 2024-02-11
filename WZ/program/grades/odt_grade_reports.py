@@ -1,5 +1,5 @@
 """
-grades/odt_grade_reports.py - last updated 2024-02-08
+grades/odt_grade_reports.py - last updated 2024-02-11
 
 Use odt-documents (ODF / LibreOffice) as templates for grade reports.
 
@@ -151,7 +151,10 @@ def make_grade_reports(
                 continue
         except KeyError:
             continue
-        template_file = DATAPATH(tfile, "TEMPLATES")
+        template_file = DATAPATH(
+            tfile,
+            f"TEMPLATES/{CONFIG.GRADE_REPORT_TEMPLATES}"
+        )
         if not template_file.endswith(".odt"):
             template_file = f"{template_file}.odt"
         #print("\n§template:", template_file)
