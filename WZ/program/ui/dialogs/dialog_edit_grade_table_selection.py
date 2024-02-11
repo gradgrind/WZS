@@ -203,7 +203,7 @@ def editGradeTableSelectionDialog(
             ui.pb_edited_occasion.setEnabled(False)
             ui.pb_remove_occasion.setEnabled(True)
         else:
-            ui.pb_new_occasion.setEnabled(True)
+            ui.pb_new_occasion.setEnabled(bool(occasion))
             ui.pb_edited_occasion.setEnabled(bool(occasion))
             ui.pb_remove_occasion.setEnabled(False)
 
@@ -217,12 +217,47 @@ def editGradeTableSelectionDialog(
         if suppress_events: return
         class_group_changed(c, ui.group_editor.text())
 
+    @Slot(str)
     def on_group_editor_textChanged(g):
         if suppress_events: return
         class_group_changed(ui.combo_classes.currentText(), g)
 
+    @Slot()
+    def on_pb_new_occasion_clicked():
+        nonlocal occasion, suppress_events
+        grc = db.table("GRADE_REPORT_CONFIG")
+        o = ui.occasion_editor.text()
+        if grc.add_records([{
+            "OCCASION": o,
+            "CLASS_GROUP": class_group,
+            "REPORT_TYPE": "",
+            "TEMPLATE": "",
+        }]):
+            # Reinitialize with <o> and <class_group>
+            occasion = o
+            suppress_events = True
+            init()
+            suppress_events = False
 
-#TODO: pb_new_report and pb_remove_report
+    @Slot()
+    def on_pb_remove_occasion_clicked():
+        print("§on_pb_remove_occasion_clicked: TODO")
+
+    @Slot()
+    def on_pb_new_group_clicked():
+        print("§on_pb_new_group_clicked: TODO")
+
+    @Slot()
+    def on_pb_remove_group_clicked():
+        print("§on_pb_remove_group_clicked: TODO")
+
+    @Slot()
+    def on_pb_new_report_clicked():
+        print("§on_pb_new_report_clicked: TODO")
+
+    @Slot()
+    def on_pb_remove_report_clicked():
+        print("§on_pb_remove_report_clicked: TODO")
 
     ##### functions #####
 
@@ -266,19 +301,32 @@ def editGradeTableSelectionDialog(
 
     def class_group_changed(c, g):
         cg = format_class_group(c, g, whole_class = "")
-        print("???", cg, cgmap)
         if cg in cgmap:
-            print("???+")
             ui.pb_new_group.setEnabled(False)
             ui.pb_remove_group.setEnabled(True)
         else:
-            print("???-")
             ui.pb_new_group.setEnabled(True)
             ui.pb_remove_group.setEnabled(False)
 
+    def init():
+        nonlocal occasion
+        report_types.update(db.table("GRADE_REPORT_CONFIG")._template_info)
+        occasions[:] = sorted(report_types)
+        ui.occasion_list.clear()
+        ui.occasion_list.addItems(occasions)
+        try:
+            i = occasions.index(occasion)
+        except ValueError:
+            i = 0
+            try:
+                occasion = occasions[0]
+            except IndexError:
+#TODO: Is this case covered??
+                occasion = ""
+        ui.occasion_list.setCurrentRow(i)
+        set_groups()
 
     ##### dialog main ######
-    print("?????", class_group_list)
 
     # Don't pass a parent because that would add a child with each call of
     # the dialog.
@@ -291,37 +339,26 @@ def editGradeTableSelectionDialog(
 #    ui.textline.setText(start_value or default)
 
     db = get_database()
-    # Get configuration data
-    report_types = db.table("GRADE_REPORT_CONFIG")._template_info
-    ui.occasion_list.clear()
-    occasions = sorted(report_types)
-    ui.occasion_list.addItems(occasions)
-
     # Populate the class combobox
     class_list = db.table("CLASSES").class_list()
     class_list.reverse()
     ui.combo_classes.clear()
     ui.combo_classes.addItems(c for _, c, _ in class_list)
-
     table_1 = Table(ui.report_table)
     report_table = ReportTable(table_1)
+    # Configuration data
+    report_types = {}
+    occasions = []
+    init()
 
-    print("?????1", class_group_list)
+
 
 
 #+++++++++++++
 
 
     result = None
-    # Use a <dict> to check for changed entries because this will
-    # ignore the order (a list comparison wouldn't).
     suppress_events = False
-    try:
-        i = occasions.index(occasion)
-    except ValueError:
-        i = 0
-    print("?????2", class_group_list, i)
-    ui.occasion_list.setCurrentRow(i)
 
     if parent:
         ui.move(parent.mapToGlobal(parent.pos()))
