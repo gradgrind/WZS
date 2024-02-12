@@ -36,8 +36,8 @@ if __name__ == "__main__":
     from core.base import setup
     setup(os.path.join(basedir, 'TESTDATA'))
 
-#from core.base import Tr
-#T = Tr("ui.dialogs.dialog_edit_grade_table_selection")
+from core.base import Tr
+T = Tr("ui.dialogs.dialog_edit_grade_table_selection")
 
 ### +++++
 
@@ -58,9 +58,10 @@ from ui.ui_base import (
     Slot,
     ### other
     load_ui,
+    SHOW_CONFIRM,
 )
 from ui.table_support import Table, ListChoice
-from core.base import DATAPATH
+from core.base import DATAPATH, REPORT_ERROR
 from core.basic_data import get_database, CONFIG
 from core.classes import format_class_group, class_group_split
 import grades.grade_tables  # noqa, needed to load table "GRADE_REPORT_CONFIG"
@@ -81,27 +82,24 @@ class ReportTable:
 
     def setup(self, data):
         self.data = data
+        n = len(data)
+        assert n > 0
+        # An empty line is only permissible as the only entry
+        if n > 1 or data[0][0]:
+            data.append(("", "", 0))    # add an empty line for a new entry
         self.table.set_row_count(len(data))
-#TODO: There will be an empty row if there is a blank line.
-# It might be better to ALWAYS have a "?" line, which would correspond
-# to this real database line if there are no other entries.
         r = 0
         for rtag, tfile, _ in data:
-            if rtag:
-                self.table.write(r, 0, rtag)
-                self.table.write(r, 1, tfile)
-                r += 1
-        if data and data[-1][0][0] == "?":
-            row = len(data) - 1
-            self.table.set_current_row(row)
-        else:
-            self.table.set_current_row(0)
-
-    def add_line(self) -> int:
-        return self.setup(self.data + [("?", "", 0)])
+            self.table.write(r, 0, rtag)
+            self.table.write(r, 1, tfile)
+            r += 1
+        self.table.set_current_row(r - 1)
 
     def choices(self, col: int):
         return self._choices
+
+    def nrows(self):
+        return len(self.data)
 
     def current_row(self) -> int:
         return self.table.current_row()
@@ -248,8 +246,46 @@ def editGradeTableSelectionDialog(
             suppress_events = False
 
     @Slot()
+    def on_pb_edited_occasion_clicked():
+        nonlocal occasion, suppress_events
+        print("§on_pb_edited_occasion_clicked: TODO")
+        # Check it is not in use
+        if db.table("GRADES").grades_for_occasion_group(
+            occasion, class_group
+        ):
+            REPORT_ERROR(T("GRADES_EXIST_FOR_OCCASION", o = occasion))
+            return
+        o = ui.occasion_editor.text()
+        grc = db.table("GRADE_REPORT_CONFIG")
+        for rtl in report_types[occasion].values():
+            for _, _, id in rtl:
+                grc.update_cell(id, "OCCASION", o)
+        grc.reset()
+        occasion = o
+        suppress_events = True
+        init()
+        suppress_events = False
+
+    @Slot()
     def on_pb_remove_occasion_clicked():
-        print("§on_pb_remove_occasion_clicked: TODO")
+        nonlocal suppress_events
+        # Check it is not in use
+        if db.table("GRADES").grades_for_occasion_group(
+            occasion, class_group
+        ):
+            REPORT_ERROR(T("GRADES_EXIST_FOR_OCCASION", o = occasion))
+            return
+        if not SHOW_CONFIRM(T("REALLY_DELETE_OCCASION", o = occasion)):
+            return
+        rowids = []
+        for rtl in report_types[occasion].values():
+            for _, _, id in rtl:
+                rowids.append(id)
+        grc = db.table("GRADE_REPORT_CONFIG")
+        grc.delete_records(rowids)
+        suppress_events = True
+        init()
+        suppress_events = False
 
     @Slot()
     def on_pb_new_group_clicked():
@@ -270,37 +306,62 @@ def editGradeTableSelectionDialog(
 
     @Slot()
     def on_pb_remove_group_clicked():
-        print("§on_pb_remove_group_clicked: TODO")
-
-    @Slot()
-    def on_pb_new_report_clicked():
-        report_table.add_line()
-        ui.pb_new_report.setEnabled(False)
+        nonlocal suppress_events
+        # Check it is not in use
+        if db.table("GRADES").grades_for_occasion_group(
+            occasion, class_group
+        ):
+            REPORT_ERROR(T("GRADES_EXIST_FOR_GROUP",
+                o = occasion, cg = class_group
+            ))
+            return
+        if not SHOW_CONFIRM(T("REALLY_DELETE_GROUP",
+            o = occasion, cg = class_group
+        )):
+            return
+        rowids = [id for _, _, id in report_types[occasion][class_group]]
+        #print("???", rowids, report_types[occasion][class_group])
+        grc = db.table("GRADE_REPORT_CONFIG")
+        grc.delete_records(rowids)
+        suppress_events = True
+        init()
+        suppress_events = False
 
     @Slot()
     def on_pb_remove_report_clicked():
-        print("§on_pb_remove_report_clicked: TODO")
+        nonlocal suppress_events
         row = report_table.current_row()
-        print("§§", report_table.data[row])
         rowid = report_table.read(row, 2)
-        if rowid > 0:
-            tag = report_table.read(row, 0)
-            template = report_table.read(row, 1)
-            print(f"TODO: delete {occasion} {class_group} {tag} {template}")
-        else:
-            # Just remove the line, there is no database entry
-            print("TODO: delete dummy line")
-
-#+++++++++++++++++++++++
+        rtype = report_table.read(row, 0)
+        if rowid > 0 and rtype:
+            # Check it is not in use
+            for st, gm in db.table("GRADES").grades_for_occasion_group(
+                occasion, class_group
+            ).items():
+                if gm.grades.get("REPORT_TYPE") == rtype:
+                    REPORT_ERROR(T("REPORT_TYPE_IN_USE"))
+                    return
+            if not SHOW_CONFIRM(T("REALLY_DELETE_REPORT_TYPE",
+                t = rtype, o = occasion, cg = class_group
+            )):
+                return
+            grc = db.table("GRADE_REPORT_CONFIG")
+            if report_table.nrows() == 1:
+                # Keep entry, but clear tag and template
+                grc.update_cells(TAG = "", TEMPLATE = "")
+                report_table.write(0, 0, "")
+                report_table.write(0, 1, "")
+            else:
+                grc.delete_records([rowid])
+                suppress_events = True
+                init()
+                suppress_events = False
+        #else: There is no database entry
 
     ##### functions #####
 
-#    def reset_occasions():
-#        ui.occasion_list.setCurrentRow(0)
-
     def set_groups():
         nonlocal suppress_events
-#        report_table.setup([])
         suppress_events = True
         ui.group_list.clear()
         cgmap.clear()
@@ -328,8 +389,7 @@ def editGradeTableSelectionDialog(
         ui.combo_classes.setCurrentText(c)
         ui.group_editor.setText(g)
         report_table.setup(rlist)
-        ui.pb_new_report.setEnabled(True)
-        ui.pb_remove_report.setEnabled(bool(rlist))
+        #ui.pb_remove_report.setEnabled(bool(rlist))
         suppress_events = False
         class_group_changed(c, g)
 
@@ -345,6 +405,7 @@ def editGradeTableSelectionDialog(
 
     def init():
         nonlocal occasion
+        report_types.clear()
         report_types.update(db.table("GRADE_REPORT_CONFIG")._template_info)
         occasions[:] = sorted(report_types)
         ui.occasion_list.clear()

@@ -112,7 +112,7 @@
          <item>
           <widget class="QToolButton" name="pb_remove_occasion">
            <property name="toolTip">
-            <string>aktuellen Kurs löschen </string>
+            <string>Den aktuellen Anlass löschen.</string>
            </property>
            <property name="icon">
             <iconset>
@@ -123,7 +123,7 @@
          <item>
           <widget class="QToolButton" name="pb_new_occasion">
            <property name="toolTip">
-            <string>einen neuen Kurs zur Tabelle hinzufügen</string>
+            <string>Den neu eingegebenen Anlass in die Liste aufnehmen.</string>
            </property>
            <property name="icon">
             <iconset>
@@ -147,7 +147,7 @@
          <item>
           <widget class="QToolButton" name="pb_edited_occasion">
            <property name="toolTip">
-            <string>einen neuen Kurs zur Tabelle hinzufügen</string>
+            <string>Den aktuellen Anlass umbenennen.</string>
            </property>
            <property name="icon">
             <iconset>
@@ -261,7 +261,7 @@
          <item>
           <widget class="QToolButton" name="pb_remove_group">
            <property name="toolTip">
-            <string>aktuellen Kurs löschen </string>
+            <string>Aktuelle Klasse/Gruppe (für den aktuellen Anlass) löschen.</string>
            </property>
            <property name="icon">
             <iconset>
@@ -272,7 +272,7 @@
          <item>
           <widget class="QToolButton" name="pb_new_group">
            <property name="toolTip">
-            <string>einen neuen Kurs zur Tabelle hinzufügen</string>
+            <string>Die neu angegebene Klasse/Gruppe in die Liste aufnehmen.</string>
            </property>
            <property name="icon">
             <iconset>
@@ -354,22 +354,11 @@
          <item>
           <widget class="QToolButton" name="pb_remove_report">
            <property name="toolTip">
-            <string>aktuellen Kurs löschen </string>
+            <string>Aktuelle Zeugnis-Art (für aktuellen Anlass und aktuelle Gruppe) löschen.</string>
            </property>
            <property name="icon">
             <iconset>
              <normaloff>../icons/icon_remove.svg</normaloff>../icons/icon_remove.svg</iconset>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QToolButton" name="pb_new_report">
-           <property name="toolTip">
-            <string>einen neuen Kurs zur Tabelle hinzufügen</string>
-           </property>
-           <property name="icon">
-            <iconset>
-             <normaloff>../icons/icon_new.svg</normaloff>../icons/icon_new.svg</iconset>
            </property>
           </widget>
          </item>

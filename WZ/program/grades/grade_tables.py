@@ -1,5 +1,5 @@
 """
-grades/grade_tables.py - last updated 2024-02-11
+grades/grade_tables.py - last updated 2024-02-12
 
 Manage grade tables.
 
@@ -140,7 +140,7 @@ class Grades(db_Table):
     ) -> dict[int, GradeMap]:
         """Return a mapping with an entry for each student in the group
         who has an entry for the given occasion.
-        The values are mappings: str(subject-id) -> <GradeMap> instance
+        The values are <GradeMap> instances.
         NOTE that the grade mapping can include also non-grade elements,
         like DATE_ISSUE and LEVEL (this LEVEL should be used rather than
         that of the student as the latter might have changed after this
