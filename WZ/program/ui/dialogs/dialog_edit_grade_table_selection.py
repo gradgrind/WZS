@@ -1,7 +1,7 @@
 """
 ui/dialogs/dialog_edit_grade_table_selection.py
 
-Last updated:  2024-02-11
+Last updated:  2024-02-12
 
 Supporting "dialog" for the grades manager – edit the "occasion" + group
 pairs and their associated report types and templates.
@@ -63,7 +63,7 @@ from ui.table_support import Table, ListChoice
 from core.base import DATAPATH
 from core.basic_data import get_database, CONFIG
 from core.classes import format_class_group, class_group_split
-import grades.grade_tables # needed to load table "GRADE_REPORT_CONFIG"
+import grades.grade_tables  # noqa, needed to load table "GRADE_REPORT_CONFIG"
 
 ### -----
 
@@ -82,26 +82,35 @@ class ReportTable:
     def setup(self, data):
         self.data = data
         self.table.set_row_count(len(data))
+#TODO: There will be an empty row if there is a blank line.
+# It might be better to ALWAYS have a "?" line, which would correspond
+# to this real database line if there are no other entries.
         r = 0
         for rtag, tfile, _ in data:
-            self.table.write(r, 0, rtag)
-            self.table.write(r, 1, tfile)
-            r += 1
+            if rtag:
+                self.table.write(r, 0, rtag)
+                self.table.write(r, 1, tfile)
+                r += 1
+        if data and data[-1][0][0] == "?":
+            row = len(data) - 1
+            self.table.set_current_row(row)
+        else:
+            self.table.set_current_row(0)
+
+    def add_line(self) -> int:
+        return self.setup(self.data + [("?", "", 0)])
 
     def choices(self, col: int):
         return self._choices
+
+    def current_row(self) -> int:
+        return self.table.current_row()
 
     def read(self, row: int, col: int) -> str:
         return self.data[row][col]
 
     def write(self, row: int, col: int, val: str):
         print("§write (TODO):", row, col, val)
-
-    def add_line(self):
-        print("§add_line (TODO)")
-
-    def remove_line(self):
-        print("§remove_line (TODO)")
 
 
 class TableDelegate(QStyledItemDelegate):
@@ -186,8 +195,7 @@ def editGradeTableSelectionDialog(
     @Slot()
     def on_accepted():
         nonlocal result
-#TODO
-        result = groups
+        result = (occasion, class_group)
 
     @Slot(str)
     def on_occasion_list_currentTextChanged(text):
@@ -245,7 +253,20 @@ def editGradeTableSelectionDialog(
 
     @Slot()
     def on_pb_new_group_clicked():
+        nonlocal class_group, suppress_events
         print("§on_pb_new_group_clicked: TODO")
+        grc = db.table("GRADE_REPORT_CONFIG")
+        if grc.add_records([{
+            "OCCASION": occasion,
+            "CLASS_GROUP": new_class_group,
+            "REPORT_TYPE": "",
+            "TEMPLATE": "",
+        }]):
+            # Reinitialize with <occasion> and <new_class_group>
+            class_group = new_class_group
+            suppress_events = True
+            init()
+            suppress_events = False
 
     @Slot()
     def on_pb_remove_group_clicked():
@@ -253,11 +274,24 @@ def editGradeTableSelectionDialog(
 
     @Slot()
     def on_pb_new_report_clicked():
-        print("§on_pb_new_report_clicked: TODO")
+        report_table.add_line()
+        ui.pb_new_report.setEnabled(False)
 
     @Slot()
     def on_pb_remove_report_clicked():
         print("§on_pb_remove_report_clicked: TODO")
+        row = report_table.current_row()
+        print("§§", report_table.data[row])
+        rowid = report_table.read(row, 2)
+        if rowid > 0:
+            tag = report_table.read(row, 0)
+            template = report_table.read(row, 1)
+            print(f"TODO: delete {occasion} {class_group} {tag} {template}")
+        else:
+            # Just remove the line, there is no database entry
+            print("TODO: delete dummy line")
+
+#+++++++++++++++++++++++
 
     ##### functions #####
 
@@ -266,7 +300,7 @@ def editGradeTableSelectionDialog(
 
     def set_groups():
         nonlocal suppress_events
-        report_table.setup([])
+#        report_table.setup([])
         suppress_events = True
         ui.group_list.clear()
         cgmap.clear()
@@ -279,29 +313,30 @@ def editGradeTableSelectionDialog(
         except ValueError:
             i = 0
         ui.group_list.setCurrentRow(i)
-        suppress_events = False
         r = ui.group_list.currentRow()
         set_class_group(class_group_list[r])
+        suppress_events = False
 
     def set_class_group(cg):
-        nonlocal class_group
+        nonlocal class_group, suppress_events
         class_group = cg
         rlist = sorted(cgmap[cg])
         print("\n§on_group_list_currentTextChanged", cg, rlist)
         c, g = class_group_split(cg, whole_class = "")
         #print(f"§class + group: '{c}', '{g}'")
+        suppress_events = True
         ui.combo_classes.setCurrentText(c)
         ui.group_editor.setText(g)
-#        ui.pb_new_group.setEnabled(False)
-#        ui.pb_remove_group.setEnabled(True)
         report_table.setup(rlist)
-
-
-
+        ui.pb_new_report.setEnabled(True)
+        ui.pb_remove_report.setEnabled(bool(rlist))
+        suppress_events = False
+        class_group_changed(c, g)
 
     def class_group_changed(c, g):
-        cg = format_class_group(c, g, whole_class = "")
-        if cg in cgmap:
+        nonlocal new_class_group
+        new_class_group = format_class_group(c, g, whole_class = "")
+        if new_class_group in cgmap:
             ui.pb_new_group.setEnabled(False)
             ui.pb_remove_group.setEnabled(True)
         else:
@@ -349,17 +384,10 @@ def editGradeTableSelectionDialog(
     # Configuration data
     report_types = {}
     occasions = []
+    new_class_group = None
     init()
-
-
-
-
-#+++++++++++++
-
-
     result = None
     suppress_events = False
-
     if parent:
         ui.move(parent.mapToGlobal(parent.pos()))
     # Activate the dialog

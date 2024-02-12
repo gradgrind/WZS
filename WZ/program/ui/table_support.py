@@ -1,7 +1,7 @@
 """
 ui/table_support.py
 
-Last updated:  2024-02-11
+Last updated:  2024-02-12
 
 Support for table widgets, extending their capabilities.
 
@@ -80,8 +80,11 @@ class Table:
     def write(self, row: int, column: int, text: str):
         self.qtable.item(row, column).setText(text)
 
-    def current_row(self):
+    def current_row(self) -> int:
         return self.qtable.currentRow()
+
+    def set_current_row(self, row: int):
+        self.qtable.setCurrentCell(row, 0)
 
 
 class CopyPasteEventFilter(QObject):
@@ -296,5 +299,3 @@ class TextEditor(QDialog):
         self.bb.button(QDialogButtonBox.StandardButton.Ok).setDisabled(
             self.current == self.text0
         )
-
-
