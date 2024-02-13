@@ -1,7 +1,7 @@
 """
 ui/dialogs/dialog_edit_grade_table_selection.py
 
-Last updated:  2024-02-12
+Last updated:  2024-02-13
 
 Supporting "dialog" for the grades manager – edit the "occasion" + group
 pairs and their associated report types and templates.
@@ -46,16 +46,13 @@ from typing import Optional
 from ui.ui_base import (
     ### QtWidgets:
     QWidget,
-#    QDialogButtonBox,
-#    QTableWidget,
-#    QComboBox,
     QStyledItemDelegate,
     QLineEdit,
     ### QtGui:
     ### QtCore:
     QPoint,
-#    Qt,
     Slot,
+    QTimer,
     ### other
     load_ui,
     SHOW_CONFIRM,
@@ -64,14 +61,15 @@ from ui.table_support import Table, ListChoice
 from core.base import DATAPATH, REPORT_ERROR
 from core.basic_data import get_database, CONFIG
 from core.classes import format_class_group, class_group_split
-import grades.grade_tables  # noqa, needed to load table "GRADE_REPORT_CONFIG"
+import grades.grade_tables  # noqa (load table "GRADE_REPORT_CONFIG")
 
 ### -----
 
 
 class ReportTable:
-    def __init__(self, table: Table):
+    def __init__(self, table: Table, update_report_type):
         self.table = table
+        self._update = update_report_type
         self._delegate = TableDelegate(table.qtable, self)
         table.qtable.setItemDelegate(self._delegate)
         tdir = DATAPATH(CONFIG.GRADE_REPORT_TEMPLATES, "TEMPLATES")
@@ -108,7 +106,28 @@ class ReportTable:
         return self.data[row][col]
 
     def write(self, row: int, col: int, val: str):
-        print("§write (TODO):", row, col, val)
+        ## Update database, if value is valid
+        # Check that the values are really new
+        if col == 0:
+            # Report-type field
+            if not val:
+                REPORT_ERROR(T("NO_REPORT_TYPE"))
+                return
+            for r in self.data:
+                if r[0] == val:
+                    REPORT_ERROR(T("TAG_NOT_NEW"))
+                    return
+            # Allow empty template: when adding a new entry, this field
+            # must be filled before the template field.
+            # It is also possible that a type is to be defined before a
+            # template is available (?)
+            self._update(self.data[row][2], val, self.data[row][1])
+        elif val != self.data[row][1]:
+            rt = self.data[row][0]
+            if rt:
+                self._update(self.data[row][2], rt, val)
+            else:
+                REPORT_ERROR(T("NO_REPORT_TYPE"))
 
 
 class TableDelegate(QStyledItemDelegate):
@@ -137,7 +156,7 @@ class TableDelegate(QStyledItemDelegate):
         # underlying "actual" values, <self._table> is used.
         value = self._table.read(row, col)
         # or tw.item(row, col).text()
-        print("§createEditor:", row, col, value)
+        #print("§createEditor:", row, col, value)
         if col == 0:
             # simple text
             e = self._editor
@@ -175,7 +194,7 @@ class TableDelegate(QStyledItemDelegate):
         """
         # The "editor" must be an object whose value is available via
         # the "text" method – like a QLineEdit.
-        print("§setModelData:", index.row(), index.column(), editor.text())
+        #print("§setModelData:", index.row(), index.column(), editor.text())
         self._table.write(index.row(), index.column(), editor.text())
 
 
@@ -197,10 +216,12 @@ def editGradeTableSelectionDialog(
 
     @Slot(str)
     def on_occasion_list_currentTextChanged(text):
-        nonlocal occasion
+        nonlocal occasion, suppress_events
         if suppress_events: return
         occasion = text
+        suppress_events = True
         set_groups()
+        suppress_events = False
 
     @Slot(str)
     def on_occasion_editor_textChanged(text):
@@ -215,8 +236,11 @@ def editGradeTableSelectionDialog(
 
     @Slot(str)
     def on_group_list_currentTextChanged(text):
+        nonlocal suppress_events
         if suppress_events: return
+        suppress_events = True
         set_class_group(text)
+        suppress_events = False
 
     @Slot(str)
     def on_combo_classes_currentTextChanged(c):
@@ -241,14 +265,11 @@ def editGradeTableSelectionDialog(
         }]):
             # Reinitialize with <o> and <class_group>
             occasion = o
-            suppress_events = True
             init()
-            suppress_events = False
 
     @Slot()
     def on_pb_edited_occasion_clicked():
         nonlocal occasion, suppress_events
-        print("§on_pb_edited_occasion_clicked: TODO")
         # Check it is not in use
         if db.table("GRADES").grades_for_occasion_group(
             occasion, class_group
@@ -262,9 +283,7 @@ def editGradeTableSelectionDialog(
                 grc.update_cell(id, "OCCASION", o)
         grc.reset()
         occasion = o
-        suppress_events = True
         init()
-        suppress_events = False
 
     @Slot()
     def on_pb_remove_occasion_clicked():
@@ -283,14 +302,11 @@ def editGradeTableSelectionDialog(
                 rowids.append(id)
         grc = db.table("GRADE_REPORT_CONFIG")
         grc.delete_records(rowids)
-        suppress_events = True
         init()
-        suppress_events = False
 
     @Slot()
     def on_pb_new_group_clicked():
         nonlocal class_group, suppress_events
-        print("§on_pb_new_group_clicked: TODO")
         grc = db.table("GRADE_REPORT_CONFIG")
         if grc.add_records([{
             "OCCASION": occasion,
@@ -300,9 +316,7 @@ def editGradeTableSelectionDialog(
         }]):
             # Reinitialize with <occasion> and <new_class_group>
             class_group = new_class_group
-            suppress_events = True
             init()
-            suppress_events = False
 
     @Slot()
     def on_pb_remove_group_clicked():
@@ -323,9 +337,7 @@ def editGradeTableSelectionDialog(
         #print("???", rowids, report_types[occasion][class_group])
         grc = db.table("GRADE_REPORT_CONFIG")
         grc.delete_records(rowids)
-        suppress_events = True
         init()
-        suppress_events = False
 
     @Slot()
     def on_pb_remove_report_clicked():
@@ -349,20 +361,14 @@ def editGradeTableSelectionDialog(
             if report_table.nrows() == 1:
                 # Keep entry, but clear tag and template
                 grc.update_cells(TAG = "", TEMPLATE = "")
-                report_table.write(0, 0, "")
-                report_table.write(0, 1, "")
             else:
                 grc.delete_records([rowid])
-                suppress_events = True
-                init()
-                suppress_events = False
+            init()
         #else: There is no database entry
 
     ##### functions #####
 
     def set_groups():
-        nonlocal suppress_events
-        suppress_events = True
         ui.group_list.clear()
         cgmap.clear()
         cgmap.update(report_types.get(occasion))
@@ -376,21 +382,18 @@ def editGradeTableSelectionDialog(
         ui.group_list.setCurrentRow(i)
         r = ui.group_list.currentRow()
         set_class_group(class_group_list[r])
-        suppress_events = False
 
     def set_class_group(cg):
-        nonlocal class_group, suppress_events
+        nonlocal class_group
         class_group = cg
         rlist = sorted(cgmap[cg])
-        print("\n§on_group_list_currentTextChanged", cg, rlist)
+        #print("\n§set_class_group:", cg, rlist)
         c, g = class_group_split(cg, whole_class = "")
         #print(f"§class + group: '{c}', '{g}'")
-        suppress_events = True
         ui.combo_classes.setCurrentText(c)
         ui.group_editor.setText(g)
         report_table.setup(rlist)
         #ui.pb_remove_report.setEnabled(bool(rlist))
-        suppress_events = False
         class_group_changed(c, g)
 
     def class_group_changed(c, g):
@@ -404,7 +407,8 @@ def editGradeTableSelectionDialog(
             ui.pb_remove_group.setEnabled(False)
 
     def init():
-        nonlocal occasion
+        nonlocal occasion, suppress_events
+        suppress_events = True
         report_types.clear()
         report_types.update(db.table("GRADE_REPORT_CONFIG")._template_info)
         occasions[:] = sorted(report_types)
@@ -421,6 +425,28 @@ def editGradeTableSelectionDialog(
                 occasion = ""
         ui.occasion_list.setCurrentRow(i)
         set_groups()
+        suppress_events = False
+
+    def update_report_type(rowid: int, report_type: str, template: str):
+        """Manage updates to the report-type table
+        """
+        grc = db.table("GRADE_REPORT_CONFIG")
+        if rowid:
+            if not grc.update_cells(
+                rowid, REPORT_TYPE = report_type, TEMPLATE = template
+            ):
+                return
+            grc.reset()
+        else:
+            if not grc.add_records([{
+                "OCCASION": occasion,
+                "CLASS_GROUP": class_group,
+                "REPORT_TYPE": report_type,
+                "TEMPLATE": template,
+            }]):
+                return
+        # Call indirectly to avoid (here harmless) error message
+        QTimer.singleShot(0, init)
 
     ##### dialog main ######
 
@@ -441,7 +467,7 @@ def editGradeTableSelectionDialog(
     ui.combo_classes.clear()
     ui.combo_classes.addItems(c for _, c, _ in class_list)
     table_1 = Table(ui.report_table)
-    report_table = ReportTable(table_1)
+    report_table = ReportTable(table_1, update_report_type)
     # Configuration data
     report_types = {}
     occasions = []
@@ -462,7 +488,7 @@ def editGradeTableSelectionDialog(
 if __name__ == "__main__":
 
     print("\n----->", editGradeTableSelectionDialog(
-        occasion = "2. Halbjahr",
+        occasion = "2. HalbjahrX",
         class_group = "11G",
         parent = None,
     ))
