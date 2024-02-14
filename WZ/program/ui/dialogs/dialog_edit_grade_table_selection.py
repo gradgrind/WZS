@@ -1,7 +1,12 @@
 """
 ui/dialogs/dialog_edit_grade_table_selection.py
 
-Last updated:  2024-02-13
+Last updated:  2024-02-14
+
+#TODO: When called from grades_manager the template pop-up is below the
+# dialog window ...
+# ~ l.459 by adding a parent it's okay again, but see the comment above
+# that!
 
 Supporting "dialog" for the grades manager – edit the "occasion" + group
 pairs and their associated report types and templates.
@@ -202,7 +207,7 @@ def editGradeTableSelectionDialog(
     occasion: str = None,
     class_group: str = None,
     parent: Optional[QWidget] = None,
-) -> Optional[str]:
+) -> Optional[tuple[str, str]]:     # return (occasion, class_group)
 
     class_group_list = []
     cgmap = {}
@@ -452,7 +457,8 @@ def editGradeTableSelectionDialog(
 
     # Don't pass a parent because that would add a child with each call of
     # the dialog.
-    ui = load_ui("dialog_edit_grade_table_selection.ui", None, locals())
+#    ui = load_ui("dialog_edit_grade_table_selection.ui", None, locals())
+    ui = load_ui("dialog_edit_grade_table_selection.ui", parent, locals())
 
     # Data initialization
     suppress_events = True

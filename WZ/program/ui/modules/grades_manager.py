@@ -1,7 +1,7 @@
 """
 ui/modules/grades_manager.py
 
-Last updated:  2024-02-10
+Last updated:  2024-02-14
 
 Front-end for managing grade reports.
 
@@ -71,7 +71,8 @@ from ui.table_support import (
     TextEditor,
     ListChoice,
 )
-
+from ui.dialogs.dialog_edit_grade_table_selection \
+    import editGradeTableSelectionDialog
 from core.base import (
     DATAPATH,
     REPORT_INFO,
@@ -381,9 +382,14 @@ class ManageGradesPage(QObject):
         # Set up lists of classes, teachers and subjects for the course
         # filter. These are lists of tuples:
         #    (db-primary-key, short form, full name)
+        self.occasion = None
+        self.class_group = None
         self.clear_display()
         self.db = get_database()
         self.report_info = class_report_data(GRADES = True)
+        self.setup()
+
+    def setup(self):
         ## Set up widgets
         self.suppress_handlers = True
         # Set up the "occasions" choice.
@@ -394,9 +400,14 @@ class ManageGradesPage(QObject):
         ]
         self.ui.combo_occasion.clear()
         self.ui.combo_occasion.addItems(p[0] for p in self.occasions)
-        self.ui.combo_occasion.setCurrentIndex(-1)
+        if self.occasion:
+            self.ui.combo_occasion.setCurrentText(self.occasion)
+        else:
+            self.ui.combo_occasion.setCurrentIndex(-1)
         self.fill_group_list()
         # Activate the window
+        if self.occasion and self.class_group:
+            self.set_group(self.class_group)
         self.suppress_handlers = False
 
     def clear_display(self):
@@ -472,7 +483,10 @@ class ManageGradesPage(QObject):
         olist = self.occasions[i][1]
         self.ui.combo_group.addItems(olist)
         if len(olist) > 1:
-            self.ui.combo_group.setCurrentIndex(-1)
+            if self.class_group:
+                self.ui.combo_group.setCurrentText(self.class_group)
+            else:
+                self.ui.combo_group.setCurrentIndex(-1)
         elif olist:
             self.ui.combo_group.setCurrentIndex(0)
 
@@ -625,8 +639,14 @@ class ManageGradesPage(QObject):
 
     @Slot()
     def on_edit_groups_clicked(self):
-#TODO: occasion + group editor (popup)
-        print("§on_edit_groups_clicked")
+        res = editGradeTableSelectionDialog(
+            self.occasion,
+            self.class_group,
+            parent = self.ui.edit_groups,
+        )
+        if res:
+            self.occasion, self.class_group = res
+        self.setup()
 
     @Slot(int)
     def on_combo_occasion_currentIndexChanged(self, i):

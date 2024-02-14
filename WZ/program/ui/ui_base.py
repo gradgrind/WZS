@@ -88,7 +88,7 @@ class GuiError(Exception):
     pass
 
 
-from core.base import Tr, set_reporter
+from core.base import Tr, set_reporter, REPORT_CRITICAL
 T = Tr("ui.ui_base")
 
 LOAD_UI_MARGIN = 0
@@ -175,6 +175,30 @@ def load_ui(uipath:str, parent:QWidget, frame:dict = None):
                     getattr(obj, sig).connect(func)
 
     return ui
+
+
+ui_cache = {}
+#+
+def get_ui(self, uipath: str, parent: QWidget):
+    """A ui-file (qt designer) loader for PySide6.
+    The designer file is looked for in the "ui" subdirectory of APPDATAPATH.
+    If no parent QWidget is supplied, an unparented widget will be returned.
+    The loaded widget is cached.
+    """
+    try:
+        ui = ui_cache[uipath]
+        if ui.parent() != parent:
+            ui.setParent(parent)
+    except KeyError:
+        loader = QUiLoader()
+        datadir = APPDATAPATH("ui")
+        loader.setWorkingDirectory(QDir(datadir))
+        ui = loader.load(os.path.join(datadir, uipath), parent)
+        if not ui:
+            REPORT_CRITICAL("Bug in ui_base.get_ui: {loader.errorString()}")
+        ui_cache[uipath] = ui
+    return ui
+
 
 
 DATE_FORMAT_MAP = {
