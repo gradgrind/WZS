@@ -41,7 +41,7 @@ T = Tr("ui.dialogs.dialog_edit_grade_table_selection")
 
 ### +++++
 
-from typing import Optional, Self
+from typing import Optional
 
 from ui.ui_base import (
     ### QtWidgets:
@@ -53,10 +53,9 @@ from ui.ui_base import (
     QPoint,
     Slot,
     QTimer,
-    Qt,
     ### other
-    get_ui,
     SHOW_CONFIRM,
+    Singleton,
 )
 from ui.table_support import Table, ListChoice
 from core.base import DATAPATH, REPORT_ERROR
@@ -74,31 +73,6 @@ def editGradeTableSelectionDialog(
 ) -> Optional[tuple[str, str]]:     # return (occasion, class_group)
     egtsd = __EditGradeTableSelectionDialog._get(parent)
     return egtsd.popup(occasion, class_group)
-
-
-class Singleton:
-    _cache: Self = None
-    _ui_file: str = None   # override!
-
-    @classmethod
-    def _get(cls, parent: QWidget = None):
-        o1 = cls._cache
-        if not o1:
-            o1 = cls()
-            cls._cache = o1
-            o1.ui = get_ui(cls._ui_file, wrapper = o1)
-            o1._setup()
-        o1.ui.setParent(parent)
-        if parent:
-            o1.ui.move(parent.mapToGlobal(parent.pos()))
-            # This, or some other flags, is needed to make the dialog show:
-            o1.ui.setWindowFlags(Qt.WindowType.SplashScreen)
-        return o1
-
-    def _setup(self):
-        """Override if there are things to be initialized at creation time.
-        """
-        pass
 
 
 class __EditGradeTableSelectionDialog(Singleton):

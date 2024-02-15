@@ -1,7 +1,7 @@
 """
 ui/ui_base.py
 
-Last updated:  2024-02-14
+Last updated:  2024-02-15
 
 Support stuff for the GUI: application initialization, dialogs, etc.
 
@@ -91,7 +91,7 @@ class GuiError(Exception):
 from core.base import Tr, set_reporter, REPORT_CRITICAL
 T = Tr("ui.ui_base")
 
-from typing import Any
+from typing import Self
 
 LOAD_UI_MARGIN = 0
 
@@ -214,6 +214,31 @@ def get_ui(
                     obj = getattr(ui, widget)
                 getattr(obj, sig).connect(getattr(wrapper, name))
     return ui
+
+
+class Singleton:
+    _cache: Self = None
+    _ui_file: str = None   # override!
+
+    @classmethod
+    def _get(cls, parent: QWidget = None):
+        o1 = cls._cache
+        if not o1:
+            o1 = cls()
+            cls._cache = o1
+            o1.ui = get_ui(cls._ui_file, wrapper = o1)
+            o1._setup()
+        o1.ui.setParent(parent)
+        if parent:
+            o1.ui.move(parent.mapToGlobal(parent.pos()))
+            # This, or some other flags, is needed to make the dialog show:
+            o1.ui.setWindowFlags(Qt.WindowType.SplashScreen)
+        return o1
+
+    def _setup(self):
+        """Override if there are things to be initialized at creation time.
+        """
+        pass
 
 
 DATE_FORMAT_MAP = {
