@@ -394,16 +394,17 @@ class ManageGradesPage(QObject):
         self.suppress_handlers = True
         # Set up the "occasions" choice.
         grc = self.db.table("GRADE_REPORT_CONFIG")._template_info
-        self.occasions = [
-            (o, sorted(grc[o], reverse = True))
-            for o in sorted(grc)
-        ]
+        self.occasions = []
+        i = -1
+        for j, o in enumerate(sorted(grc)):
+            _gl = sorted(grc[o], reverse = True)
+            self.occasions.append((o, _gl))
+            if o == self.occasion:
+                i = j
+                self._groups = _gl
         self.ui.combo_occasion.clear()
         self.ui.combo_occasion.addItems(p[0] for p in self.occasions)
-        if self.occasion:
-            self.ui.combo_occasion.setCurrentText(self.occasion)
-        else:
-            self.ui.combo_occasion.setCurrentIndex(-1)
+        self.ui.combo_occasion.setCurrentIndex(i)
         self.fill_group_list()
         # Activate the window
         if self.occasion and self.class_group:

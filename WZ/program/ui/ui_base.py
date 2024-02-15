@@ -1,7 +1,7 @@
 """
 ui/ui_base.py
 
-Last updated:  2024-02-09
+Last updated:  2024-02-14
 
 Support stuff for the GUI: application initialization, dialogs, etc.
 
@@ -91,6 +91,8 @@ class GuiError(Exception):
 from core.base import Tr, set_reporter, REPORT_CRITICAL
 T = Tr("ui.ui_base")
 
+from typing import Any
+
 LOAD_UI_MARGIN = 0
 
 ### -----
@@ -105,6 +107,7 @@ LOAD_UI_MARGIN = 0
 # on entry and not rely on settings in the ui-file which might be changed
 # on useage.
 
+#TODO: deprecated, move to <get_ui>?
 #import inspect
 def load_ui(uipath:str, parent:QWidget, frame:dict = None):
     """A ui-file (qt designer) loader for PySide6.
@@ -177,28 +180,40 @@ def load_ui(uipath:str, parent:QWidget, frame:dict = None):
     return ui
 
 
-ui_cache = {}
-#+
-def get_ui(self, uipath: str, parent: QWidget):
+def get_ui(
+    uipath: str,
+    parent: QWidget = None,
+    wrapper: object = None
+) -> QWidget:
     """A ui-file (qt designer) loader for PySide6.
     The designer file is looked for in the "ui" subdirectory of APPDATAPATH.
     If no parent QWidget is supplied, an unparented widget will be returned.
-    The loaded widget is cached.
+    If <wrapper> is supplied, signals in the ui-file will be automatically
+    connected to "slots" in the given object.
+    This can work in Python because the "slots" don't have to be actual
+    Qt-slots, a normal Python function is possible.
     """
-    try:
-        ui = ui_cache[uipath]
-        if ui.parent() != parent:
-            ui.setParent(parent)
-    except KeyError:
-        loader = QUiLoader()
-        datadir = APPDATAPATH("ui")
-        loader.setWorkingDirectory(QDir(datadir))
-        ui = loader.load(os.path.join(datadir, uipath), parent)
-        if not ui:
-            REPORT_CRITICAL("Bug in ui_base.get_ui: {loader.errorString()}")
-        ui_cache[uipath] = ui
+    loader = QUiLoader()
+    datadir = APPDATAPATH("ui")
+    loader.setWorkingDirectory(QDir(datadir))
+    ui = loader.load(os.path.join(datadir, uipath), parent)
+    if not ui:
+        REPORT_CRITICAL("Bug in ui_base.get_ui: {loader.errorString()}")
+    if wrapper:
+        for name in dir(wrapper):
+            try:
+                pre, sig = name.split("_", 1)
+            except ValueError:
+                continue
+            if pre == "on":
+                try:
+                    widget, sig = sig.rsplit("_", 1)
+                except ValueError:
+                    obj = ui
+                else:
+                    obj = getattr(ui, widget)
+                getattr(obj, sig).connect(getattr(wrapper, name))
     return ui
-
 
 
 DATE_FORMAT_MAP = {
