@@ -48,6 +48,19 @@
         "program/local/niwa/reports.py",
         "program/grades/odf_support.py",
         "program/check_translations.py",
-        "program/ui/dialogs/dialog_edit_grade_table_selection.py"
+        "program/ui/dialogs/dialog_edit_grade_table_selection.py",
+        "program/ui/grid_support.py",
+        "program/ui/timetable_grid.py",
+        "program/timetable/tt_basic_data.py",
+        "program/ui/modules/timetable_editor.py",
+        "program/ui/dialogs/dialog_update_students.py",
+        "program/local/niwa/raw_students.py",
+        "program/local/tussenvoegsel.py",
+        "program/core/new_db.py",
+        "prog2/core/base.py",
+        "prog2/core/basic_data.py",
+        "prog2/core/db_access.py",
+        "prog2/core/classes.py",
+        "prog2/core/rooms.py"
     ]
 }
