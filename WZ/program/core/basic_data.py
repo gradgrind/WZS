@@ -1,5 +1,5 @@
 """
-core/basic_data.py - last updated 2024-01-31
+core/basic_data.py - last updated 2024-02-17
 
 Configuration and other basic data dependent on the database.
 
@@ -117,8 +117,8 @@ class _CONFIG:
     __table = "__CONFIG__"
     _create = f"""CREATE TABLE {__table} (
         id      INTEGER PRIMARY KEY NOT NULL,
-        KEY     TEXT    UNIQUE NOT NULL,
-        VALUE   TEXT    NOT NULL,
+        K       TEXT    UNIQUE NOT NULL,
+        DATA    TEXT    NOT NULL,
         COMMENT TEXT    NOT NULL
     )
     STRICT;
@@ -131,7 +131,7 @@ class _CONFIG:
         comments = {}
         self._map["__COMMENTS__"] = comments
         for key, val, comment in db.select(
-            f"KEY, VALUE, COMMENT from {self.__table}"
+            f"K, DATA, COMMENT from {self.__table}"
         ):
             comments[key] = comment
             self._map[key] = val
@@ -152,7 +152,7 @@ class _CALENDAR:
     __table = "__CALENDAR__"
     _create = f"""CREATE TABLE {__table} (
         id      INTEGER PRIMARY KEY NOT NULL,
-        KEY     TEXT    UNIQUE NOT NULL,
+        K       TEXT    UNIQUE NOT NULL,
         DATE1   TEXT    NOT NULL,
         DATE2   TEXT    NOT NULL,
         COMMENT TEXT    NOT NULL
@@ -171,7 +171,7 @@ class _CALENDAR:
         records = {}
         self._map["__RECORDS__"] = records
         for key, d1, d2, comment in db.select(
-            f"KEY, DATE1, DATE2, COMMENT from {self.__table}"
+            f"K, DATE1, DATE2, COMMENT from {self.__table}"
         ):
             records[key] = [d1, d2, comment]
             self.set_key(key, d1, d2)
@@ -217,7 +217,7 @@ class _CALENDAR:
         }
 
     def update(self,
-        KEY: str,
+        K: str,
         DATE1: str = None,
         DATE2: str = None,
         COMMENT: str = None,
@@ -226,7 +226,7 @@ class _CALENDAR:
         """
         db = get_database()
         try:
-            old_value = self._map["__RECORDS__"][KEY]
+            old_value = self._map["__RECORDS__"][K]
         except KeyError:
             ## new record
             d2 = DATE2 or ""
@@ -239,16 +239,16 @@ class _CALENDAR:
             ):
                 REPORT_CRITICAL(
                     "Bug in basic_data::_CALENDAR.update, got bad data:\n"
-                    f"  KEY: {repr(KEY)}\n"
+                    f"  K: {repr(K)}\n"
                     f"  DATE1: {repr(DATE1)}\n"
                     f"  DATE2: {repr(DATE2)}\n"
                     f"  COMMENT: {repr(COMMENT)}"
                 )
-            flist = ["KEY", "DATE1", "DATE2", "COMMENT"]
-            vlist = [KEY, DATE1, d2, c]
-            self._map["__RECORDS__"][KEY] = [DATE1, d2, c]
+            flist = ["K", "DATE1", "DATE2", "COMMENT"]
+            vlist = [K, DATE1, d2, c]
+            self._map["__RECORDS__"][K] = [DATE1, d2, c]
             db.insert(self.__table, flist, vlist)
-            self.set_key(KEY, DATE1, d2)
+            self.set_key(K, DATE1, d2)
         else:
             ## existing record
             d1, d2, comment = old_value
@@ -284,12 +284,12 @@ class _CALENDAR:
                 flist.append("COMMENT = ?")
                 vlist.append(COMMENT)
                 old_value[2] = COMMENT
-            vlist.append(KEY)
+            vlist.append(K)
             db.transaction(
-                f"update {self.__table} set {', '.join(flist)} where KEY = ?",
+                f"update {self.__table} set {', '.join(flist)} where K = ?",
                 vlist
             )
-            self.set_key(KEY, old_value[0], old_value[1])
+            self.set_key(K, old_value[0], old_value[1])
 #+
 CALENDAR = _CALENDAR()
 
