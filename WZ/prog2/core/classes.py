@@ -139,11 +139,36 @@ DIVISIONS_SCHEMA = {
 #print("§re:", re.match(rx, "G=A").groups())
 
 
-class Classes(db_Table):
-    table = "CLASSES"
+class Classes(DB_Table):
+    _table = "CLASSES"
     order = "CLASS"
+    null_entry = {
+        "CLASS": "--",
+        "YEAR": "",
+        "NAME": "keine Klasse",
+        "Classroom_id": 0,
+        "DIVISIONS": ""
+    }
 
-    @classmethod
+    def setup(self):
+#TODO
+        return
+
+        DB_FIELD_TEXT("CLASS", unique = True),
+        DB_FIELD_TEXT("YEAR"),
+        DB_FIELD_TEXT("NAME", unique = True),
+        DB_FIELD_REFERENCE("Classroom", target = Rooms.table),
+        DB_FIELD_JSON(
+            "DIVISIONS",
+            schema = DIVISIONS_SCHEMA,
+            empty = [],
+        ),
+    )
+
+DB_Table.add_table(Classes)
+
+
+@classmethod
     def init(cls) -> bool:
         if cls.fields is None:
             cls.init_fields(

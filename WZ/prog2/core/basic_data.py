@@ -1,5 +1,5 @@
 """
-core/basic_data.py - last updated 2024-02-17
+core/basic_data.py - last updated 2024-02-18
 
 Configuration and other basic data dependent on the database.
 
@@ -83,8 +83,16 @@ def get_database(year: str = None):
 
 
 class YearData(Database):
-    def __init__(self, year: str):
-        # Open database
+    __slots__ = (
+        "nodes", "tables", "CONFIG", "CALENDAR", "__tables",
+        "modified_ids", "trigger_update"
+    )
+
+    def __init__(self, year: str, trigger_update = None):
+        self.modified_ids = set()
+        self.trigger_update = trigger_update
+
+        ## Open the database
         if year:
             dbpath = year_data_path(year, path = DATABASE)
         else:
@@ -122,22 +130,24 @@ class YearData(Database):
                     os.makedirs(os.path.dirname(bupath), exist_ok = True)
                     copyfile(dbpath, bupath)
                     REPORT_INFO(T("MONTHLY_DB_BACKUP", path = bupath))
+
         ## Load the database
         super().__init__(dbpath)
         # Read all "nodes"
         tables = {}
+        record_map = {}
+        self.nodes = record_map
         for id, table, data in self.select("* from NODES"):
+            record_map[id] = NODE(table, id, self, **json.loads(data))
             try:
-                records = tables[table]
+                tables[table].append(id)
             except KeyError:
-                records = {}
-                tables[table] = records
-            records[id] = json.loads(data)
+                tables[table] = [id]
         self.tables = tables
         # Set up the CONFIG table
-        self.CONFIG = _CONFIG(tables)
+        self.CONFIG = _CONFIG(self)
         # ... and the CALENDAR table
-        self.CALENDAR = _CALENDAR(tables)
+        self.CALENDAR = _CALENDAR(self)
         self.__tables = {}
 
     def table(self, name):
@@ -148,9 +158,90 @@ class YearData(Database):
                 cls = DB_Table._table_classes[name]
             except KeyError:
                 REPORT_CRITICAL(f"Bug: Table {name} not registered")
-        tbl = cls()
+        tbl = cls(self)
         self.__tables[name] = tbl
         return tbl
+
+    def add_node(self, table, **new):
+        id = self.insert(
+            "NODES",
+            ("DB_TABLE", "DATA"),
+            (table, to_json(new))
+        )
+        self.nodes[id] = NODE(table, id, self, **new)
+        self.tables[table].append(id)
+
+    def modified(self, id: int):
+        self.modified_ids.add(id)
+        if self.trigger_update:
+            self.trigger_update()
+        else:
+            self.update_nodes()
+
+    def update_nodes(self):
+        """Save modifications to database.
+        """
+        while True:
+            try:
+                id = self.modified_ids.pop()
+            except KeyError:
+                break
+            node = self.nodes[id]
+            self.update("NODES", id, "DATA", to_json(node))
+
+
+class NODE(dict):
+    """A special <dict> for NODES records.
+    It supports attribute access and handles automatic redirection of
+    references to other NODE records via reference field names stripped
+    of the "_id" suffix.
+    Only fields entered at initialization, or later using the method <set>,
+    are available.
+    """
+    __slots__ = ("_table", "_id", "_db")
+
+    def __init__(self, table: str, id: int, db: YearData, **fields):
+        super().__init__()
+        super().__setattr__("_table", table)
+        super().__setattr__("_id", id)
+        super().__setattr__("_db", db)
+        self.set(**fields)
+
+    def __getattr__(self, field: str):
+        return self[field]
+
+    def __getitem__(self, field: str):
+        try:
+            return super().__getitem__(field)
+        except KeyError:
+            r = super().__getitem__(f"{field}_id")
+            try:
+                return self._db.nodes[r]
+            except KeyError:
+                REPORT_CRITICAL(f"Bug: NODES[{r}] does not exist")
+
+    def set(self, **fields):
+        for k, v in fields.items():
+            super().__setitem__(k, v)
+
+    def set_modified(self):
+        """Trigger a db update.
+        """
+        self._db.modified(self._id)
+
+    def __setattr__(self, field: str, val: Any):
+        if field in self.__slots__:
+            super().__setattr__(field, val)
+        else:
+            self[field] = val
+
+    def __setitem__(self, field: str, val: Any):
+        """Updates only existing fields when the value is really new.
+        Other fields will raise a <KeyError>.
+        """
+        if val != super().__getitem__(field):
+            super().__setitem__(field, val)
+            self.set_modified()
 
 
 class DB_Table:
@@ -158,24 +249,19 @@ class DB_Table:
     """
     _table_classes = {}    # collect table classes
     null_entry = {}
+    order = None
 
     @classmethod
     def add_table(cls, tableclass):
         cls._table_classes[tableclass._table] = tableclass
 
-    def __init__(self):
-        db = get_database()
-        records = db.tables[self._table]
-        if not records:
+    def __init__(self, db):
+        self.db = db
+        if not db.tables.get(self._table):
+            db.tables[self._table] = []
             new = {"_i": 0}
             new.update(self.null_entry)
-            idl = db.insert(
-                "NODES",
-                ("DB_TABLE", "DATA"),
-                (self._table, to_json(new))
-            )
-            records = {idl[0]: new}
-            db.tables[self._table] = records
+            db.add_node(self._table, **new)
         self.setup()
 
     def setup(self):
@@ -183,8 +269,8 @@ class DB_Table:
 
     def records(self):
         olist = [
-            (record, id)
-            for id, record in get_database().tables[self._table].items()
+            (self.db.nodes[id], id)
+            for id in self.db.tables[self._table]
         ]
         if self.order:
             olist.sort(key = lambda x: x[0][self.order])
@@ -195,11 +281,12 @@ class _CONFIG:
     __slots__ = ("_map",)
     _table = "__CONFIG__"
 
-    def __init__(self, tables):
+    def __init__(self, year_data: YearData):
         self._map = {}
         comments = {}
         self._map["__COMMENTS__"] = comments
-        for record in tables[self._table].values():
+        for id in year_data.tables[self._table]:
+            record = year_data.nodes[id]
             key = record["K"]
             comments[key] = record["COMMENT"]
             self._map[key] = record["DATA"]
@@ -216,19 +303,20 @@ class _CALENDAR:
     __slots__ = ("_map",)
     _table = "__CALENDAR__"
 
-    def __init__(self, tables):
+    def __init__(self, year_data: YearData):
         self._map = {}
         self._map["__HOLIDAYS__"] = {}
         self._map["__CUSTOM__"] = {}
         self._map["__REPORTS__"] = {}
         records = {}
         self._map["__RECORDS__"] = records
-        for record in tables[self._table].values():
+        for id in year_data.tables[self._table]:
+            record = year_data.nodes[id]
             key = record["K"]
             d1 = record["DATE1"]
             d2 = record["DATE2"]
             comment = record["COMMENT"]
-            records[key] = [d1, d2, comment]
+            records[key] = [d1, d2, comment, id]
             self.set_key(key, d1, d2)
 
     def set_key(self, key, d1, d2) -> bool:
@@ -302,14 +390,18 @@ class _CALENDAR:
             flist = ["K", "DATE1", "DATE2", "COMMENT"]
             vlist = [K, DATE1, d2, c]
             self._map["__RECORDS__"][K] = [DATE1, d2, c]
-
-#???
-            get_database().insert(self._table, flist, vlist)
+            get_database().add_node(
+                self._table,
+                K = K,
+                DATE1 = DATE1,
+                DATE2 = d2,
+                COMMENT = c
+            )
             self.set_key(K, DATE1, d2)
         else:
             ## existing record
             d1, d2, comment = old_value
-            flist, vlist = [], []
+            changes = {}
             if DATE2 is None:
                 DATE2 = d2
             else:
@@ -325,8 +417,7 @@ class _CALENDAR:
                             "Bug: basic_data::_CALENDAR.update"
                             f" got bad DATE2 ({DATE2})"
                         )
-                flist.append("DATE2 = ?")
-                vlist.append(DATE2)
+                changes["DATE2"] = DATE2
                 old_value[1] = DATE2
             if DATE1 is not None:
                 if DATE2 != "X" and not isodate(DATE1):
@@ -334,20 +425,14 @@ class _CALENDAR:
                         "Bug: basic_data::_CALENDAR.update"
                         f" got bad DATE1 ({DATE1})"
                     )
-                flist.append("DATE1 = ?")
-                vlist.append(DATE1)
+                changes["DATE1"] = DATE1
                 old_value[0] = DATE1
             if COMMENT is not None:
-                flist.append("COMMENT = ?")
-                vlist.append(COMMENT)
+                changes["COMMENT"] = COMMENT
                 old_value[2] = COMMENT
-            vlist.append(K)
-
-#???
-            get_database().transaction(
-                f"update {self._table} set {', '.join(flist)} where K = ?",
-                vlist
-            )
+            node = get_database().nodes[old_value[3]]
+            node.set(**changes)
+            node.set_modified()
             self.set_key(K, old_value[0], old_value[1])
 
 
@@ -401,6 +486,17 @@ if __name__ == "__main__":
 #    print("\n?DB_TABLES:", DB_TABLES)
 
     db = get_database()
+
+    r = NODE("Table", 1000, db, the_other = "The other", ref_id = 3)
+#    r._table = "that"
+    print(r._table, r._id)
+    print(r.get("_table"))
+    r.set(extra = "Extra")
+    print(r)
+    print("JSON:", to_json(r))
+    print(r.get("x"))
+    print("$", r.ref)
+#    print(r.x)
 
     print("\n§CONFIG:")
     comments = CONFIG._map.pop("__COMMENTS__")
