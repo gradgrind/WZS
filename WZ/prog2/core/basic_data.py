@@ -387,8 +387,6 @@ class _CALENDAR:
                     f"  DATE2: {repr(DATE2)}\n"
                     f"  COMMENT: {repr(COMMENT)}"
                 )
-            flist = ["K", "DATE1", "DATE2", "COMMENT"]
-            vlist = [K, DATE1, d2, c]
             self._map["__RECORDS__"][K] = [DATE1, d2, c]
             get_database().add_node(
                 self._table,
