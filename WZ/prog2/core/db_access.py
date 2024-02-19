@@ -1,7 +1,7 @@
 """
 core/db_access.py
 
-Last updated:  2024-02-17
+Last updated:  2024-02-19
 
 Helper functions for accessing the database.
 
@@ -97,7 +97,7 @@ class Database:
 #            REPORT_CRITICAL("TODO: Foreign keys not supported:\n  {dbpath}")
         # Retain the "connection":
         self.conn = con
-        self.tables = {}
+        self.node_tables = {}
 
     def query(self, sql: str, data: tuple | list = None) -> sqlite3.Cursor:
         #print("§query:", sql, "\n  --", data)

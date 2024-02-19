@@ -1,5 +1,5 @@
 """
-core/basic_data.py - last updated 2024-02-18
+core/basic_data.py - last updated 2024-02-19
 
 Configuration and other basic data dependent on the database.
 
@@ -73,12 +73,22 @@ def to_json(item):
     return json.dumps(item, ensure_ascii = False, separators = (',', ':'))
 
 
+#TODO: A switch of year could mess up CONFIG and CALENDAR for other modules
 def get_database(year: str = None):
     global __DB, CONFIG, CALENDAR
     if year or not __DB:
         __DB = YearData(year)
         CONFIG = __DB.CONFIG
         CALENDAR = __DB.CALENDAR
+    return __DB
+# ->
+#Try this? (Remove globals CONFIG and CALENDAR)
+def DB(table: str = None, year: str = None):
+    global __DB
+    if year or not __DB:
+        __DB = YearData(year)
+    if table:
+        return __DB.table(table)
     return __DB
 
 
@@ -143,7 +153,7 @@ class YearData(Database):
                 tables[table].append(id)
             except KeyError:
                 tables[table] = [id]
-        self.tables = tables
+        self.node_tables = tables
         # Set up the CONFIG table
         self.CONFIG = _CONFIG(self)
         # ... and the CALENDAR table
@@ -169,7 +179,7 @@ class YearData(Database):
             (table, to_json(new))
         )
         self.nodes[id] = NODE(table, id, self, **new)
-        self.tables[table].append(id)
+        self.node_tables[table].append(id)
 
     def modified(self, id: int):
         self.modified_ids.add(id)
@@ -245,7 +255,7 @@ class NODE(dict):
 
 
 class DB_Table:
-    """This is a sort of "virtual" class.
+    """This is a sort of "abstract" base class.
     """
     _table_classes = {}    # collect table classes
     null_entry = {}
@@ -257,8 +267,8 @@ class DB_Table:
 
     def __init__(self, db):
         self.db = db
-        if not db.tables.get(self._table):
-            db.tables[self._table] = []
+        if not db.node_tables.get(self._table):
+            db.node_tables[self._table] = []
             new = {"_i": 0}
             new.update(self.null_entry)
             db.add_node(self._table, **new)
@@ -267,11 +277,21 @@ class DB_Table:
     def setup(self):
         pass
 
-    def records(self):
-        olist = [
-            (self.db.nodes[id], id)
-            for id in self.db.tables[self._table]
-        ]
+    def records(self, **kargs):
+        """Return a list of (node, id) paris.
+        The keyword arguments are used as filter criteria, filtering on
+        the node fields.
+        """
+        olist = []
+        for id in self.db.node_tables[self._table]:
+            node = self.db.nodes[id]
+            print(" **", node)
+            for k, v in kargs.items():
+                if node[k] != v:
+                    break
+            else:
+                olist.append((node, id))
+#TODO: It can be multiple fields!
         if self.order:
             olist.sort(key = lambda x: x[0][self.order])
         return olist
@@ -285,7 +305,7 @@ class _CONFIG:
         self._map = {}
         comments = {}
         self._map["__COMMENTS__"] = comments
-        for id in year_data.tables[self._table]:
+        for id in year_data.node_tables[self._table]:
             record = year_data.nodes[id]
             key = record["K"]
             comments[key] = record["COMMENT"]
@@ -310,7 +330,7 @@ class _CALENDAR:
         self._map["__REPORTS__"] = {}
         records = {}
         self._map["__RECORDS__"] = records
-        for id in year_data.tables[self._table]:
+        for id in year_data.node_tables[self._table]:
             record = year_data.nodes[id]
             key = record["K"]
             d1 = record["DATE1"]

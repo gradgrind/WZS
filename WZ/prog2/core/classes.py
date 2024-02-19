@@ -1,5 +1,5 @@
 """
-core/classes.py - last updated 2024-02-18
+core/classes.py - last updated 2024-02-19
 
 Manage class data.
 
@@ -40,7 +40,6 @@ from itertools import product
 
 from core.base import REPORT_CRITICAL
 from core.basic_data import (
-    CONFIG,
     DB_Table,
     to_json,
 #    DB_FIELD_TEXT,
@@ -79,7 +78,7 @@ def format_class_group(c: str, g: str, whole_class: str = None) -> str:
     if g == whole_class:
         return c
     if g:
-        return f"{c}{CONFIG.CLASS_GROUP_SEP}{g}"
+        return f"{c}{DB().CONFIG.CLASS_GROUP_SEP}{g}"
     return f"({c})"
 
 
@@ -94,7 +93,7 @@ def class_group_split(
         assert class_group.endswith(")")
         return (class_group.strip("()"), "")
     try:
-        class_group, g = class_group.split(CONFIG.CLASS_GROUP_SEP, 1)
+        class_group, g = class_group.split(DB().CONFIG.CLASS_GROUP_SEP, 1)
     except ValueError:
         g = GROUP_ALL if whole_class is None else whole_class
     return (class_group, g)
@@ -152,7 +151,7 @@ class Classes(DB_Table):
     }
 
     def setup(self):
-#TODO
+#TODO: Set up a class -> id map?
         return
 
         DB_FIELD_TEXT("CLASS", unique = True),
@@ -362,9 +361,8 @@ def make_divisions(group_info: dict[str, GroupInfo]) -> str:
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
 
 if __name__ == "__main__":
-    from core.basic_data import get_database
-    db = get_database()
-    classes = Classes(db)
+    from core.basic_data import DB
+    classes = DB("CLASSES")
     for data in classes.class_list(skip_null = False):
         print("  --", data)
 

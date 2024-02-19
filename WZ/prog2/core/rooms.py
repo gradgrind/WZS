@@ -1,5 +1,5 @@
 """
-core/rooms.py - last updated 2024-02-17
+core/rooms.py - last updated 2024-02-19
 
 Manage rooms data.
 
@@ -163,12 +163,10 @@ def print_room_choice(
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
 
 if __name__ == "__main__":
-    from core.basic_data import get_database
-    db = get_database()
-
+    from core.basic_data import DB
     #print("?sql:", Rooms.sql_create_table())
     #rooms = Rooms()
-    rooms = db.table("ROOMS")
+    rooms = DB("ROOMS")
 
     print("\n§Rooms:")
     for r in rooms.records():

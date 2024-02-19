@@ -61,6 +61,7 @@
         "prog2/core/basic_data.py",
         "prog2/core/db_access.py",
         "prog2/core/classes.py",
-        "prog2/core/rooms.py"
+        "prog2/core/rooms.py",
+        "prog2/core/students.py"
     ]
 }
