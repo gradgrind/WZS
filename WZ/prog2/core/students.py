@@ -1,5 +1,5 @@
 """
-core/students.py - last updated 2024-02-19
+core/students.py - last updated 2024-02-20
 
 Manage students data.
 
@@ -37,51 +37,16 @@ if __name__ == "__main__":
 
 ### +++++
 
-from core.basic_data import (
-    DB_Table,
-#    DB_PK,
-#    DB_FIELD_TEXT,
-#    DB_FIELD_REFERENCE,
-#    DB_FIELD_JSON,
-)
-from core.basic_data import CALENDAR
-from core.classes import Classes
-
-EXTRA_SCHEMA = {
-    "type": "object",
-    "patternProperties":
-        {"^[A-Za-z_][A-Za-z0-9_]*$": {"type": "string"}},
-    #"additionalProperties": {"type": "string"},
-    "additionalProperties": False
-}
+from core.base import REPORT_CRITICAL
+from core.basic_data import DB, DB_Table
 
 ### -----
 
 
 class Students(DB_Table):
+    __slots__ = ()
     _table = "STUDENTS"
     order = "SORTNAME"
-
-    @classmethod
-    def init(cls) -> bool:
-        if cls.fields is None:
-            cls.init_fields(
-                DB_PK(),
-                DB_FIELD_REFERENCE("Class", target = Classes.table),
-                DB_FIELD_TEXT("PID", unique = True),
-                DB_FIELD_TEXT("SORTNAME", unique = True),
-                DB_FIELD_TEXT("LASTNAME"),
-                DB_FIELD_TEXT("FIRSTNAMES"),
-                DB_FIELD_TEXT("FIRSTNAME"),
-                DB_FIELD_TEXT("DATE_BIRTH"),
-                DB_FIELD_TEXT("DATE_ENTRY"),
-                DB_FIELD_TEXT("DATE_EXIT"),
-                DB_FIELD_TEXT("BIRTHPLACE"),
-                DB_FIELD_TEXT("GROUPS"),
-                DB_FIELD_JSON("__EXTRA__", schema = EXTRA_SCHEMA),
-            )
-            return True
-        return False
 
     def all_string_fields(self, id: int) -> dict[str, str]:
         """Return a mapping containing all pupil fields with string values,
@@ -123,7 +88,6 @@ class Students(DB_Table):
         """
         slist = []
         for node, id in self.records(Class_id = class_id):
-            print("???", node)
             if (not group) or group in node.GROUPS.split():
                 slist.append(node)
         return slist
@@ -132,37 +96,42 @@ class Students(DB_Table):
 DB_Table.add_table(Students)
 
 
-def compare_update(newdata: list[dict[str, str | int]]) -> list[tuple]:
-    """Compare the new data with the existing data and compile a list
-    of changes. There are three types:
+def compare_update(
+    newdata: list[dict[str, str | int]]
+) -> tuple[
+    list[dict],     # new students (field mapping)
+    list[tuple[int, list[tuple[str, str | int]]]],  # changed fields
+    list[int]       # students to remove (id)
+]:
+    """Compare the new data with the existing data and compile lists
+    of changes. There are three types of change:
         - new student
         - student to remove (students shouldn't be removed within a
           school-year, just marked in DATE_EXIT, but this could be
           needed for patching or migrating to a new year)
         - field(s) changed.
     The new data is supplied as a mapping: {PID: {field: value}}
-    Return a list of changes, each "change" being a tuple representing
-    one of the above three types.
+    Return lists for each of the types of changes.
     """
-    students_delta = []
-    # Get a mapping of all current pupils: {pid: pupil-data}
-    current_students = {}
-    db = get_database()
-    classes = db.table("CLASSES")
-    students = db.table("STUDENTS")
-    for kid, klass, kname in classes.class_list():
-        for pdata in students.student_list(kid):
-            current_students[pdata.PID] = pdata
-    first_day = CALENDAR.DATE_FIRST
+    new_list, delta_list, remove_list = [], [], []
+    ## Get a mapping of all current pupils: {pid: (pupil-data, pupil-id)}
+    students = DB("STUDENTS")
+    current_students = {
+        node.PID: (node, id)
+        for node, id in students.records()
+    }
+    first_day = DB().CALENDAR.DATE_FIRST
+    ## Compare new data with old
     for pmap in newdata:
+        # Skip students who have left
         date_exit = pmap["DATE_EXIT"]
         if date_exit and date_exit < first_day:
             continue
         try:
-            olddata = current_students.pop(pmap["PID"])
+            olddata, id = current_students.pop(pmap["PID"])
         except KeyError:
-            # New pupil
-            students_delta.append(("NEW", pmap))
+            # New student
+            new_list.append(pmap)
             continue
         # Compare the fields of the old pupil-data with the new ones.
         # Build a list of pairs detailing the deviating fields:
@@ -170,93 +139,49 @@ def compare_update(newdata: list[dict[str, str | int]]) -> list[tuple]:
         # Only the fields of the new data are taken into consideration.
         delta = []
         for k, v in pmap.items():
-            if k.endswith("_id"):
-                v0 = getattr(olddata, k[:-3]).id
-            else:
-                v0 = getattr(olddata, k)
-            if v != v0:
+            if v != olddata[k]:
                 delta.append((k, v))
         if delta:
-            students_delta.append(("DELTA", olddata, delta))
-    # Add removed pupils to list
+            delta_list.append((id, delta))
+    ## Add removed pupil-ids to list
     for pid, pdata in current_students.items():
-        students_delta.append(("REMOVE", pdata))
-    return students_delta
+        remove_list.append(pdata[1])
+    return new_list, delta_list, remove_list
 
 
-#TODO
-def update_classes(changes: list[tuple]):
-    """Apply the changes in the <changes> lists to the pupil data.
+def update_classes(
+    new_list: list[dict],   # new students (field mapping)
+    delta_list: list[tuple[int, list[tuple[str, str | int]]]],
+    # ... changed fields
+    remove_list: list[int]  # students to remove (id)
+):
+    """Apply the changes in the supplied lists to the pupil data.
     The entries are basically those generated by <compare_update>,
     but it would be possible to insert a filtering step before
     calling this function.
     """
-    print("\n???????????????????\n", changes)
-    db = get_database()
-    students = db.table("STUDENTS")
-    to_add = []
-    for d in changes:
-        if d[0] == "NEW":
-            #print("\n§§§§§ ADD", pdata)
-            # Add a new student
-#TODO: I can use the mapping directly if ALL fields are in it.
-# That would mean dealing with that when loading the table, or else here.
-# The EXTRA field would need adding. If the table can contain values from
-# it, these would need to be dealt with too...
-            to_add.append(d[1])
-
-
-        elif d[0] == "REMOVE":
-            #print("\n§§§§§ REMOVE", pdata)
-            # Remove from pupils
-            db_delete_rows("PUPILS", PID=pdata["PID"])
-        elif d[0] == "DELTA":
-            #print("\n§§§§§ UPDATE", pdata, "\n  :::", d[2])
-            # Changes field values
-            db_update_fields("PUPILS", d[2], PID=pdata["PID"])
-        else:
-            raise Bug("Bad delta key: %s" % d[0])
-
-    if to_add:
-#TODO
-        students.add_records()
-#?    clear_cache()
+    db = DB()
+    for pdata in new_list:
+        # Add a new student
+        db.add_node("STUDENTS", **pdata)
+    for id, delta in delta_list:
+        node = db.nodes[id]
+        for k, v in delta:
+            node[k] = v
+    for id in remove_list:
+        db.delete_node(id)
 
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
 
 if __name__ == "__main__":
-    from core.basic_data import DB
-    #print("\n?create-sql:", Students.sql_create_table())
-
+    import core.classes     # noqa: F401    – to initialize CLASSES
     students = DB("STUDENTS")
-    for s in students.student_list(23, "R"):
+    classes = DB("CLASSES")
+    cl = classes.class2id["12"]
+    for s in students.student_list(cl, "R"):
         print("  --", s)
 
-    quit(2)
-
-#    print("\n***** STUDENTS fields *****")
-#    for f in students.fields:
-#        print("  -", f.field0, f.field)
-
-    '''
-    from core.db_access import to_json
-    for rec in students.records:
-        x = rec.__EXTRA__
-        for k, v in x.items():
-            print(" --", rec.Class.CLASS, rec.id, k, v)
-        try:
-            g = x.pop("GROUPS")
-        except KeyError:
-            pass
-        else:
-            if g:
-                db.update("STUDENTS", rec.id, "GROUPS", g)
-            db.update("STUDENTS", rec.id, "__EXTRA__", to_json(x))
-    quit(2)
-    '''
-
-    classes = Classes(db)
     for cid, CLASS, NAME in classes.class_list():
         print(f"\n Class {CLASS}\n==============")
         for s in students.student_list(cid):
@@ -266,12 +191,15 @@ if __name__ == "__main__":
     from core.base import DATAPATH
     from local.niwa.raw_students import read_raw_students_data
 
-    classmap = {
-        rec.CLASS: rec.id
-        for rec in classes.records
-        if rec.id > 0
-    }
     fpath = DATAPATH("test_students_data.ods", "working_data")
-    records = read_raw_students_data(fpath, classmap)
-    for d in compare_update(records):
-        print("  ::", d)
+    records = read_raw_students_data(fpath, classes.class2id)
+    changes = compare_update(records)
+    for c in changes[1]:
+        print("  DELTA ::", c)
+    for c in changes[0]:
+        print("  NEW ::", c)
+    for c in changes[2]:
+        print("  REMOVE ::", c)
+
+#TODO: Test this
+#    update_classes(changes)

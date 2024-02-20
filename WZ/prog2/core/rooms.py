@@ -49,17 +49,10 @@ from core.basic_data import (
 
 
 class Rooms(DB_Table):
+    __slots__ = ()
     _table = "ROOMS"
     order = "RID"
     null_entry = {"RID": "$", "NAME": T("Classroom")}
-
-    def setup(self):
-#TODO
-        return
-
-        DB_FIELD_TEXT("RID", unique = True)
-        DB_FIELD_TEXT("NAME", unique = True)
-
 
 DB_Table.add_table(Rooms)
 

@@ -62,6 +62,13 @@
         "prog2/core/db_access.py",
         "prog2/core/classes.py",
         "prog2/core/rooms.py",
-        "prog2/core/students.py"
+        "prog2/core/students.py",
+        "prog2/local/__init__.py",
+        "prog2/local/tussenvoegsel.py",
+        "prog2/local/niwa/grades.py",
+        "prog2/local/niwa/raw_students.py",
+        "prog2/local/niwa/reports.py",
+        "prog2/tables/ods_support.py",
+        "prog2/tables/table_utilities.py"
     ]
 }

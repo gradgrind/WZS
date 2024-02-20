@@ -104,14 +104,7 @@ def class_group_split_with_id(class_group: str) -> tuple[int, str]:
     group. The class is returned as its database id.
     """
     c, g = class_group_split(class_group)
-    classes = get_database().table("CLASSES")
-    for rec in classes.records:
-        if rec.CLASS == c:
-            return (rec.id, g)
-    REPORT_CRITICAL(
-        "Bug: classes::class_group_split_with_id:"
-        f" group '{class_group}' is unknown"
-    )
+    return (DB("CLASSES").class2id(c), g)
 
 ### -----
 
@@ -140,6 +133,7 @@ DIVISIONS_SCHEMA = {
 
 
 class Classes(DB_Table):
+    __slots__ = ("class2id",)
     _table = "CLASSES"
     order = "CLASS"
     null_entry = {
@@ -151,18 +145,11 @@ class Classes(DB_Table):
     }
 
     def setup(self):
-#TODO: Set up a class -> id map?
-        return
-
-        DB_FIELD_TEXT("CLASS", unique = True),
-        DB_FIELD_TEXT("YEAR"),
-        DB_FIELD_TEXT("NAME", unique = True),
-        DB_FIELD_REFERENCE("Classroom", target = Rooms.table),
-        DB_FIELD_JSON(
-            "DIVISIONS",
-            schema = DIVISIONS_SCHEMA,
-            empty = [],
-        ),
+        # Set up a class -> id map
+        self.class2id = {
+            self.db.nodes[id].CLASS: id
+            for id in self.db.node_tables[self._table]
+        }
 
     def class_list(self, skip_null: bool = True):
         """Return an ordered list of classes.

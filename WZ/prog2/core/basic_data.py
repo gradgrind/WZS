@@ -57,8 +57,6 @@ from core.base import (
 from core.db_access import Database
 
 __DB = None           # the current database, set in "get_database"
-CONFIG = None
-CALENDAR = None
 
 REPORT_SPLITTER = '#'
 REPORT_ALL_NAMES = '*'
@@ -73,16 +71,6 @@ def to_json(item):
     return json.dumps(item, ensure_ascii = False, separators = (',', ':'))
 
 
-#TODO: A switch of year could mess up CONFIG and CALENDAR for other modules
-def get_database(year: str = None):
-    global __DB, CONFIG, CALENDAR
-    if year or not __DB:
-        __DB = YearData(year)
-        CONFIG = __DB.CONFIG
-        CALENDAR = __DB.CALENDAR
-    return __DB
-# ->
-#Try this? (Remove globals CONFIG and CALENDAR)
 def DB(table: str = None, year: str = None):
     global __DB
     if year or not __DB:
@@ -181,6 +169,12 @@ class YearData(Database):
         self.nodes[id] = NODE(table, id, self, **new)
         self.node_tables[table].append(id)
 
+    def delete_node(self, id: int):
+        self.delete("NODES", id)
+        node = self.nodes[id]
+        del self.nodes[id]
+        self.node_tables[node._table].remove(id)
+
     def modified(self, id: int):
         self.modified_ids.add(id)
         if self.trigger_update:
@@ -257,6 +251,7 @@ class NODE(dict):
 class DB_Table:
     """This is a sort of "abstract" base class.
     """
+    __slots__ = ("db",)
     _table_classes = {}    # collect table classes
     null_entry = {}
     order = None
@@ -282,18 +277,22 @@ class DB_Table:
         The keyword arguments are used as filter criteria, filtering on
         the node fields.
         """
+        def sort_key(item):
+            node = item[0]
+            return tuple(node[x] for x in order_fields)
+
         olist = []
         for id in self.db.node_tables[self._table]:
             node = self.db.nodes[id]
-            print(" **", node)
             for k, v in kargs.items():
                 if node[k] != v:
                     break
             else:
                 olist.append((node, id))
-#TODO: It can be multiple fields!
         if self.order:
-            olist.sort(key = lambda x: x[0][self.order])
+            # It can be multiple fields!
+            order_fields = [x.strip() for x in self.order.split(",")]
+            olist.sort(key = sort_key)
         return olist
 
 
@@ -408,7 +407,7 @@ class _CALENDAR:
                     f"  COMMENT: {repr(COMMENT)}"
                 )
             self._map["__RECORDS__"][K] = [DATE1, d2, c]
-            get_database().add_node(
+            DB().add_node(
                 self._table,
                 K = K,
                 DATE1 = DATE1,
@@ -448,7 +447,7 @@ class _CALENDAR:
             if COMMENT is not None:
                 changes["COMMENT"] = COMMENT
                 old_value[2] = COMMENT
-            node = get_database().nodes[old_value[3]]
+            node = DB().nodes[old_value[3]]
             node.set(**changes)
             node.set_modified()
             self.set_key(K, old_value[0], old_value[1])
@@ -474,8 +473,9 @@ def print_fix(
     are then no decimal places left, also the decimal separator will be
     removed.
     """
+    conf = DB().CONFIG
     if decimal_places < 0:
-        decimal_places = CONFIG.DECIMAL_PLACES
+        decimal_places = conf.DECIMAL_PLACES
     fstr = f"{value:.{decimal_places}f}"
     if decimal_places:
         if strip_trailing_zeros:
@@ -490,12 +490,12 @@ def print_fix(
                 elif i < -1:
                     fstr = fstr[:i+1]
                 break
-        return fstr.replace('.', CONFIG.DECIMAL_SEP)
+        return fstr.replace('.', conf.DECIMAL_SEP)
     return fstr
 
 
 def fix_is_zero(value: float) -> bool:
-    abs(value) < CONFIG.DECIMAL_ZERO
+    abs(value) < DB().CONFIG.DECIMAL_ZERO
 
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
@@ -503,7 +503,7 @@ def fix_is_zero(value: float) -> bool:
 if __name__ == "__main__":
 #    print("\n?DB_TABLES:", DB_TABLES)
 
-    db = get_database()
+    db = DB()
 
     r = NODE("Table", 1000, db, the_other = "The other", ref_id = 3)
 #    r._table = "that"
@@ -517,14 +517,14 @@ if __name__ == "__main__":
 #    print(r.x)
 
     print("\n§CONFIG:")
-    comments = CONFIG._map.pop("__COMMENTS__")
-    for k, v in CONFIG._map.items():
+    comments = db.CONFIG._map.pop("__COMMENTS__")
+    for k, v in db.CONFIG._map.items():
         print(" --", k, "::", repr(v), "//", comments.get(k))
-    print(f"\n  DECIMAL_PLACES: {repr(CONFIG.DECIMAL_PLACES)}")
-    print(f"  DECIMAL_ZERO: {repr(CONFIG.DECIMAL_ZERO)}")
+    print(f"\n  DECIMAL_PLACES: {repr(db.CONFIG.DECIMAL_PLACES)}")
+    print(f"  DECIMAL_ZERO: {repr(db.CONFIG.DECIMAL_ZERO)}")
 
     print("\n§CALENDAR:")
-    for k, v in CALENDAR._map.items():
+    for k, v in db.CALENDAR._map.items():
         print(" --", k, "::", repr(v))
 
     print("\n ======= print_fix =======")
