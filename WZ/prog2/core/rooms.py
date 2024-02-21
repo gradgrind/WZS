@@ -1,5 +1,5 @@
 """
-core/rooms.py - last updated 2024-02-19
+core/rooms.py - last updated 2024-02-21
 
 Manage rooms data.
 
@@ -53,6 +53,7 @@ class Rooms(DB_Table):
     _table = "ROOMS"
     order = "RID"
     null_entry = {"RID": "$", "NAME": T("Classroom")}
+
 
 DB_Table.add_table(Rooms)
 

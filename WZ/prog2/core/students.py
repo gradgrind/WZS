@@ -1,5 +1,5 @@
 """
-core/students.py - last updated 2024-02-20
+core/students.py - last updated 2024-02-21
 
 Manage students data.
 
@@ -37,7 +37,6 @@ if __name__ == "__main__":
 
 ### +++++
 
-from core.base import REPORT_CRITICAL
 from core.basic_data import DB, DB_Table
 
 ### -----

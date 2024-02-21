@@ -1,5 +1,5 @@
 """
-core/basic_data.py - last updated 2024-02-19
+core/basic_data.py - last updated 2024-02-21
 
 Configuration and other basic data dependent on the database.
 
@@ -56,7 +56,7 @@ from core.base import (
 )
 from core.db_access import Database
 
-__DB = None           # the current database, set in "get_database"
+__DB = None           # the current database, set in "DB()"
 
 REPORT_SPLITTER = '#'
 REPORT_ALL_NAMES = '*'
@@ -81,8 +81,11 @@ def DB(table: str = None, year: str = None):
 
 
 class YearData(Database):
+    """In the NODES table all atomic values (in the JSON formatted DATA
+    field) are strings, except for node references, which are integers.
+    """
     __slots__ = (
-        "nodes", "tables", "CONFIG", "CALENDAR", "__tables",
+        "nodes", "node_tables", "CONFIG", "CALENDAR", "__tables",
         "modified_ids", "trigger_update"
     )
 
@@ -170,10 +173,39 @@ class YearData(Database):
         self.node_tables[table].append(id)
 
     def delete_node(self, id: int):
+        reflist = self.node_search(id)
+        if reflist:
+            nodes = []
+            for n in reflist:
+                s = str(n)
+                if len(s) > 64:
+                    s = s[:60] + " ..."
+                nodes.append(s)
+            REPORT_ERROR(T("DELETE_IN_USE", nodes = "\n".join(nodes)))
+            return
         self.delete("NODES", id)
         node = self.nodes[id]
         del self.nodes[id]
         self.node_tables[node._table].remove(id)
+
+    def node_search(self, id) -> list:  # list[NODE]
+        def item_search(itemlist):
+            for item in itemlist:
+                if item == id:
+                    return True
+                elif isinstance(item, dict):
+                    if item_search(item.values()):
+                        return True
+                elif isinstance(item, list):
+                    if item_search(item):
+                        return True
+            return False
+
+        nodelist = []
+        for node in self.nodes.values():
+            if item_search(node.values()):
+                nodelist.append(node)
+        return nodelist
 
     def modified(self, id: int):
         self.modified_ids.add(id)
@@ -247,6 +279,10 @@ class NODE(dict):
             super().__setitem__(field, val)
             self.set_modified()
 
+    def __str__(self):
+        fields = ", ".join(f"{k}={v}" for k, v in self.items())
+        return f"NODE<{self._id}:{self._table}>({fields})"
+
 
 class DB_Table:
     """This is a sort of "abstract" base class.
@@ -264,7 +300,7 @@ class DB_Table:
         self.db = db
         if not db.node_tables.get(self._table):
             db.node_tables[self._table] = []
-            new = {"_i": 0}
+            new = {"_i": "0"}
             new.update(self.null_entry)
             db.add_node(self._table, **new)
         self.setup()
@@ -537,3 +573,8 @@ if __name__ == "__main__":
     print("§N 6.789@0:", print_fix(6.789, 0))
     print("§N 6.789@1:", print_fix(6.789, 1))
     print("§N 6.789@2:", print_fix(6.789, 2))
+
+    print("\n ======= node_search =======")
+    print(" #1417:")
+    for n in db.node_search(1417):
+        print("   --", n)

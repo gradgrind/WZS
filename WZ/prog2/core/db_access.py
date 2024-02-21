@@ -1,7 +1,7 @@
 """
 core/db_access.py
 
-Last updated:  2024-02-19
+Last updated:  2024-02-21
 
 Helper functions for accessing the database.
 
@@ -82,6 +82,8 @@ class DB_Error(Exception):
 
 
 class Database:
+    __slots__ = ("path", "conn")
+
     def __init__(self, dbpath):
         if not os.path.isfile(dbpath):
             REPORT_WARNING(f"TODO: No database at:\n  {dbpath}")
@@ -97,7 +99,6 @@ class Database:
 #            REPORT_CRITICAL("TODO: Foreign keys not supported:\n  {dbpath}")
         # Retain the "connection":
         self.conn = con
-        self.node_tables = {}
 
     def query(self, sql: str, data: tuple | list = None) -> sqlite3.Cursor:
         #print("§query:", sql, "\n  --", data)

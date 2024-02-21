@@ -1,5 +1,5 @@
 """
-core/classes.py - last updated 2024-02-19
+core/classes.py - last updated 2024-02-21
 
 Manage class data.
 
@@ -38,7 +38,6 @@ T = Tr("core.classes")
 from typing import NamedTuple, Optional
 from itertools import product
 
-from core.base import REPORT_CRITICAL
 from core.basic_data import (
     DB_Table,
     to_json,
@@ -46,7 +45,6 @@ from core.basic_data import (
 #    DB_FIELD_JSON,
 #    DB_FIELD_REFERENCE,
 )
-from core.rooms import Rooms
 
 GROUP_ALL = "*"
 #NO_CLASS = "--"
@@ -156,7 +154,7 @@ class Classes(DB_Table):
         """
         classes = []
         for node, id in self.records():
-            if (not skip_null) or (node.get("_i") != 0):
+            if (not skip_null) or (node.get("_i") != "0"):
                 classes.append((id, node.CLASS, node.NAME))
         return classes
 

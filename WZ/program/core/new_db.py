@@ -1,5 +1,5 @@
 """
-core/new_db.py - last updated 2024-02-16
+core/new_db.py - last updated 2024-02-21
 
 Switching to a new database structure (again) ...
 
@@ -40,11 +40,6 @@ if __name__ == "__main__":
 
 import sqlite3
 import json
-
-from typing import Any
-from shutil import copyfile
-from datetime import date, timedelta, datetime
-from glob import glob
 
 from core.base import (
     DATAPATH,
@@ -125,7 +120,7 @@ def make_new_db():
         for r in cur0.fetchall():
             #print("  **", r)
             val = {f: r[i] for i, f in enumerate(fields)}
-            recid = val.pop("id")            
+            recid = val.pop("id")
             if tbl == "STUDENTS":
                 x = val.pop("__EXTRA__")
                 if x:
@@ -160,7 +155,7 @@ def make_new_db():
             if recid == 0:
 #TODO: Put these somewhere else? A "NULL_ENTRY" table? Or perhaps in
 # The reference table?
-                val["_i"] = 0
+                val["_i"] = "0"
             cur1.execute(
                 "INSERT INTO NODES(DB_TABLE, DATA) VALUES(?,?)",
                 (tbl, to_json(val))
