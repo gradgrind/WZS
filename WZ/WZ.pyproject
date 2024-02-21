@@ -69,6 +69,8 @@
         "prog2/local/niwa/raw_students.py",
         "prog2/local/niwa/reports.py",
         "prog2/tables/ods_support.py",
-        "prog2/tables/table_utilities.py"
+        "prog2/tables/table_utilities.py",
+        "prog2/core/subjects.py",
+        "prog2/core/teachers.py"
     ]
 }

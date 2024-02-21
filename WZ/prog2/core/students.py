@@ -46,6 +46,7 @@ class Students(DB_Table):
     __slots__ = ()
     _table = "STUDENTS"
     order = "SORTNAME"
+#?    null_entry = {"SID": "", "NAME": "", "SORTING": ""}
 
     def all_string_fields(self, id: int) -> dict[str, str]:
         """Return a mapping containing all pupil fields with string values,

@@ -171,6 +171,7 @@ class YearData(Database):
         )
         self.nodes[id] = NODE(table, id, self, **new)
         self.node_tables[table].append(id)
+        self.table_changed(table)
 
     def delete_node(self, id: int):
         reflist = self.node_search(id)
@@ -187,6 +188,7 @@ class YearData(Database):
         node = self.nodes[id]
         del self.nodes[id]
         self.node_tables[node._table].remove(id)
+        self.table_changed(node._table)
 
     def node_search(self, id) -> list:  # list[NODE]
         def item_search(itemlist):
@@ -217,6 +219,7 @@ class YearData(Database):
     def update_nodes(self):
         """Save modifications to database.
         """
+        tables = set()
         while True:
             try:
                 id = self.modified_ids.pop()
@@ -224,6 +227,12 @@ class YearData(Database):
                 break
             node = self.nodes[id]
             self.update("NODES", id, "DATA", to_json(node))
+            tables.add(node._table)
+        for table in tables:
+            self.table_changed(table)
+
+    def table_changed(self, table):
+        self.table(table)._table_changed()
 
 
 class NODE(dict):
@@ -308,6 +317,8 @@ class DB_Table:
     def setup(self):
         pass
 
+
+#TODO: Why is the id returned when it is available in the NODE anyway?!?
     def records(self, **kargs):
         """Return a list of (node, id) paris.
         The keyword arguments are used as filter criteria, filtering on
@@ -330,6 +341,9 @@ class DB_Table:
             order_fields = [x.strip() for x in self.order.split(",")]
             olist.sort(key = sort_key)
         return olist
+
+    def _table_changed(self):
+        pass
 
 
 class _CONFIG:
