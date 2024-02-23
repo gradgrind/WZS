@@ -1,5 +1,5 @@
 """
-core/rooms.py - last updated 2024-02-21
+core/rooms.py - last updated 2024-02-23
 
 Manage rooms data.
 
@@ -35,17 +35,9 @@ T = Tr("core.rooms")
 
 ### +++++
 
-from core.basic_data import (
-    DB_Table,
-#    DB_FIELD_TEXT,
-#    DB_FIELD_REFERENCE,
-)
+from core.basic_data import DB_Table
 
 ### -----
-
-#TODO: Sort on Room_id, coupled with contiguous indexes and
-# reallocation of indexes when there are room changes?
-# Could then use indexes directly in timetable arrays.
 
 
 class Rooms(DB_Table):
@@ -158,8 +150,6 @@ def print_room_choice(
 
 if __name__ == "__main__":
     from core.basic_data import DB
-    #print("?sql:", Rooms.sql_create_table())
-    #rooms = Rooms()
     rooms = DB("ROOMS")
 
     print("\n§Rooms:")
@@ -167,9 +157,6 @@ if __name__ == "__main__":
         print("  --", r)
 
     quit(2)
-
-    for rid, index in rooms.id2index.items():
-        print(f"\n  {rid}: {index:02d}/{rooms.records[index]}")
 
     rgm = RoomGroupMap(db)
     for rg_id, rdata in rgm.get_room_lists().items():

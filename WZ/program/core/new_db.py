@@ -1,5 +1,5 @@
 """
-core/new_db.py - last updated 2024-02-21
+core/new_db.py - last updated 2024-02-23
 
 Switching to a new database structure (again) ...
 
@@ -155,7 +155,7 @@ def make_new_db():
             if recid == 0:
 #TODO: Put these somewhere else? A "NULL_ENTRY" table? Or perhaps in
 # The reference table?
-                val["_i"] = "0"
+                val["#"] = "0"
             cur1.execute(
                 "INSERT INTO NODES(DB_TABLE, DATA) VALUES(?,?)",
                 (tbl, to_json(val))

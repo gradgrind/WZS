@@ -1,5 +1,5 @@
 """
-core/basic_data.py - last updated 2024-02-21
+core/basic_data.py - last updated 2024-02-23
 
 Configuration and other basic data dependent on the database.
 
@@ -151,14 +151,15 @@ class YearData(Database):
         self.CALENDAR = _CALENDAR(self)
         self.__tables = {}
 
-    def table(self, name):
+    def table(self, name):  # -> DB_Table subclass
+        """Return the table instance for the given name.
+        If the class has not yet been "registered" (by calling
+        <DB_Table.add_table()>) a <KeyError> exception will be raised.
+        """
         try:
             return self.__tables[name]
         except KeyError:
-            try:
-                cls = DB_Table._table_classes[name]
-            except KeyError:
-                REPORT_CRITICAL(f"Bug: Table {name} not registered")
+            cls = DB_Table._table_classes[name]
         tbl = cls(self)
         self.__tables[name] = tbl
         return tbl
@@ -191,22 +192,13 @@ class YearData(Database):
         self.table_changed(node._table)
 
     def node_search(self, id) -> list:  # list[NODE]
-        def item_search(itemlist):
-            for item in itemlist:
-                if item == id:
-                    return True
-                elif isinstance(item, dict):
-                    if item_search(item.values()):
-                        return True
-                elif isinstance(item, list):
-                    if item_search(item):
-                        return True
-            return False
-
+        """Search for references to the given node id (in all nodes).
+        """
         nodelist = []
         for node in self.nodes.values():
-            if item_search(node.values()):
-                nodelist.append(node)
+            for k, v in node.items():
+                if k[0] == "_" and v == id:
+                    nodelist.append(node)
         return nodelist
 
     def modified(self, id: int):
@@ -232,7 +224,11 @@ class YearData(Database):
             self.table_changed(table)
 
     def table_changed(self, table):
-        self.table(table)._table_changed()
+        try:
+            tbl = self.__tables[table]
+        except KeyError:
+            return    # nothing to do if the class has not been initialized
+        tbl._table_changed()
 
 
 class NODE(dict):
@@ -241,7 +237,10 @@ class NODE(dict):
     references to other NODE records via reference field names stripped
     of the "_id" suffix.
     Only fields entered at initialization, or later using the method <set>,
-    are available.
+    are available. In the latter case ".set_modified()" should be called to
+    update the database.
+    Also if a field is removed from the node (using "del" or ".pop()"),
+    ".set_modified()" should be called to update the database.
     """
     __slots__ = ("_table", "_id", "_db")
 
@@ -259,7 +258,7 @@ class NODE(dict):
         try:
             return super().__getitem__(field)
         except KeyError:
-            r = super().__getitem__(f"{field}_id")
+            r = super().__getitem__(f"_{field}")
             try:
                 return self._db.nodes[r]
             except KeyError:
@@ -289,7 +288,7 @@ class NODE(dict):
             self.set_modified()
 
     def __str__(self):
-        fields = ", ".join(f"{k}={v}" for k, v in self.items())
+        fields = ", ".join(f"{k}={repr(v)}" for k, v in self.items())
         return f"NODE<{self._id}:{self._table}>({fields})"
 
 
@@ -309,7 +308,7 @@ class DB_Table:
         self.db = db
         if not db.node_tables.get(self._table):
             db.node_tables[self._table] = []
-            new = {"_i": "0"}
+            new = {"#": "0"}
             new.update(self.null_entry)
             db.add_node(self._table, **new)
         self.setup()
@@ -317,16 +316,13 @@ class DB_Table:
     def setup(self):
         pass
 
-
-#TODO: Why is the id returned when it is available in the NODE anyway?!?
     def records(self, **kargs):
-        """Return a list of (node, id) paris.
+        """Return a list of nodes.
         The keyword arguments are used as filter criteria, filtering on
         the node fields.
         """
         def sort_key(item):
-            node = item[0]
-            return tuple(node[x] for x in order_fields)
+            return tuple(item[x] for x in order_fields)
 
         olist = []
         for id in self.db.node_tables[self._table]:
@@ -335,7 +331,7 @@ class DB_Table:
                 if node[k] != v:
                     break
             else:
-                olist.append((node, id))
+                olist.append(node)
         if self.order:
             # It can be multiple fields!
             order_fields = [x.strip() for x in self.order.split(",")]
@@ -555,7 +551,7 @@ if __name__ == "__main__":
 
     db = DB()
 
-    r = NODE("Table", 1000, db, the_other = "The other", ref_id = 3)
+    r = NODE("Table", 1000, db, the_other = "The other", _ref = 3)
 #    r._table = "that"
     print(r._table, r._id)
     print(r.get("_table"))

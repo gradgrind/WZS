@@ -1,5 +1,5 @@
 """
-core/classes.py - last updated 2024-02-21
+core/classes.py - last updated 2024-02-23
 
 Manage class data.
 
@@ -138,7 +138,7 @@ class Classes(DB_Table):
         "CLASS": "--",
         "YEAR": "",
         "NAME": "keine Klasse",
-        "Classroom_id": 0,
+        "_Classroom": 0,
         "DIVISIONS": ""
     }
 
@@ -148,15 +148,6 @@ class Classes(DB_Table):
             self.db.nodes[id].CLASS: id
             for id in self.db.node_tables[self._table]
         }
-
-    def class_list(self, skip_null: bool = True):
-        """Return an ordered list of classes.
-        """
-        classes = []
-        for node, id in self.records():
-            if (not skip_null) or (node.get("_i") != "0"):
-                classes.append((id, node.CLASS, node.NAME))
-        return classes
 
     def group_data(self, class_id: int):
         record = self.db.nodes[class_id]
@@ -348,13 +339,11 @@ def make_divisions(group_info: dict[str, GroupInfo]) -> str:
 if __name__ == "__main__":
     from core.basic_data import DB
     classes = DB("CLASSES")
-    for data in classes.class_list(skip_null = False):
-        print("  --", data)
 
-    for rec, id in classes.records():
+    for rec in classes.records():
         print("\n======================================================")
         print("\n?DIVISIONS:", rec)
-        divdata = classes.group_data(id)
+        divdata = classes.group_data(rec._id)
 
         print("\n?raw_divisions:", divdata["raw_divisions"])
         print("\n?atomic_groups:", divdata["atomic_groups"])

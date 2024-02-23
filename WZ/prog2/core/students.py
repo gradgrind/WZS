@@ -1,5 +1,5 @@
 """
-core/students.py - last updated 2024-02-21
+core/students.py - last updated 2024-02-23
 
 Manage students data.
 
@@ -87,7 +87,7 @@ class Students(DB_Table):
         If a group is given, include only those students who are in the group.
         """
         slist = []
-        for node, id in self.records(Class_id = class_id):
+        for node in self.records(_Class = class_id):
             if (not group) or group in node.GROUPS.split():
                 slist.append(node)
         return slist
@@ -117,8 +117,8 @@ def compare_update(
     ## Get a mapping of all current pupils: {pid: (pupil-data, pupil-id)}
     students = DB("STUDENTS")
     current_students = {
-        node.PID: (node, id)
-        for node, id in students.records()
+        node.PID: node
+        for node in students.records()
     }
     first_day = DB().CALENDAR.DATE_FIRST
     ## Compare new data with old
@@ -128,7 +128,7 @@ def compare_update(
         if date_exit and date_exit < first_day:
             continue
         try:
-            olddata, id = current_students.pop(pmap["PID"])
+            olddata = current_students.pop(pmap["PID"])
         except KeyError:
             # New student
             new_list.append(pmap)
@@ -142,10 +142,10 @@ def compare_update(
             if v != olddata[k]:
                 delta.append((k, v))
         if delta:
-            delta_list.append((id, delta))
+            delta_list.append((olddata._id, delta))
     ## Add removed pupil-ids to list
     for pid, pdata in current_students.items():
-        remove_list.append(pdata[1])
+        remove_list.append(pdata)
     return new_list, delta_list, remove_list
 
 
@@ -182,9 +182,9 @@ if __name__ == "__main__":
     for s in students.student_list(cl, "R"):
         print("  --", s)
 
-    for cid, CLASS, NAME in classes.class_list():
-        print(f"\n Class {CLASS}\n==============")
-        for s in students.student_list(cid):
+    for cnode in classes.records():
+        print(f"\n Class {cnode.CLASS}\n==============")
+        for s in students.student_list(cnode._id):
             print("  --", s)
 
     print("\n  ***** DELTA *****")

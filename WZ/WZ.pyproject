@@ -71,6 +71,7 @@
         "prog2/tables/ods_support.py",
         "prog2/tables/table_utilities.py",
         "prog2/core/subjects.py",
-        "prog2/core/teachers.py"
+        "prog2/core/teachers.py",
+        "prog2/tweak.py"
     ]
 }

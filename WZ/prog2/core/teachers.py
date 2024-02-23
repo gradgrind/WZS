@@ -1,5 +1,5 @@
 """
-core/teachers.py - last updated 2024-02-21
+core/teachers.py - last updated 2024-02-23
 
 Manage teacher data.
 
@@ -36,7 +36,7 @@ if __name__ == "__main__":
 
 ### +++++
 
-from core.basic_data import DB_Table, NODE
+from core.basic_data import DB_Table
 
 ### -----
 
@@ -64,25 +64,10 @@ class Teachers(DB_Table):
         """Return an ordered list of teachers.
         """
         teachers = []
-        for node, id in self.records():
-            if (not skip_null) or (node.get("_i") != "0"):
-                teachers.append((id, node.TID, self.get_name(node)))
+        for node in self.records():
+            if (not skip_null) or (node.get("#") != "0"):
+                teachers.append((node._id, node.TID, self.get_name(node)))
         return teachers
-
-#TODO:???
-    def tid_map(self) -> NODE:
-        """Return the data for all teachers as a mapping with the TID value
-        as key.
-        This data is cached, so subsequent calls get the same instance.
-        """
-        if not self.__tid_map:
-            for node, id in self.records():
-                if node.get("_i") != "0":
-                    self.__tid_map[node.TID] = node
-        return self.__tid_map
-
-    def _table_changed(self):
-        self.__tid_map.clear()
 
 
 DB_Table.add_table(Teachers)
@@ -104,7 +89,3 @@ if __name__ == "__main__":
 
     for r in table.teacher_list(skip_null = True):
         print("  --", r)
-
-    print("\n*************************************\n tid_map():")
-    for tid, tdata in table.tid_map().items():
-        print(f"\n  {tid}: {tdata}")

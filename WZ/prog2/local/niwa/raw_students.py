@@ -1,7 +1,7 @@
 """
 local/niwa/raw_students.py
 
-Last updated:  2024-02-20
+Last updated:  2024-02-23
 
 Importiere Schülerdaten
 
@@ -49,7 +49,7 @@ from local.tussenvoegsel import tussenvoegsel_filter
 
 #TODO -> config
 HEADERS = (
-    ("CLASS", "Schulklasse"),   # -> "Class_id"
+    ("CLASS", "Schulklasse"),   # -> "_Class"
     ("PID", "ID"),
     ("SORTNAME", ""),
     ("LASTNAME", "Name"),
@@ -90,7 +90,7 @@ def read_raw_students_data(
         rec = {h: row[c] if c >= 0 else "" for h, c in clist}
         if not rec["PID"]:
             continue    # skip line, assume not relevant
-        rec["Class_id"] = classmap[rec.pop("CLASS")]
+        rec["_Class"] = classmap[rec.pop("CLASS")]
         (
             rec["FIRSTNAMES"],
             rec["LASTNAME"],

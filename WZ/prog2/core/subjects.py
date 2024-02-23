@@ -48,15 +48,6 @@ class Subjects(DB_Table):
     order = "NAME"
     null_entry = {"SID": "", "NAME": "", "SORTING": ""}
 
-    def subject_list(self, skip_null: bool = True):
-        """Return an ordered list of subjects.
-        """
-        subjects = []
-        for node, id in self.records():
-            if (not skip_null) or (node.get("_i") != "0"):
-                subjects.append((id, node.SID, node.NAME))
-        return subjects
-
     @staticmethod
     def clip_name(name: str) -> str:
         """Return the given subject name without the optional extra suffix.
@@ -75,9 +66,4 @@ if __name__ == "__main__":
     print("\n§Subjects:")
     subjects = DB("SUBJECTS")
     for r in subjects.records():
-        print("  --", r)
-
-    print("\n -------------------------------")
-
-    for r in subjects.subject_list(skip_null = True):
         print("  --", r)
