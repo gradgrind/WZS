@@ -197,8 +197,20 @@ class YearData(Database):
         nodelist = []
         for node in self.nodes.values():
             for k, v in node.items():
-                if k[0] == "_" and v == id:
-                    nodelist.append(node)
+                if k[0] == "_":
+                    if v == id:
+                        nodelist.append(node)
+                    elif k[-1] == "_" and v:
+                        if isinstance(v, list):
+                            for vv in v:
+                                if vv == id:
+                                    nodelist.append(node)
+                                    break
+                        else:
+                            REPORT_CRITICAL(
+                                "Bug: NODE reference list expected in"
+                                f" {node},\n  field '{k}'"
+                            )
         return nodelist
 
     def modified(self, id: int):
@@ -258,11 +270,15 @@ class NODE(dict):
         try:
             return super().__getitem__(field)
         except KeyError:
-            r = super().__getitem__(f"_{field}")
-            try:
-                return self._db.nodes[r]
-            except KeyError:
-                REPORT_CRITICAL(f"Bug: NODES[{r}] does not exist")
+            if field[-1] != "_":
+                # If this is a reference field (starts with "_") and
+                # NOT a list of references (ends with "_"), return the
+                # referenced node.
+                r = super().__getitem__(f"_{field}")
+                try:
+                    return self._db.nodes[r]
+                except KeyError:
+                    REPORT_CRITICAL(f"Bug: NODES[{r}] does not exist")
 
     def set(self, **fields):
         for k, v in fields.items():
