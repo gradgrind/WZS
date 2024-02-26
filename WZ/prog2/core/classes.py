@@ -1,5 +1,5 @@
 """
-core/classes.py - last updated 2024-02-23
+core/classes.py - last updated 2024-02-24
 
 Manage class data.
 
@@ -38,13 +38,7 @@ T = Tr("core.classes")
 from typing import NamedTuple, Optional
 from itertools import product
 
-from core.basic_data import (
-    DB_Table,
-    to_json,
-#    DB_FIELD_TEXT,
-#    DB_FIELD_JSON,
-#    DB_FIELD_REFERENCE,
-)
+from core.basic_data import DB_Table, to_json
 
 GROUP_ALL = "*"
 #NO_CLASS = "--"
@@ -293,6 +287,26 @@ class Classes(DB_Table):
 
 
 DB_Table.add_table(Classes)
+
+
+class StudentGroups(DB_Table):
+    __slots__ = ()
+    _table = "STUDENT_GROUPS"
+    null_entry = {"_Class": 0, "NAME": "", "DIV": 0, "POS": "00"}
+
+#TODO
+    def setup(self):
+        # Structure the data in classes
+        self.class2id = {
+            self.db.nodes[id].CLASS: id
+            for id in self.db.node_tables[self._table]
+        }
+
+
+DB_Table.add_table(StudentGroups)
+
+
+
 
 
 #import re

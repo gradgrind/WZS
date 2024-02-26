@@ -1,5 +1,5 @@
 """
-core/basic_data.py - last updated 2024-02-23
+core/basic_data.py - last updated 2024-02-26
 
 Configuration and other basic data dependent on the database.
 
@@ -81,7 +81,7 @@ def DB(table: str = None, year: str = None):
 
 
 class YearData(Database):
-    """In the NODES table all atomic values (in the JSON formatted DATA
+    """In the NODES table all leaf values (in the JSON formatted DATA
     field) are strings, except for node references, which are integers.
     """
     __slots__ = (
@@ -164,15 +164,17 @@ class YearData(Database):
         self.__tables[name] = tbl
         return tbl
 
-    def add_node(self, table, **new):
+    def add_node(self, table, **new) -> int:
+        node_table = self.node_tables[table]
         id = self.insert(
             "NODES",
             ("DB_TABLE", "DATA"),
             (table, to_json(new))
         )
         self.nodes[id] = NODE(table, id, self, **new)
-        self.node_tables[table].append(id)
+        node_table.append(id)
         self.table_changed(table)
+        return id
 
     def delete_node(self, id: int):
         reflist = self.node_search(id)
@@ -275,10 +277,9 @@ class NODE(dict):
                 # NOT a list of references (ends with "_"), return the
                 # referenced node.
                 r = super().__getitem__(f"_{field}")
-                try:
-                    return self._db.nodes[r]
-                except KeyError:
-                    REPORT_CRITICAL(f"Bug: NODES[{r}] does not exist")
+#TODO: 0-references are not handled here, so they will cause an exception.
+# Is some other behaviour desirable?
+                return self._db.nodes[r]
 
     def set(self, **fields):
         for k, v in fields.items():
@@ -320,6 +321,10 @@ class DB_Table:
     def add_table(cls, tableclass):
         cls._table_classes[tableclass._table] = tableclass
 
+#TODO: If I want null references to point at the actual null entry for
+# the target field, the initialization would need to know where to find
+# this null target. This could be by special entries in <null_entry>, e.g.
+# "_Target": "TARGET_TABLE"?
     def __init__(self, db):
         self.db = db
         if not db.node_tables.get(self._table):
