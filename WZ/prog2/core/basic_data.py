@@ -272,14 +272,15 @@ class NODE(dict):
         try:
             return super().__getitem__(field)
         except KeyError:
-            if field[-1] != "_":
-                # If this is a reference field (starts with "_") and
-                # NOT a list of references (ends with "_"), return the
-                # referenced node.
-                r = super().__getitem__(f"_{field}")
+            if field[-1] == "_":
+                raise
+            # If this is a reference field (starts with "_") and
+            # NOT a list of references (ends with "_"), return the
+            # referenced node.
+            r = super().__getitem__(f"_{field}")
 #TODO: 0-references are not handled here, so they will cause an exception.
 # Is some other behaviour desirable?
-                return self._db.nodes[r]
+            return self._db.nodes[r]
 
     def set(self, **fields):
         for k, v in fields.items():

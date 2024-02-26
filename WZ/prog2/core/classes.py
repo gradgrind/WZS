@@ -1,5 +1,5 @@
 """
-core/classes.py - last updated 2024-02-24
+core/classes.py - last updated 2024-02-26
 
 Manage class data.
 
@@ -295,12 +295,12 @@ class StudentGroups(DB_Table):
     null_entry = {"_Class": 0, "NAME": "", "DIV": 0, "POS": "00"}
 
 #TODO
-    def setup(self):
-        # Structure the data in classes
-        self.class2id = {
-            self.db.nodes[id].CLASS: id
-            for id in self.db.node_tables[self._table]
-        }
+#    def setup(self):
+#        # Structure the data in classes
+#        self.class2id = {
+#            self.db.nodes[id].CLASS: id
+#            for id in self.db.node_tables[self._table]
+#        }
 
 
 DB_Table.add_table(StudentGroups)

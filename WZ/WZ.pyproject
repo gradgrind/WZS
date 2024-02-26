@@ -73,6 +73,7 @@
         "prog2/core/subjects.py",
         "prog2/core/teachers.py",
         "prog2/tweak.py",
-        "prog2/core/time_slots.py"
+        "prog2/core/time_slots.py",
+        "prog2/core/courses.py"
     ]
 }

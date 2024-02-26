@@ -1,5 +1,5 @@
 """
-core/teachers.py - last updated 2024-02-23
+core/teachers.py - last updated 2024-02-26
 
 Manage teacher data.
 
@@ -42,16 +42,13 @@ from core.basic_data import DB_Table
 
 
 class Teachers(DB_Table):
-    __slots__ = ("__tid_map",)
+    __slots__ = ()
     _table = "TEACHERS"
     order = "SORTNAME"
     null_entry = {
         "TID": "---", "FIRSTNAMES": "keine", "LASTNAME": "Lehrkraft",
         "SIGNED": "-----", "SORTNAME": "---"
     }
-
-    def setup(self):
-        self.__tid_map = {}
 
     @staticmethod
     def get_name(data):
