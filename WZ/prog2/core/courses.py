@@ -1,7 +1,7 @@
 """
 core/courses.py
 
-Last updated:  2024-02-26
+Last updated:  2024-02-27
 
 Support functions dealing with courses, lessons, etc.
 
@@ -49,15 +49,17 @@ from core.base import (
 )
 from core.basic_data import (
     DB_Table,
+    DB,
+    NODE,
     REPORT_SPLITTER,
     REPORT_ALL_NAMES,
     SUBJECT_SPLITTER,
     print_fix,
 )
-from core.classes import Classes, format_class_group
+from core.classes import format_student_group
 from core.teachers import Teachers
 from core.subjects import Subjects
-from core.rooms import Rooms, RoomGroups
+import core.rooms
 from core.time_slots import timeslots
 
 REPORT_WRITER = "Z"     # flag for teacher's ROLE in table COURSE_TEACHERS
@@ -77,30 +79,7 @@ WEIGHT_PATTERN = "^[1-9+-]$"  # for a constraint weight
 
 ### -----
 
-#TEMPORARY stuff to remodel the database
-from core.basic_data import DB
-class CourseGroups(DB_Table):
-    __slots__ = ()
-    _table = "COURSE_GROUPS"
-    null_entry = {}
 
-
-DB_Table.add_table(CourseGroups)
-
-sgroups = DB("STUDENT_GROUPS")
-class_groups = {}
-for r in sgroups.records():
-    print("  --", r)
-    try:
-        class_groups[r._Class][r.NAME] = r._id
-    except KeyError:
-        class_groups[r._Class] = {r.NAME: r._id}
-for cref, gmap in class_groups.items():
-    print("§_Class:", cref)
-    for g, sgref in gmap.items():
-        print("  --", g, sgref)
-
-#KEEP THIS! +++
 class Courses(DB_Table):
     __slots__ = ()
     _table = "COURSES"
@@ -108,38 +87,6 @@ class Courses(DB_Table):
 
 
 DB_Table.add_table(Courses)
-# ---
-
-print("==========================================")
-courses = DB("COURSES")
-course_groups = {
-    r._id: []
-    for r in courses.records()
-}
-cgroups = DB("COURSE_GROUPS")
-for r in cgroups.records():
-    print("  --", r)
-    g = r.GROUP_TAG
-#???
-    if g == "*":
-        g = ""
-    elif not g:
-        print("*** NO GROUP:", r)
-        continue
-    cref = r._Course
-    clref = r._Class
-    cgref = class_groups[clref][g]
-    course_groups[cref].append(cgref)
-
-for cref, cglist in course_groups.items():
-    print("$$$", cref, cglist)
-#TODO: Add these class-group NODE references to the COURSES NODES.
-
-#TODO: Add teacher reference lists
-
-
-quit(1)
-
 
 
 class BLOCK(NamedTuple):
@@ -174,7 +121,7 @@ class BLOCK(NamedTuple):
 class LessonBlocks(DB_Table):
     __slots__ = ()
     _table = "LESSON_BLOCKS"
-    null_entry = {}
+    null_entry = {"BLOCK": "", "WORKLOAD": "0", "_Lessons_": []}
 
 
 DB_Table.add_table(LessonBlocks)
@@ -183,10 +130,10 @@ DB_Table.add_table(LessonBlocks)
 class ParallelTags(DB_Table):
     __slots__ = ()
     _table = "PARALLEL_TAGS"
-    null_entry = {}
+    null_entry = {"TAG": "", "WEIGHT": "-"}
 
     @staticmethod
-    def split_tag(parallel_tag):# db_TableRow) -> tuple[str, str]:
+    def split_tag(parallel_tag: NODE) -> tuple[str, str]:
         """Split a TAG field into category and tag.
         Return a tuple of these substrings.
         """
@@ -232,42 +179,73 @@ DB_Table.add_table(ParallelTags)
 class LessonUnits(DB_Table):
     __slots__ = ()
     _table = "LESSON_UNITS"
-    null_entry = {}
-
-    def get_block_units(self, block_id: int):
-        """Return a list of lesson records for the given block (id).
-        """
-        try:
-            return self.__bumap.get(block_id) or []
-        except AttributeError:
-            pass
-        bumap = {}
-        for rec in self.records:
-            bi = rec.Lesson_block.id
-            try:
-                bumap[bi].append(rec)
-            except KeyError:
-                bumap[bi] = [rec]
-        self.__bumap = bumap
-        return bumap.get(block_id) or []
-
-    def clear_caches(self):
-        # Note that the caches must be cleared if the table is changed.
-        self.__bumap = None
+    null_entry = {"LENGTH": "0", "_Time": 0, "_Parallel": 0}
 
 
 DB_Table.add_table(LessonUnits)
 
 
+class COURSE:
+    """An object of this class represents a single course line as returned
+    by <filter_activities>. It adds some methods to the basic <NODE> of
+    the underlying record.
+    """
+    __slots__ = ("node",)
 
+    def __init__(self, node: NODE):
+        self.node = node
 
+    def show(self, field: str) -> str:
+        if field == "id":
+            return str(self.node._id)
+        if field == "Subject":
+            return self.node.Subject.NAME
+        if field == "Groups":
+            return ", ".join(
+                format_student_group(sgid)
+                for sgid in self.node._Groups_
+            )
+        if field == "Teachers":
+            nodes = DB().nodes
+            return ", ".join(
+                f"{nodes[ctid].Teacher.TID}"
+                for ctid in self.node._Teachers_
+            )
+        REPORT_CRITICAL(f"Bug: Unknown COURSE_LINE field: {repr(field)}")
 
+#TODO: Group '*' or '' and where is the difference important? Check that
+# I am not relying on empty groups anywhere, switch "empty" groups to
+# '*' where this is what is meant.
+
+    def info(self):
+        g = ", ".join(
+            format_student_group(sgid)
+            for sgid in self.node._Groups_
+        )
+        t = ", ".join(f"{t.Teacher.TID}" for t in self.teacher_list)
+        bl = self.course.Lesson_block.BLOCK
+        b = f"({bl})" if bl else ""
+        return (
+            f"COURSE<{self.course.id}:{self.course.Subject.NAME}"
+            f"{b} [{g} // {t}]>"
+        )
+
+    def get_classroom(self):
+        if len(self.group_list) != 1:
+            return 0
+        return self.group_list[0].Class.Classroom.id
+
+    def __str__(self):
+        t = self.show
+        return (
+            f'<{t("id")}: {t("Subject")} | {t("Groups")} | {t("Teachers")}>'
+        )
 
 
 '''
 class COURSE_LINE(NamedTuple):
     """An object of this class represents a single course line as returned
-    by <filter_activities>. It is based on an entry in the COURSE_BASE
+    by <filter_activities>. It is based on an entry in the COURSES
     table, but includes also the associated group and teacher lists.
     """
     course: db_TableRow
@@ -548,7 +526,7 @@ def filter_activities(filter_field: str, value: int):# -> list[COURSE_LINE]:
     the given filter constraint (CLASS, TEACHER or SUBJECT).
 
     The main components are subject, teacher(s), pupil-group(s), and
-    possibly "block" for each course entry (in COURSE_BASE).
+    possibly "block" for each course entry (in COURSES).
     Additional fields are also collected so as to enable access to
     room-wishes, payment info, etc.
     """
@@ -873,8 +851,10 @@ def workload_class(class_id: int, activity_list: list#[COURSE_LINE]
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
 
 if __name__ == "__main__":
-    from core.basic_data import DB
-    db = DB()
+    courses = DB("COURSES")
+    for r in courses.records():
+        print("  --", r)
+        print("  ++", COURSE(r))
 
     quit(2)
 

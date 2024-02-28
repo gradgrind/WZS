@@ -1,5 +1,5 @@
 """
-core/rooms.py - last updated 2024-02-23
+core/rooms.py - last updated 2024-02-27
 
 Manage rooms data.
 
@@ -50,65 +50,17 @@ class Rooms(DB_Table):
 DB_Table.add_table(Rooms)
 
 
-#------------------------------------------------------
-#TODO: Are these tables still needed in this form?
-
 class RoomGroups(DB_Table):
+    __slots__ = ()
     _table = "TT_ROOM_GROUPS"
-
-    @classmethod
-    def init(cls):
-        if cls.fields is None:
-            cls.init_fields(
-                DB_PK(),
-                DB_FIELD_TEXT("ROOM_GROUP", unique = True),
-                DB_FIELD_TEXT("DESCRIPTION", unique = True),
-            )
+    null_entry = {"ROOM_GROUP": "", "DESCRIPTION": "", "_Rooms_": []}
 
 
-class RoomGroupMap(DB_Table):
-    table = "TT_ROOM_GROUP_MAP"
+DB_Table.add_table(RoomGroups)
 
-    @classmethod
-    def init(cls):
-        if cls.fields is None:
-            cls.init_fields(
-                DB_PK(),
-                DB_FIELD_REFERENCE("Room_group", target = RoomGroups.table),
-                DB_FIELD_REFERENCE("Room", target = Rooms.table),
-            )
 
-    def get_room_lists(self) -> dict[str, tuple]:
-        """Return information about the room-groups.
-        Return a mapping, the key being the RoomGroup id.
-        The values are tuples:
-            - (a weak ref to) the RoomGroup record
-            - a list of tuples:
-                - RoomGroupMap_id
-                - (a weak ref to) the Room record
-        As the result contains record field values extracted from their
-        records, it is potentially vulnerable to problems arising
-        from changes to individual records. The returned data should thus
-        not be retained over changes to these database tables.
-        """
-        rgmap = self.__room_lists
-        if rgmap is not None:
-            return rgmap
-        rgmap = {}
-        for rec in self.records:
-            rgi = rec.Room_group.id
-            val = (rec.id, rec.Room)
-            try:
-                rgmap[rgi][1].append(val)
-            except KeyError:
-                rgmap[rgi] = (rec.Room_group, [val])
-        self.__room_lists = rgmap
-        return rgmap
-
-    def clear_caches(self):
-        # Note that the caches must be cleared if the table is changed.
-        self.__room_lists = None
-
+#------------------------------------------------------
+#TODO: Are these still needed in this form?
 
 
 def get_db_rooms(db_rooms: DB_Table, db_room_group_map: DB_Table
@@ -122,6 +74,7 @@ def get_db_rooms(db_rooms: DB_Table, db_room_group_map: DB_Table
     """
     all_rooms = [(r.id, r.RID, r.NAME) for r in db_rooms.records]
     room_groups = []
+#TODO
     for rg, data in db_room_group_map.get_room_lists().items():
         rgdata = data[0]
         room_groups.append((
@@ -151,16 +104,11 @@ def print_room_choice(
 if __name__ == "__main__":
     from core.basic_data import DB
     rooms = DB("ROOMS")
-
     print("\n§Rooms:")
     for r in rooms.records():
         print("  --", r)
 
-    quit(2)
-
-    rgm = RoomGroupMap(db)
-    for rg_id, rdata in rgm.get_room_lists().items():
-        rg, rlist = rdata
-        print(f"\n  {rg_id}:: {rg.ROOM_GROUP} // {rg.DESCRIPTION}")
-        for r in rlist:
-            print(f"   -- ({r[0]}) {r[1]}")
+    rgs = DB("TT_ROOM_GROUPS")
+    print("\n§Room groups:")
+    for r in rgs.records():
+        print("  --", r)
