@@ -1,7 +1,7 @@
 """
 core/db_access.py
 
-Last updated:  2024-02-21
+Last updated:  2024-03-14
 
 Helper functions for accessing the database.
 
@@ -64,7 +64,7 @@ T = Tr("core.db_access")
 
 import sqlite3
 #import re
-#import json
+import json
 #import fastjsonschema
 #import weakref
 
@@ -85,10 +85,20 @@ class Database:
     __slots__ = ("path", "conn")
 
     def __init__(self, dbpath):
-        if not os.path.isfile(dbpath):
-            REPORT_WARNING(f"TODO: No database at:\n  {dbpath}")
+        dbexists = os.path.isfile(dbpath)
         self.path = dbpath
-        con = sqlite3.connect(dbpath)
+        # Retain the "connection":
+        self.conn = sqlite3.connect(dbpath)
+        if not dbexists:
+            REPORT_WARNING(f"Creating new database at:\n  {dbpath}")
+            self.query("""
+                CREATE TABLE NODES (
+                    id       INTEGER PRIMARY KEY    NOT NULL,
+                    DB_TABLE TEXT    NOT NULL,
+                    DATA     TEXT    NOT NULL
+                )
+                STRICT;
+            """)
 #        con.row_factory = sqlite3.Row   # for dict-like access
 #        ## Check foreign key support
 #        cursor = con.cursor()
@@ -97,8 +107,6 @@ class Database:
 #        cursor.execute("PRAGMA foreign_keys")
 #        if not cursor.fetchone()[0] == 1:
 #            REPORT_CRITICAL("TODO: Foreign keys not supported:\n  {dbpath}")
-        # Retain the "connection":
-        self.conn = con
 
     def query(self, sql: str, data: tuple | list = None) -> sqlite3.Cursor:
         #print("§query:", sql, "\n  --", data)
@@ -183,6 +191,29 @@ class Database:
             values
         )
 
+    def insertnodes(self, values: list[list[str | int]]) -> list[int]:
+        return self.insertmany("NODES", ["DB_TABLE", "DATA"], values)
+
+    def insertmany(
+        self, table: str, fields: list[str], values: list[list[str | int]]
+    ) -> list[int]:
+        flist = ", ".join(fields)
+        slots = ", ".join('?' for f in fields)
+        cur = self.conn.cursor()
+        ids = []
+        sql = f"insert into {table} ({flist}) values ({slots})"
+        try:
+            for row in values:
+                cur.execute(sql, row)
+                ids.append(cur.lastrowid)
+        except sqlite3.Error as e:
+            cur.close()
+            self.rollback()
+            raise DB_Error(f"{type(e).__name__}: {e}")
+        cur.close()
+        self.commit()
+        return ids
+
     def delete(self, table: str, rowid: int):
         """Remove the row with the given id from the given table.
         """
@@ -190,6 +221,18 @@ class Database:
             f"delete from {table} where rowid=?",
             (rowid,)
         )
+
+
+def to_json(item: dict[str, str | int | list | dict]):
+    """Convert the given item to a json object.
+    Any first-level (!) keys starting with "$" will be omitted.
+    """
+    val = {
+        _k: _v
+        for _k, _v in item.items()
+        if _k[0] != "$"
+    }
+    return json.dumps(val, ensure_ascii = False, separators = (',', ':'))
 
 
 ######-----------------------------------------------------------------
