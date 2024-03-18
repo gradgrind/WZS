@@ -1,5 +1,5 @@
 """
-w365/wz_w365/w365base.py - last updated 2024-03-14
+w365/wz_w365/w365base.py - last updated 2024-03-18
 
 Basic functions for:
     Reading a Waldorf365 file.
@@ -55,11 +55,14 @@ _End = "End"
 _EpochFactor = "EpochFactor"
 _EpochPlan = "EpochPlan"
 _EpochPlanYear = "EpochPlanGrade"
+_EpochWeeks = "EpochWeeks"
+_FirstAfternoonHour = "FirstAfternoonHour"
 _Firstname = "Firstname"
 _Fixed = "Fixed"
 _ForceFirstHour = "ForceFirstHour"
 _Gender = "Gender"
 _Groups = "Groups"
+_HandWorkload = "HandWorkload"
 _Hour = "Hour"
 _hour = "hour"
 _HoursPerWeek = "HoursPerWeek"
@@ -113,7 +116,8 @@ class W365_DB:
         assert len(keys) == len(w365id_nodes)
         for i, k in enumerate(keys):
             _id, n = w365id_nodes[i]
-            self.id2key[_id] = k
+            if _id:
+                self.id2key[_id] = k
             self.key2node[k] = n
 
 

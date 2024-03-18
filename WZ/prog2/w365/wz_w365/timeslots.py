@@ -1,5 +1,5 @@
 """
-w365/wz_w365/timeslots.py - last updated 2024-03-12
+w365/wz_w365/timeslots.py - last updated 2024-03-15
 
 Manage time slots (for timetable).
 
@@ -46,6 +46,7 @@ from w365.wz_w365.w365base import (
     _Start,
     _End,
     _MiddayBreak,
+    _FirstAfternoonHour,
 )
 
 ### -----
@@ -72,7 +73,6 @@ def read_days(w365_db):
     w365_db.add_nodes(table, w365id_nodes)
 
 
-
 def read_periods(w365_db):
     table = "PERIODS"
     w365id_nodes = []
@@ -84,6 +84,8 @@ def read_periods(w365_db):
             "START_TIME": node[_Start],
             "END_TIME": node[_End],
             "LUNCHBREAK": node[_MiddayBreak],
+#?
+            "FirstAfternoonHour": node.get(_FirstAfternoonHour) == "true",
         }
         plist.append((int(float(node[_ListPosition])), node[_Id], xnode))
     plist.sort()
@@ -103,7 +105,7 @@ def read_periods(w365_db):
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
 
-# Remove existing database file, add subjects from w365.
+# Remove existing database file, add time slots from w365.
 
 if __name__ == "__main__":
     from core.base import DATAPATH
