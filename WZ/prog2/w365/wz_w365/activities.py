@@ -1,7 +1,7 @@
 """
-w365/wz_w365/actiities.py - last updated 2024-03-18
+w365/wz_w365/activities.py - last updated 2024-03-19
 
-Manage data concerning the "activities" (courses, lessons, etc.=.
+Manage data concerning the "activities" (courses, lessons, etc.).
 
 =+LICENCE=================================
 Copyright 2024 Michael Towers
@@ -36,7 +36,6 @@ if __name__ == "__main__":
 ### +++++
 
 from w365.wz_w365.w365base import (
-    W365_DB,
     _Course,
     _DoubleLessonMode,
     _HoursPerWeek,
@@ -74,19 +73,10 @@ from w365.wz_w365.w365base import (
 ### -----
 
 
-#TODO
 def read_activities(w365_db):
-    table = "ACTIVITIES"
+    table = "COURSES"
     w365id_nodes = []
-
-    multisubjects = set()
-    course2activities = {}
-
-#    subject_activities = SubjectGroupActivities(idmap["__CLASS_GROUP_ATOMS__"])
-#?
     course_lessons = {}
-
-#?
     group_map = w365_db.group_map
     for node in w365_db.scenario[_Course]:
         course_id = node[_Id]
@@ -95,22 +85,17 @@ def read_activities(w365_db):
         glist = node[_Groups].split(LIST_SEP)
         _pr = node.get(_PreferredRooms)
         rlist = _pr.split(LIST_SEP) if _pr else []
-#TODO: What internal forms do I want and what needs to be prepared for
-# the database?
         tklist = [w365_db.id2key[t] for t in tlist]
         gidlist = [group_map[g] for g in glist]
         sklist = [w365_db.id2key[s] for s in slist]
         rklist = [w365_db.id2key[r] for r in rlist]
-#TODO: rooms?
-
         workload = node[_HandWorkload]
         if workload == "555.555":   # (automatic!)
             workload = ""
-
         ## Generate the activity or activities
         # Divide lessons up according to duration
         total_duration = int(float(node[_HoursPerWeek]))
-#TODO: What are the possibilities for this field?
+#NOTE: Not all multiple lesson possibilities are supported here.
         # Take only the first value
         dlm = node[_DoubleLessonMode].split(",")[0]
         ll = int(dlm)
@@ -137,7 +122,7 @@ def read_activities(w365_db):
         else:
             xnode["LESSONS"] = lessons
             course_lessons[course_id] = []
-        print("§XNODE:", xnode)
+        #print("§XNODE:", xnode)
         w365id_nodes.append((course_id, xnode))
         c = categories(w365_db.idmap, node)
         if c:
@@ -145,8 +130,7 @@ def read_activities(w365_db):
     # Add to database
     w365_db.add_nodes(table, w365id_nodes)
 
-#--------------------------------------------------------------------
-#TODO: the blocks ("Epochen") must be handled separately (at present).
+    # The blocks ("Epochen") must be handled separately (at present).
 
 #TODO: Need to specify which "Schedule" to use
     schedules = [
@@ -167,15 +151,14 @@ def read_activities(w365_db):
     isched = 0
     lesson_ids = schedules[isched][-1].split(LIST_SEP)
     lesson_set = set(lesson_ids)
-#?
-    w365_db.w365lessons = lesson_ids
-# Maybe rather one with a particular name?
+# (or maybe rather one with a particular name?)
 
-    print("\n ****** LESSONS:")
+#TODO?
+#    w365_db.w365lessons = lesson_ids
 
     block_lessons = {}
     for ep in w365_db.scenario[_EpochPlan]:
-        print("????ep:", ep)
+        #print("????ep:", ep)
         block_lessons[ep[_Id]] = []
 
     # NOTE that I am only picking up fixed Epochenstunden ...
@@ -184,7 +167,6 @@ def read_activities(w365_db):
     for lid in lesson_ids:
         node = w365_db.idmap[lid]
         course_id = node.get(_Course)
-#        course_key = w365_db.id2key[course_id]
         if node[_Fixed] == "true":
             slot = (node[_Day], node[_Hour])
         else:
@@ -193,16 +175,17 @@ def read_activities(w365_db):
             # Add lesson id and time slot (if fixed) to course
             course_lessons[course_id].append((lid, slot))
         else:
+            # Add lesson id and time slot (if fixed) to block
             ep_id = node[_EpochPlan]
             block_lessons[ep_id].append((lid, slot))
 
     w365id_nodes.clear()
     ep_times = {}
     for ep_id, epl in block_lessons.items():
-        print("????ep_id:", ep_id)
+        #print("????ep_id:", ep_id)
         lesson_times = set()
         for l_id, slot in epl:
-            print("    ", l_id, slot)
+            #print("    ", l_id, slot)
             if slot:
                 lesson_times.add(slot)
         if lesson_times:
@@ -215,7 +198,7 @@ def read_activities(w365_db):
 # the groups (but see previous use of "GROUPS" field and consider
 # future changes).
 #        print("    or just classes:", [cl for cl, _ in cl_list])
-            print(" -e-", node, lesson_times)
+            #print(" -e-", node, lesson_times)
             pltimes = process_lesson_times(lesson_times)
             llengths = []
             ltlist = []
@@ -225,35 +208,23 @@ def read_activities(w365_db):
                     ltlist.append((ll, d, p))
             ep_times[ep_id] = ltlist
             xnode = {
-#            "TEACHERS": tklist,
                 "GROUPS": cl_list,
-#            "SUBJECTS": sklist,
-#            "ROOM_WISH":  rklist,
                 "BLOCK": node[_Shortcut],
                 "NAME": node[_Name],
                 "LESSONS": llengths,
-#            "WORKLOAD": workload,
+#TODO: Field "ID"?
             }
-# Field "ID"?
-            print("§XNODE:", xnode)
+            #print("§XNODE:", xnode)
             w365id_nodes.append((ep_id, xnode))
 
-#TODO: convert to a more convenient form (see <process_lesson_times>)
-# and add to the groups covered by the block. If a group already has
-# block times, that would be treated as an error (current limit of one
-# block per class).
-
 # At present it seems best not to attempt to deal with "Epochen" for which
-# no times are set. It is all too complicated. Also more than one "Epoche"
-# in a class may theoretically sort-of work, but if that is true, then it
-# is not useable in practice.
+# no times are set. It is all too complicated.
 
     # Add to database
-    w365_db.add_nodes(table, w365id_nodes)
+    w365_db.add_nodes("BLOCKS", w365id_nodes)
 
-#TODO
+    # Now deal with the individual lessons
     w365id_nodes.clear()
-
     for ep_id, ltlist in ep_times.items():
         k = w365_db.id2key[ep_id]
         for ll, d, p in ltlist:
@@ -266,7 +237,7 @@ def read_activities(w365_db):
                 #"_Parallel": 0,
             }
             w365id_nodes.append(("", xnode))
-            print("     ++", xnode)
+            #print("     ++", xnode)
     for course_id, lslots in course_lessons.items():
         if lslots:
             lesson_times = set()
@@ -275,7 +246,7 @@ def read_activities(w365_db):
                 if slot:
                     lesson_times.add(slot)
             pltimes = process_lesson_times(lesson_times)
-            print(" --c--:", pltimes)
+            #print(" --c--:", pltimes)
             k = w365_db.id2key[course_id]
             for ll, tlist in pltimes.items():
                 for d, p in tlist:
@@ -288,10 +259,9 @@ def read_activities(w365_db):
                         #"_Parallel": 0,
                     }
                     w365id_nodes.append(("", xnode))
-                    print("     ++", xnode)
+                    #print("     ++", xnode)
     # Add to database
     w365_db.add_nodes("LESSONS", w365id_nodes)
-    return
 
 
 #TODO: Might want to record the ids of non-fixed lessons as these entries
@@ -300,9 +270,9 @@ def read_activities(w365_db):
 
 # Do I need the EpochPlan to discover which teachers are involved in an
 # Epoch, or can I get it from the Course entries somehow? No, this is really
-# not ideal. There is a tenuous connection between Epochenschienen and courses
-# only when an Epochenplan has been generated: there are then lessons
-# which point to the course. Maybe for now I should collect the block
+# not ideal. There is a tenuous connection between "Epochenschienen" and
+# courses only when an "Epochenplan" has been generated: there are then
+# lessons which point to the course. Maybe for now I should collect the block
 # times associated with the classes (I suppose using the EpochPlan to
 # identify the classes is best? – it also supplies the name tag), then
 # go through the block courses to find those in a block (test EpochWeeks?)
@@ -373,7 +343,7 @@ from w365.wz_w365.class_groups import read_groups
 
 if __name__ == "__main__":
     from core.base import DATAPATH
-    from w365.wz_w365.w365base import read_active_scenario
+    from w365.wz_w365.w365base import W365_DB, read_active_scenario
 
     dbpath = DATAPATH("db365.sqlite", "w365_data")
     w365path = DATAPATH("test.w365", "w365_data")

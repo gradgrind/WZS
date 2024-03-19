@@ -1,5 +1,5 @@
 """
-w365/wz_w365/w365base.py - last updated 2024-03-18
+w365/wz_w365/w365base.py - last updated 2024-03-19
 
 Basic functions for:
     Reading a Waldorf365 file.
@@ -48,6 +48,7 @@ _Absences = "Absences"
 _capacity = "capacity"
 _Categories = "Categories"
 _ContainerId = "ContainerId"
+_CountryCode = "CountryCode"
 _day = "day"
 _DoubleLessonMode = "DoubleLessonMode"
 _EditedScenario = "EditedScenario"
@@ -85,6 +86,7 @@ _Rooms = "Rooms"
 _SchoolName = "SchoolName"
 _Shortcut = "Shortcut"
 _Start = "Start"
+_StateCode = "StateCode"
 _Subjects = "Subjects"
 _Teachers = "Teachers"
 _YearDivs = "GradePartitions"
@@ -102,7 +104,12 @@ class W365_DB:
         except FileNotFoundError:
             pass
         self.db = Database(dbpath)
-        self.schoolstate = filedata["$$SCHOOLSTATE"]
+        schoolstate = filedata["$$SCHOOLSTATE"]
+        self.config = {
+            "SCHOOL": schoolstate[_SchoolName],
+            "STATE": schoolstate[_StateCode],
+            "COUNTRY": schoolstate[_CountryCode],
+        }
         self._scenarios = filedata["$$SCENARIOS"]
         self.scenario = filedata["$$SCENARIO"]
         self.idmap = filedata["$$IDMAP"]
@@ -119,68 +126,6 @@ class W365_DB:
             if _id:
                 self.id2key[_id] = k
             self.key2node[k] = n
-
-
-
-#TODO: deprecated +++++++++++++++++++++
-def create_db(dbpath, filedata):
-    print("DATABASE FILE:", dbpath)
-    try:
-        os.remove(dbpath)
-    except FileNotFoundError:
-        pass
-    db = Database(dbpath)
-
-#TODO: This will need some adjustments when I need to use the rowids
-# Perhaps:
-#    $dbkey2node: db-rowid -> xnode
-#    $$id2dbkey: w365-id -> db-rowid
-
-    values = []
-    for table, items in filedata.items():
-        print("§1:", table)
-        if not table[0] == "$":
-            for k, item in items.items():
-                print("§2:", k)
-                if not k[0] == "$":
-                    values.append((table, to_json(item)))
-    #for v in values:
-    #    print("   ", v)
-    ids = db.insertnodes(values)
-    print(" ->", ids)
-    return ids
-
-
-
-
-
-
-
-
-
-
-def table2db(filedata, table):
-    values = []
-    items = filedata[table]
-    dbitems = []
-    for k, item in items.items():
-        print("§2:", k)
-        if not k[0] == "$":
-            values.append((table, to_json(item)))
-            dbitems.append(item)
-    #for v in values:
-    #    print("   ", v)
-    ids = db.insertnodes(values)
-    print(" ->", ids)
-    dbkey2node = filedata["$dbkey2node"]
-    id2dbkey = filedata["$$id2dbkey"]
-    for i, dbid in enumerate(ids):
-        dbkey2node[dbid] = dbitems[i]
-
-#??? How do I get the Id?
-        id2dbkey[_Id] = dbid
-
-# ---------------------------
 
 
 def read_active_scenario(w365path):
