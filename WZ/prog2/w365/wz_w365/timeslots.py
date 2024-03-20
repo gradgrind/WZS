@@ -1,5 +1,5 @@
 """
-w365/wz_w365/timeslots.py - last updated 2024-03-15
+w365/wz_w365/timeslots.py - last updated 2024-03-20
 
 Manage time slots (for timetable).
 
@@ -83,8 +83,7 @@ def read_periods(w365_db):
             "NAME": node.get(_Name) or "",
             "START_TIME": node[_Start],
             "END_TIME": node[_End],
-            "LUNCHBREAK": node[_MiddayBreak],
-#?
+            "LUNCHBREAK": node[_MiddayBreak] == "true",
             "FirstAfternoonHour": node.get(_FirstAfternoonHour) == "true",
         }
         plist.append((int(float(node[_ListPosition])), node[_Id], xnode))

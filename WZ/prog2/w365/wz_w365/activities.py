@@ -1,5 +1,5 @@
 """
-w365/wz_w365/activities.py - last updated 2024-03-19
+w365/wz_w365/activities.py - last updated 2024-03-20
 
 Manage data concerning the "activities" (courses, lessons, etc.).
 
@@ -331,19 +331,25 @@ def process_lesson_times(time_list):
     return slots
 
 
+#TODO: Consider how to ensure that two lessons of a course do not
+# end up on the same day. One possibility would be to look for group
+# intersections at the "atomic" level, but it should also be possible
+# to seek the intersections within a class division, as it is very
+# likely that the divisions in a single subject will all lie within
+# a single division (e.g. 10, 10.A and 10.B: 10.A and 10.B can have a
+# subject on the same day, but other combinations are not allowed).
+
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
 
 # Remove existing database file, add basic data and activities from w365.
 
-from w365.wz_w365.rooms import read_rooms
-from w365.wz_w365.subjects import read_subjects
-from w365.wz_w365.teachers import read_teachers
-from w365.wz_w365.class_groups import read_groups
-
-
 if __name__ == "__main__":
     from core.base import DATAPATH
     from w365.wz_w365.w365base import W365_DB, read_active_scenario
+    from w365.wz_w365.rooms import read_rooms
+    from w365.wz_w365.subjects import read_subjects
+    from w365.wz_w365.teachers import read_teachers
+    from w365.wz_w365.class_groups import read_groups
 
     dbpath = DATAPATH("db365.sqlite", "w365_data")
     w365path = DATAPATH("test.w365", "w365_data")

@@ -1,5 +1,5 @@
 """
-w365/wz_w365/w365base.py - last updated 2024-03-19
+w365/wz_w365/w365base.py - last updated 2024-03-20
 
 Basic functions for:
     Reading a Waldorf365 file.
@@ -113,7 +113,7 @@ class W365_DB:
         self._scenarios = filedata["$$SCENARIOS"]
         self.scenario = filedata["$$SCENARIO"]
         self.idmap = filedata["$$IDMAP"]
-#        self.datamap = {}
+        self.tables = {}
         self.id2key = {}
         self.key2node = {}
 
@@ -121,11 +121,17 @@ class W365_DB:
         values = [(table, to_json(n)) for _, n in w365id_nodes]
         keys = self.db.insertnodes(values)
         assert len(keys) == len(w365id_nodes)
+        try:
+            tlist = self.tables[table]
+        except KeyError:
+            tlist = []
+            self.tables[table]= tlist
         for i, k in enumerate(keys):
             _id, n = w365id_nodes[i]
             if _id:
                 self.id2key[_id] = k
             self.key2node[k] = n
+            tlist.append(n)
 
 
 def read_active_scenario(w365path):

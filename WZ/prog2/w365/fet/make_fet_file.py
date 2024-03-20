@@ -1,5 +1,5 @@
 """
-w365/fet/make_fet_file.py - last updated 2024-03-19
+w365/fet/make_fet_file.py - last updated 2024-03-20
 
 Build a fet-file from the timetable data in the database.
 
@@ -193,10 +193,10 @@ def make_class_groups(class_group_atoms, classtag, divs):
 #=======================================================================
 
 
-def get_days(idmap, fetout, scenario):
+def get_days(db, fetout):
     fetlist = []
-    for d in scenario[_Day]:
-        fetlist.append({"Name": d[_Shortcut]})
+    for node in db.tables["DAYS"]:
+        fetlist.append({"Name": node["ID"]})
     fetout["Days_List"] = {
         "Number_of_Days":   f"{len(fetlist)}",
         "Day": fetlist,
@@ -204,21 +204,22 @@ def get_days(idmap, fetout, scenario):
     return fetlist
 
 
-def get_periods(idmap, fetout, scenario):
+def get_periods(db, fetout):
     fetlist = []
-    lunchbreak = []
-    for i, p in enumerate(scenario[_Period]):
-        # It seems to be acceptable to have no "Shortcut".
-        # In that case, use the counter.
-        ptag = p.get(_Shortcut) or str(i + 1)
-        fetlist.append({"Name": ptag})
-        if p[_MiddayBreak] == "true":
-            lunchbreak.append(i)
+    db.lunchbreak = []
+    db.afternoon_start = -1
+    for i, node in enumerate(db.tables["PERIODS"]):
+        fetlist.append({"Name": node["ID"]})
+        if node["LUNCHBREAK"]:
+            db.lunchbreak.append(i)
+        if node["FirstAfternoonHour"]:
+            db.afternoon_start = i
     fetout["Hours_List"] = {
         "Number_of_Hours":   f"{len(fetlist)}",
         "Hour": fetlist,
     }
-    idmap["__LUNCHPERIODS__"] = lunchbreak
+    print("LUNCH", db.lunchbreak)
+    print("PM", db.afternoon_start)
     return fetlist
 
 
@@ -484,6 +485,10 @@ def build_fet_file(wzdb):
     }
     fetbase = {"fet": fetout}
 
+    get_days(wzdb, fetout)
+    get_periods(wzdb, fetout)   # adds wzdb.lunchbreak and wzdb.afternoon_start
+#TODO: Should those additions rather go to the config table?
+
     return xmltodict.unparse(fetbase, pretty=True, indent="  ")
 
 
@@ -682,15 +687,16 @@ def build_fet_file(wzdb):
 
 #-----------------------------------------------------------------------
 
-from w365.wz_w365.rooms import read_rooms
-from w365.wz_w365.subjects import read_subjects
-from w365.wz_w365.teachers import read_teachers
-from w365.wz_w365.class_groups import read_groups
-from w365.wz_w365.activities import read_activities
 
 if __name__ == "__main__":
     from core.base import DATAPATH
     from w365.wz_w365.w365base import W365_DB, read_active_scenario
+    from w365.wz_w365.rooms import read_rooms
+    from w365.wz_w365.subjects import read_subjects
+    from w365.wz_w365.teachers import read_teachers
+    from w365.wz_w365.class_groups import read_groups
+    from w365.wz_w365.activities import read_activities
+    from w365.wz_w365.timeslots import read_days, read_periods
 
     dbpath = DATAPATH("db365.sqlite", "w365_data")
     w365path = DATAPATH("test.w365", "w365_data")
@@ -704,6 +710,8 @@ if __name__ == "__main__":
     filedata = read_active_scenario(w365path)
     w365 = W365_DB(dbpath, filedata)
 
+    read_days(w365)
+    read_periods(w365)
     read_groups(w365)
     read_subjects(w365)
     read_teachers(w365)
