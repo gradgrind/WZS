@@ -1,5 +1,5 @@
 """
-w365/wz_w365/teachers.py - last updated 2024-03-15
+w365/wz_w365/teachers.py - last updated 2024-03-21
 
 Manage teachers data.
 
@@ -47,7 +47,7 @@ from w365.wz_w365.w365base import (
     _MaxLessonsPerDay,
     _MinLessonsPerDay,
     _NumberOfAfterNoonDays,
-#    LIST_SEP,
+    _ListPosition,
     absences,
     categories,
 )
@@ -57,18 +57,18 @@ from w365.wz_w365.w365base import (
 
 def read_teachers(w365_db):
     table = "TEACHERS"
-    w365id_nodes = []
+    _nodes = []
     for node in w365_db.scenario[_Teacher]:
-        id = node[_Shortcut]
+        _id = node[_Shortcut]
         name = node[_Name]
         xnode = {
-            "ID": id,
+            "ID": _id,
             "LASTNAME": node[_Name],
             "FIRSTNAMES": node[_Firstname],
             #"SEX": int(node[_Gender]),  # 0: male, 1: female
             # There is also other personal information ...
         }
-        w365id_nodes.append((node[_Id], xnode))
+        _nodes.append((float(node[_ListPosition]), node[_Id], xnode))
         constraints = {
             f: node[f]
             for f in (
@@ -86,6 +86,12 @@ def read_teachers(w365_db):
         c = categories(w365_db.idmap, node)
         if c:
             xnode["$$EXTRA"] = c
+    w365id_nodes = []
+    i = 0
+    for _, _id, xnode in sorted(_nodes):
+        i += 1
+        xnode["#"] = i
+        w365id_nodes.append((_id, xnode))
     # Add to database
     w365_db.add_nodes(table, w365id_nodes)
 

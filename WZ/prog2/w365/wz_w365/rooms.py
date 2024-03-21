@@ -1,5 +1,5 @@
 """
-w365/wz_w365/rooms.py - last updated 2024-03-14
+w365/wz_w365/rooms.py - last updated 2024-03-21
 
 Manage rooms data.
 
@@ -43,6 +43,7 @@ from w365.wz_w365.w365base import (
     _Id,
     _RoomGroup,
     LIST_SEP,
+    _ListPosition,
     absences,
     categories,
 )
@@ -55,36 +56,41 @@ from w365.wz_w365.w365base import (
 
 def read_rooms(w365_db):
     table = "ROOMS"
-    w365id_nodes = []
-    roomgroups = []
+    _nodes = []
+    _roomgroups = []
     for node in w365_db.scenario[_Room]:
         nid = node[_Shortcut]
         name = node[_Name]
         xnode = {"ID": nid, "NAME": name}
         rg = node.get(_RoomGroup)
         if rg:
-            roomgroups.append((rg, node[_Id], xnode))
+            _roomgroups.append(
+                (float(node[_ListPosition]), rg, node[_Id], xnode)
+            )
         else:
-            w365id_nodes.append((node[_Id], xnode))
+            _nodes.append((float(node[_ListPosition]), node[_Id], xnode))
         a = absences(w365_db.idmap, node)
         if a:
             xnode["NOT_AVAILABLE"] = a
         c = categories(w365_db.idmap, node)
         if c:
             xnode["$$EXTRA"] = c
-
+    w365id_nodes = []
+    i = 0
+    for _, _id, xnode in sorted(_nodes):
+        i += 1
+        xnode["#"] = i
+        w365id_nodes.append((_id, xnode))
     # Add to database
     w365_db.add_nodes(table, w365id_nodes)
-
     # Add "room group" info (one "virtual" room to cover several real
     # rooms, all of which are required).
     w365id_nodes.clear()
-    for rg, w365id, xnode in roomgroups:
+    for _, rg, w365id, xnode in sorted(_roomgroups):
         # Get db-keys from w365-ids
         ridlist = [w365_db.id2key[_id] for _id in rg.split(LIST_SEP)]
         xnode["ROOM_GROUP"] = ridlist
         w365id_nodes.append((w365id, xnode))
-
     # Add to database
     w365_db.add_nodes(table, w365id_nodes)
 

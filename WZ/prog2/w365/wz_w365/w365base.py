@@ -1,5 +1,5 @@
 """
-w365/wz_w365/w365base.py - last updated 2024-03-20
+w365/wz_w365/w365base.py - last updated 2024-03-21
 
 Basic functions for:
     Reading a Waldorf365 file.
@@ -132,6 +132,13 @@ class W365_DB:
                 self.id2key[_id] = k
             self.key2node[k] = n
             tlist.append(n)
+
+    def config2db(self):
+        self.db.insert(
+            "NODES",
+            ["DB_TABLE", "DATA"],
+            ["__CONFIG__", to_json(self.config)]
+        )
 
 
 def read_active_scenario(w365path):

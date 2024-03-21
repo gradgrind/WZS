@@ -1,5 +1,5 @@
 """
-w365/wz_w365/subjects.py - last updated 2024-03-15
+w365/wz_w365/subjects.py - last updated 2024-03-21
 
 Manage subjects data.
 
@@ -41,6 +41,7 @@ from w365.wz_w365.w365base import (
     _Shortcut,
     _Name,
     _Id,
+    _ListPosition,
     categories,
 )
 
@@ -49,17 +50,21 @@ from w365.wz_w365.w365base import (
 
 def read_subjects(w365_db):
     table = "SUBJECTS"
-    w365id_nodes = []
-#    sids = set()
+    _nodes = []
     for node in w365_db.scenario[_Subject]:
         id = node[_Shortcut]
         name = node[_Name]
         xnode = {"ID": id, "NAME": name}
-        w365id_nodes.append((node[_Id], xnode))
-#        sids.add(id)
         c = categories(w365_db.idmap, node)
         if c:
             xnode["$$EXTRA"] = c
+        _nodes.append((float(node[_ListPosition]), node[_Id], xnode))
+    w365id_nodes = []
+    i = 0
+    for _, _id, xnode in sorted(_nodes):
+        i += 1
+        xnode["#"] = i
+        w365id_nodes.append((_id, xnode))
     # Add to database
     w365_db.add_nodes(table, w365id_nodes)
 

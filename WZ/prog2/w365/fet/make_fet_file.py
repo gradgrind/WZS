@@ -1,5 +1,5 @@
 """
-w365/fet/make_fet_file.py - last updated 2024-03-20
+w365/fet/make_fet_file.py - last updated 2024-03-21
 
 Build a fet-file from the timetable data in the database.
 
@@ -44,18 +44,20 @@ import xmltodict
 
 '''
 from w365.fet.fet_support import next_activity_id, AG_SEP
-from w365.fet.constraints import get_time_constraints, EXTRA_SUBJECTS
 from w365.fet.constraints_subject_separation import (
     SubjectGroupActivities,
 )
 '''
+from w365.fet.constraints import get_time_constraints, EXTRA_SUBJECTS
+from w365.wz_w365.class_groups import AG_SEP
 
 ###-----
 
 
-def make_class_groups(class_group_atoms, classtag, divs):
+def class_groups(node):
+    classtag = node["ID"]
+    divs = node["DIVISIONS"]
     if not divs:
-        class_group_atoms[classtag] = {"": set()}
         return {
             "Name": classtag,
             "Number_of_Students": "0",
@@ -76,65 +78,23 @@ def make_class_groups(class_group_atoms, classtag, divs):
         "Number_of_Categories": "1",
         "Separator": AG_SEP,
     }
-    # Check the input
-    gset = set()
-    divs1 = []
-    divs1x = []
-    for d in divs:
-        gs = []
-        xg = {}
-        divs1.append(gs)
-        divs1x.append(xg)
-        for g in d:
-            assert g not in gset
-            gset.add(g)
-            try:
-                g, subs = g.split("=", 1)
-            except ValueError:
-                gs.append(g)   # A "normal" group
-            else:
-                # A "compound" group
-                xl = []
-                xg[g] = xl
-                for s in subs.split("+"):
-                    assert s not in xl
-                    xl.append(s)
-        for g, sl in xg.items():
-            assert len(sl) > 1
-            for s in sl:
-                assert s in gs
-        assert len(gs) > 1
-    # Generate "atomic" groups
-    g2ag = {}
-    aglist = []
-    for p in product(*divs1):
-        ag = AG(p)
-        aglist.append(ag)
-        for g in p:
-            try:
-                g2ag[g].add(ag)
-            except KeyError:
-                g2ag[g] = {ag}
-    for xg in divs1x:
-        for g, gl in xg.items():
-            ags = set()
-            for gg in gl:
-                ags.update(g2ag[gg])
-            g2ag[g] = ags
     # Add "categories" (atomic groups – not to be confused with the
     # "Categories" in Waldorf365 data)
+    g2ag = node["$GROUP_ATOMS"]
+    aglist = [str(ag) for ag in g2ag[""]]
+    aglist.sort()
     cgmap["Category"] = {
         "Number_of_Divisions": f"{len(aglist)}",
-        "Division": [str(ag) for ag in aglist],
+        "Division": aglist,
     }
     # Add groups and subgroups
     groups = []
     cgmap["Group"] = groups
     # If there is only one division, the fet-groups can be the same as
-    # fet-subgroups. If there are "compound" groups, these will contain
-    # "normal" groups, which then do not need additional fet-group
-    # entries.
-    if len(divs1) == 1:
+    # fet-subgroups.
+    # If there are "compound" groups, these will contain "normal"
+    # groups, which then do not need additional fet-group entries.
+    if len(divs) == 1:
         pending = []
         done = set()
         for g in sorted(g2ag):
@@ -184,9 +144,6 @@ def make_class_groups(class_group_atoms, classtag, divs):
                 "Subgroup": subgroups,
             })
             #print(f">>> {g} -> {agl}")
-    g2ag[""] = set(aglist)
-    class_group_atoms[classtag] = g2ag
-    #print("$g2ag:", g2ag)
     return cgmap
 
 
@@ -194,135 +151,53 @@ def make_class_groups(class_group_atoms, classtag, divs):
 
 
 def get_days(db, fetout):
-    fetlist = []
-    for node in db.tables["DAYS"]:
-        fetlist.append({"Name": node["ID"]})
+    fetlist = [{"Name": node["ID"]} for node in db.tables["DAYS"]]
     fetout["Days_List"] = {
         "Number_of_Days":   f"{len(fetlist)}",
         "Day": fetlist,
     }
-    return fetlist
+    #return fetlist
 
 
 def get_periods(db, fetout):
-    fetlist = []
-    db.lunchbreak = []
-    db.afternoon_start = -1
-    for i, node in enumerate(db.tables["PERIODS"]):
-        fetlist.append({"Name": node["ID"]})
-        if node["LUNCHBREAK"]:
-            db.lunchbreak.append(i)
-        if node["FirstAfternoonHour"]:
-            db.afternoon_start = i
+    fetlist = [{"Name": node["ID"]} for node in db.tables["PERIODS"]]
     fetout["Hours_List"] = {
         "Number_of_Hours":   f"{len(fetlist)}",
         "Hour": fetlist,
     }
-    print("LUNCH", db.lunchbreak)
-    print("PM", db.afternoon_start)
-    return fetlist
+    #return fetlist
 
 
-def get_teachers(idmap, fetout, scenario):
-    fetlist = []
-    tconstraints = {}
-    id2teacher = {}
-    for node in scenario[_Teacher]:
-        tid = node[_Shortcut]
-        id2teacher[node[_Id]] = (tid, node[_Name])
-        fetlist.append({
-            "Name": tid,
-            "Target_Number_of_Hours": "0",
-            "Qualified_Subjects": None,
-            "Comments": f'{node[_Firstname]} {node[_Name]}'
-        })
-        constraints = {
-            f: node[f]
-            for f in (
-                _MaxDays,
-                _MaxLessonsPerDay,
-                _MaxGapsPerDay,    # gaps
-                _MinLessonsPerDay,
-                _NumberOfAfterNoonDays,
-            )
-        }
-        tconstraints[tid] = constraints
-        constraints[_Absences] = absences(idmap, node)
-        constraints[_Categories] = categories(idmap, node)
+def get_teachers(db, fetout):
+    fetlist = [{
+        "Name": node["ID"],
+        "Target_Number_of_Hours": "0",
+        "Qualified_Subjects": None,
+        "Comments": f'{node["FIRSTNAMES"]} {node["LASTNAME"]}'
+    } for node in db.tables["TEACHERS"]]
     fetout["Teachers_List"] = {"Teacher": fetlist}
-    idmap["__ID2TEACHER__"] = id2teacher
-    idmap["__TEACHER_CONSTRAINTS__"] = tconstraints
-    #print("\n__TEACHER_CONSTRAINTS__", tconstraints)
+    #return fetlist
 
 
-def get_subjects(idmap, fetout, scenario):
+def get_subjects(db, fetout):
     fetlist = EXTRA_SUBJECTS()
-    id2subject = {}
-    constraints = {}
     sids = set()
-    for node in scenario[_Subject]:
-        sid = node[_Shortcut]
-        name = node[_Name]
-        id2subject[node[_Id]] = (sid, name)
-        fetlist.append({"Name": sid, "Comments": name})
+    for node in db.tables["SUBJECTS"]:
+        sid = node["ID"]
+        fetlist.append({"Name": sid, "Comments": node["NAME"]})
         sids.add(sid)
-        c = categories(idmap, node)
-        if c:
-            constraints[sid] = c
     fetout["Subjects_List"] = {"Subject": fetlist}
-    idmap["__ID2SUBJECT__"] = id2subject
-    idmap["__SUBJECT_CONSTRAINTS__"] = constraints
-    idmap["__SUBJECT_SET__"] = sids
+    db.sids = sids
+    #return fetlist
 
 
-def get_groups(idmap, fetout, scenario):
-    id2gtag = {node[_Id]: node[_Shortcut] for node in scenario[_Group]}
-    id2div = {}
-    for d in scenario[_YearDiv]:    # Waldorf365: "GradePartiton" (sic)
-        name = d[_Name]
-        gidlist = d[_Groups].split(LIST_SEP)
-        iglist = [(id2gtag[gid], gid) for gid in gidlist]
-        iglist.sort()
-        id2div[d[_Id]] = iglist
-        #print(f" -- {name} = {iglist}")
+def get_groups(db, fetout):
     ylist = []  # Collect class data for fet
-#    id2year = {}
-    id2group = {}
-    cconstraints = {}
-    class_group_atoms = {}
-    for node in scenario[_Year]:   # Waldorf365: "Grade"
-        cltag = f'{node[_Level]}{node.get(_Letter) or ""}'
-        yid = node[_Id]
-#        id2year[yid] = cltag
-        id2group[yid] = cltag
-        dlist = []
-        divs = node.get(_YearDivs)
-        if divs:
-            for div in divs.split(LIST_SEP):
-                glist = []
-                for g, gid in id2div[div]:
-                    glist.append(g)
-                    id2group[gid] = f"{cltag}{AG_SEP}{g}"
-                dlist.append(glist)
-        #print(f'+++ {cltag}: {dlist}')
-        ylist.append(make_class_groups(class_group_atoms, cltag, dlist))
-        constraints = {
-            f: node[f]
-            for f in (
-                _ForceFirstHour,
-                _MaxLessonsPerDay,
-                _MinLessonsPerDay,
-                _NumberOfAfterNoonDays,
-            )
-        }
-        cconstraints[cltag] = constraints
-        constraints[_Absences] = absences(idmap, node)
-        constraints[_Categories] = categories(idmap, node)
+    for node in db.tables["CLASSES"]:
+        print(" ***", node)
+        ylist.append(class_groups(node))
     fetout["Students_List"] = {"Year": ylist}
-    idmap["__ID2GROUP__"] = id2group
-    idmap["__YEAR_CONSTRAINTS__"] = cconstraints
-    idmap["__CLASS_GROUP_ATOMS__"] = class_group_atoms
-    #print('§idmap["__CLASS_GROUP_ATOMS__"]:', class_group_atoms)
+    #return ylist
 
 
 def get_rooms(idmap, fetout, scenario):
@@ -486,8 +361,10 @@ def build_fet_file(wzdb):
     fetbase = {"fet": fetout}
 
     get_days(wzdb, fetout)
-    get_periods(wzdb, fetout)   # adds wzdb.lunchbreak and wzdb.afternoon_start
-#TODO: Should those additions rather go to the config table?
+    get_periods(wzdb, fetout)
+    get_teachers(wzdb, fetout)
+    get_subjects(wzdb, fetout)
+    get_groups(wzdb, fetout)
 
     return xmltodict.unparse(fetbase, pretty=True, indent="  ")
 
@@ -717,6 +594,8 @@ if __name__ == "__main__":
     read_teachers(w365)
     read_rooms(w365)
     read_activities(w365)
+    # Add config items to database
+    w365.config2db()
 
 #TODO
     fetxml = build_fet_file(w365)

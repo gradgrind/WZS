@@ -1,4 +1,4 @@
-from w365base import (
+from w365.wz_w365.w365base import (
     _Absences,
     _Categories,
     _MaxDays,
@@ -8,7 +8,7 @@ from w365base import (
     _NumberOfAfterNoonDays,
     _ForceFirstHour,
 )
-from fet_support import (
+from w365.fet.fet_support import (
     AG_SEP,
     SUBJECT_LUNCH_BREAK,
     SUBJECT_FREE_AFTERNOON,

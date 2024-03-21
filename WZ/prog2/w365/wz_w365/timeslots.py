@@ -1,5 +1,5 @@
 """
-w365/wz_w365/timeslots.py - last updated 2024-03-20
+w365/wz_w365/timeslots.py - last updated 2024-03-21
 
 Manage time slots (for timetable).
 
@@ -83,17 +83,23 @@ def read_periods(w365_db):
             "NAME": node.get(_Name) or "",
             "START_TIME": node[_Start],
             "END_TIME": node[_End],
-            "LUNCHBREAK": node[_MiddayBreak] == "true",
-            "FirstAfternoonHour": node.get(_FirstAfternoonHour) == "true",
+            "_lb": node[_MiddayBreak] == "true",
+            "_pm": node.get(_FirstAfternoonHour) == "true",
         }
         plist.append((int(float(node[_ListPosition])), node[_Id], xnode))
     plist.sort()
     i = 0
+    lb = []
+    w365_db.config["LUNCHBREAK"] = lb
     for _, _id, xnode in plist:
         i += 1
         xnode["#"] = i
         xnode["ID"] = xnode["TAG"] or str(i)
         w365id_nodes.append((node[_Id], xnode))
+        if xnode.pop("_lb"):
+            lb.append(i)
+        if xnode.pop("_pm"):
+            w365_db.config["AFTERNOON_START_PERIOD"] = i
     # Add to database
     w365_db.add_nodes(table, w365id_nodes)
 
