@@ -1,5 +1,5 @@
 """
-w365/wz_w365/rooms.py - last updated 2024-03-21
+w365/wz_w365/rooms.py - last updated 2024-03-22
 
 Manage rooms data.
 
@@ -42,8 +42,9 @@ from w365.wz_w365.w365base import (
     _Name,
     _Id,
     _RoomGroup,
-    LIST_SEP,
     _ListPosition,
+    _capacity,
+    LIST_SEP,
     absences,
     categories,
 )
@@ -61,7 +62,8 @@ def read_rooms(w365_db):
     for node in w365_db.scenario[_Room]:
         nid = node[_Shortcut]
         name = node[_Name]
-        xnode = {"ID": nid, "NAME": name}
+        cap = node.get(_capacity) or ""
+        xnode = {"ID": nid, "NAME": name, "CAPACITY": cap}
         rg = node.get(_RoomGroup)
         if rg:
             _roomgroups.append(
@@ -89,6 +91,8 @@ def read_rooms(w365_db):
     for _, rg, w365id, xnode in sorted(_roomgroups):
         # Get db-keys from w365-ids
         ridlist = [w365_db.id2key[_id] for _id in rg.split(LIST_SEP)]
+        i += 1
+        xnode["#"] = i
         xnode["ROOM_GROUP"] = ridlist
         w365id_nodes.append((w365id, xnode))
     # Add to database

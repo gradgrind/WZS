@@ -1,5 +1,5 @@
 """
-w365/fet/make_fet_file.py - last updated 2024-03-21
+w365/fet/make_fet_file.py - last updated 2024-03-22
 
 Build a fet-file from the timetable data in the database.
 
@@ -200,39 +200,33 @@ def get_groups(db, fetout):
     #return ylist
 
 
-def get_rooms(idmap, fetout, scenario):
-    id2room = {}
+def get_rooms(db, fetout):
     fetlist = []
     rconstraints = {}
     roomgroups = []
-    for node in scenario[_Room]:
-        rid = node[_Shortcut]
-        rname = node[_Name]
-        id2room[node[_Id]] = (rid, rname)
-        rg = node.get(_RoomGroup)
-        if rg:
-            roomgroups.append((rid, rname, rg))
+    for node in db.tables["ROOMS"]:
+        #print("ROOM:", node)
+        rid = node["ID"]
+        rname = node["NAME"]
+        rglist = node.get("ROOM_GROUP")
+        if rglist:
+            roomgroups.append((rid, rname, rglist))
         else:
             fetlist.append({
                 "Name": rid,
                 "Building": "",
-                "Capacity": node.get(_capacity) or "30000",
+                "Capacity": node["CAPACITY"] or "30000",
                 "Virtual": "false",
                 "Comments": rname,
             })
-        rconstraints[rid] = {
-            _Absences: absences(idmap, node),
-            _Categories: categories(idmap, node)
-        }
     # Make virtual rooms with one-room elements for the room-groups
-    for rid, rname, rg in roomgroups:
-        ridlist = [id2room[_id][0] for _id in rg.split(LIST_SEP)]
+    for rid, rname, rglist in roomgroups:
         roomlist = [
             {
                 "Number_of_Real_Rooms": "1",
-                "Real_Room": room,
+                "Real_Room": db.key2node[roomkey]["ID"],
             }
-            for room in ridlist
+            for roomkey in rglist
         ]
         fetlist.append({
             "Name": rid,
@@ -244,8 +238,6 @@ def get_rooms(idmap, fetout, scenario):
             "Comments": rname,
         })
     fetout["Rooms_List"] = {"Room": fetlist}
-    idmap["__ID2ROOM__"] = id2room
-    idmap["__ROOM_CONSTRAINTS__"] = rconstraints
 
 
 def get_activities(idmap, fetout, scenario):
@@ -365,6 +357,8 @@ def build_fet_file(wzdb):
     get_teachers(wzdb, fetout)
     get_subjects(wzdb, fetout)
     get_groups(wzdb, fetout)
+    fetout["Buildings_List"] = ""
+    get_rooms(wzdb, fetout)
 
     return xmltodict.unparse(fetbase, pretty=True, indent="  ")
 
