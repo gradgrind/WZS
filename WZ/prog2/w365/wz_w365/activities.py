@@ -1,5 +1,5 @@
 """
-w365/wz_w365/activities.py - last updated 2024-03-20
+w365/wz_w365/activities.py - last updated 2024-03-23
 
 Manage data concerning the "activities" (courses, lessons, etc.).
 
@@ -115,6 +115,7 @@ def read_activities(w365_db):
             "SUBJECTS": sklist,
             "ROOM_WISH":  rklist,
             "WORKLOAD": workload,
+            "$W365ID": course_id,
         }
         if total_duration == 0:
             # Block ("Epoche")
@@ -130,7 +131,7 @@ def read_activities(w365_db):
     # Add to database
     w365_db.add_nodes(table, w365id_nodes)
 
-    # The blocks ("Epochen") must be handled separately (at present).
+    ## The blocks ("Epochen") must be handled separately (at present).
 
 #TODO: Need to specify which "Schedule" to use
     schedules = [
@@ -138,8 +139,8 @@ def read_activities(w365_db):
         for node in w365_db.scenario[_Schedule]
     ]
     schedules.sort()
-    for _, n, _ in schedules:
-        print(" +++", n)
+    #for _, n, _ in schedules:
+    #    print(" +++", n)
 
 # The "Vorlage" might have only fixed lessons.
 # If adding or deleting lessons, the Lessons field of the Schedule
@@ -212,6 +213,7 @@ def read_activities(w365_db):
                 "BLOCK": node[_Shortcut],
                 "NAME": node[_Name],
                 "LESSONS": llengths,
+                "$W365ID": ep_id,
 #TODO: Field "ID"?
             }
             #print("§XNODE:", xnode)
@@ -221,7 +223,7 @@ def read_activities(w365_db):
 # no times are set. It is all too complicated.
 
     # Add to database
-    w365_db.add_nodes("BLOCKS", w365id_nodes)
+    w365_db.add_nodes(table, w365id_nodes)
 
     # Now deal with the individual lessons
     w365id_nodes.clear()

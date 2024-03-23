@@ -1,6 +1,6 @@
 # Support functions for fet
 
-AG_SEP = ":"    # Separator for "atomic" groups, etc.
+#AG_SEP = ":"    # Separator for "atomic" groups, etc.
 
 SUBJECT_LUNCH_BREAK = ".lb"
 SUBJECT_FREE_AFTERNOON = ".pm"

@@ -1,5 +1,5 @@
 """
-w365/wz_w365/w365base.py - last updated 2024-03-21
+w365/wz_w365/w365base.py - last updated 2024-03-23
 
 Basic functions for:
     Reading a Waldorf365 file.
@@ -139,6 +139,9 @@ class W365_DB:
             ["DB_TABLE", "DATA"],
             ["__CONFIG__", to_json(self.config)]
         )
+
+    def set_subject_activities(self, subject_activities):
+        print("TODO: set_subject_activities\n", subject_activities)
 
 
 def read_active_scenario(w365path):

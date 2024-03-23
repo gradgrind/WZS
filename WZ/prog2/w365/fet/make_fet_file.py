@@ -1,5 +1,5 @@
 """
-w365/fet/make_fet_file.py - last updated 2024-03-22
+w365/fet/make_fet_file.py - last updated 2024-03-23
 
 Build a fet-file from the timetable data in the database.
 
@@ -42,14 +42,10 @@ if __name__ == "__main__":
 
 import xmltodict
 
-'''
-from w365.fet.fet_support import next_activity_id, AG_SEP
-from w365.fet.constraints_subject_separation import (
-    SubjectGroupActivities,
-)
-'''
-from w365.fet.constraints import get_time_constraints, EXTRA_SUBJECTS
 from w365.wz_w365.class_groups import AG_SEP
+from w365.fet.fet_support import next_activity_id
+from w365.fet.constraints import get_time_constraints, EXTRA_SUBJECTS
+from w365.fet.constraints_subject_separation import SubjectGroupActivities
 
 ###-----
 
@@ -151,21 +147,31 @@ def class_groups(node):
 
 
 def get_days(db, fetout):
-    fetlist = [{"Name": node["ID"]} for node in db.tables["DAYS"]]
+    days = []
+    fetlist = []
+    for node in db.tables["DAYS"]:
+        d = node["ID"]
+        days.append(d)
+        fetlist.append({"Name": d})
     fetout["Days_List"] = {
         "Number_of_Days":   f"{len(fetlist)}",
         "Day": fetlist,
     }
-    #return fetlist
+    return days
 
 
 def get_periods(db, fetout):
-    fetlist = [{"Name": node["ID"]} for node in db.tables["PERIODS"]]
+    periods = []
+    fetlist = []
+    for node in db.tables["PERIODS"]:
+        p = node["ID"]
+        periods.append(p)
+        fetlist.append({"Name": p})
     fetout["Hours_List"] = {
         "Number_of_Hours":   f"{len(fetlist)}",
         "Hour": fetlist,
     }
-    #return fetlist
+    return periods
 
 
 def get_teachers(db, fetout):
@@ -194,7 +200,7 @@ def get_subjects(db, fetout):
 def get_groups(db, fetout):
     ylist = []  # Collect class data for fet
     for node in db.tables["CLASSES"]:
-        print(" ***", node)
+        #print(" ***", node)
         ylist.append(class_groups(node))
     fetout["Students_List"] = {"Year": ylist}
     #return ylist
@@ -240,62 +246,55 @@ def get_rooms(db, fetout):
     fetout["Rooms_List"] = {"Room": fetlist}
 
 
-def get_activities(idmap, fetout, scenario):
+def get_activities(db, fetout):
     fetlist = []
     next_activity_id(reset = True)
-    id2group = idmap["__ID2GROUP__"]
-    id2subject = idmap["__ID2SUBJECT__"]
-    id2teacher = idmap["__ID2TEACHER__"]
-    id2room = idmap["__ID2ROOM__"]
     multisubjects = set()
-    course2activities = {}
-    idmap["__COURSE2ACTIVITIES__"] = course2activities
-    subject_activities = SubjectGroupActivities(idmap["__CLASS_GROUP_ATOMS__"])
-    idmap["__SUBJECT_ACTIVITIES__"] = subject_activities
-    for node in scenario[_Course]:
-        tlist = node[_Teachers].split(LIST_SEP)
-        slist = node[_Subjects].split(LIST_SEP)
-        glist = node[_Groups].split(LIST_SEP)
-        _pr = node.get(_PreferredRooms)
-        rlist = _pr.split(LIST_SEP) if _pr else []
-        # Now convert to fet forms
-        tidlist = [id2teacher[t][0] for t in tlist]
-        gidlist = [id2group[g] for g in glist]
-        sbj = ",".join(id2subject[s][0] for s in slist)
-        if len(slist) > 1 and sbj not in multisubjects:
-            # Invent a new subject
-            sbjlist = fetout["Subjects_List"]["Subject"]
-            sbjlist.append({"Name": sbj, "Comments": f"MULTI_{sbj}"})
-            multisubjects.add(sbj)
-#TODO: rooms
-        ridlist = [id2room[r][0] for r in rlist]
-
-        ## Generate the activity or activities
-        # Divide lessons up according to duration
-        total_duration = int(float(node[_HoursPerWeek]))
-        if total_duration == 0:
-#TODO
-            print("HELP! Epochenfach")
-            continue
-
-#TODO: What are the possibilities for this field?
-        # Take only the first value
-        dlm = node[_DoubleLessonMode].split(",")[0]
-        ll = int(dlm)
-        lessons = []
-        nl = total_duration
-        while nl:
-            if nl < ll:
-                # reduced length for last entry
-                lessons.append(nl)
-                break
+    subject_activities = SubjectGroupActivities()
+    for node in db.tables["COURSES"]:
+        try:
+            slist = node["SUBJECTS"]
+        except KeyError:
+            sbj = node["BLOCK"]
+        else:
+            sbj = ",".join(db.key2node[s]["ID"] for s in slist)
+            if len(slist) > 1 and sbj not in multisubjects:
+                # Invent a new subject
+                sbjlist = fetout["Subjects_List"]["Subject"]
+                sbjlist.append({"Name": sbj, "Comments": f"MULTI_{sbj}"})
+                multisubjects.add(sbj)
+        tlist = node.get("TEACHERS") or []
+        tidlist = [db.key2node[t]["ID"] for t in tlist]
+        gidlist = []
+        for cx, g in node["GROUPS"]:
+            if g:
+                gidlist.append(f'{db.key2node[cx]["ID"]}{AG_SEP}{g}')
             else:
-                lessons.append(ll)
-                nl -= ll
+                gidlist.append(db.key2node[cx]["ID"])
+        rlist = node.get("ROOM_WISH") or []
+        ridlist = [db.key2node[r]["ID"] for r in rlist]
+        ## Generate the activity or activities
+        try:
+            durations = node["LESSONS"]
+            total_duration = sum(durations)
+            # sum also works with an empty list (-> 0)
+        except KeyError:
+#?
+            continue
+#TODO
+
+# How are the courses and blocks linked??? Surely a block-course would
+# need a link to its block? At present I just haven't implemented this
+# because the Waldorf365 approach is so complicated. That means that the
+# block lessons (at least the fixed ones ...) can be associated with the
+# classes, but no other information is available. If teachers (etc.)
+# should be blocked by the blocks, this must be specified separately.
+
+# How would a "course" with no lessons look? (A bodge to cater for
+# extra workloads/payments)
 
         id0 = str(next_activity_id())
         aid_list = [id0]
-        w365_course = node[_Id]
         activity = {
             "Id": id0,
             "Teacher": tidlist,
@@ -303,12 +302,10 @@ def get_activities(idmap, fetout, scenario):
             "Students": gidlist,
             "Active": "true",
             "Total_Duration": str(total_duration),
-            "Activity_Group_Id": id0 if len(lessons) > 1 else "0",
-            "Comments": w365_course,
+            "Activity_Group_Id": id0 if len(durations) > 1 else "0",
+            "Comments": node["$W365ID"],
         }
-        aclist = []
-        course2activities[w365_course] = aclist
-        for i, ll in enumerate(lessons):
+        for i, ll in enumerate(durations):
             if i > 0:
                 activity = activity.copy()
                 aid = str(next_activity_id())
@@ -316,12 +313,8 @@ def get_activities(idmap, fetout, scenario):
                 aid_list.append(aid)
             activity["Duration"] = str(ll)
             fetlist.append(activity)
-            aclist.append(activity)
-
-        subject_activities.subject_group_activity(
-            sbj, gidlist, aid_list
-        )
-
+        subject_activities.add_activities(sbj, gidlist, aid_list)
+    db.set_subject_activities(subject_activities)
 
 # Defining a set of lessons as an "Activity_Group" / subactivities
 # is a way of grouping activities which are split into a number
@@ -336,7 +329,6 @@ def get_activities(idmap, fetout, scenario):
 # is the sum of the Duration parameters of all the members.
 
     fetout["Activities_List"] = {"Activity": fetlist}
-    idmap["__ACTIVITIES__"] = fetlist
 
 
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -352,13 +344,26 @@ def build_fet_file(wzdb):
     }
     fetbase = {"fet": fetout}
 
-    get_days(wzdb, fetout)
-    get_periods(wzdb, fetout)
+    days = get_days(wzdb, fetout)
+    periods = get_periods(wzdb, fetout)
     get_teachers(wzdb, fetout)
     get_subjects(wzdb, fetout)
     get_groups(wzdb, fetout)
     fetout["Buildings_List"] = ""
     get_rooms(wzdb, fetout)
+    get_activities(wzdb, fetout)
+
+    ### Time constraints
+    tcmap = {
+        "ConstraintBasicCompulsoryTime": {
+            "Weight_Percentage": "100",
+            "Active": "true",
+            "Comments": None,
+        },
+        "ConstraintMinDaysBetweenActivities": [],
+    }
+    ttconstraints = get_time_constraints(wzdb, tcmap, days, periods)
+    fetout["Time_Constraints_List"] = tcmap
 
     return xmltodict.unparse(fetbase, pretty=True, indent="  ")
 
@@ -406,8 +411,8 @@ def build_fet_file(wzdb):
         (node[_ListPosition], node[_Name], node[_Lessons])
         for node in scenario[_Schedule]
     ]
-    for _, n, _ in schedules:
-        print(" +++", n)
+    #for _, n, _ in schedules:
+    #    print(" +++", n)
 
 # The "Vorlage" might have only fixed lessons.
 # If adding or deleting lessons, the Lessons field of the Schedule
@@ -416,7 +421,7 @@ def build_fet_file(wzdb):
 # Assume the last schedule?
     lesson_set = set(schedules[-1][-1].split(LIST_SEP))
 
-    print("\n ****** LESSONS:")
+    #print("\n ****** LESSONS:")
     id2group = idmap["__ID2GROUP__"]
     clist = []
     elist = []
@@ -593,8 +598,8 @@ if __name__ == "__main__":
 
 #TODO
     fetxml = build_fet_file(w365)
-    print("§XML:", fetxml)
-    quit(1)
+    #print("§XML:", fetxml)
+    #quit(1)
 
     outfile = f'{os.path.basename(w365path).rsplit(".", 1)[0]}.fet'
     outpath = os.path.join(os.path.dirname(w365path), outfile)

@@ -1,5 +1,5 @@
 """
-w365/wz_w365/class_groups.py - last updated 2024-03-15
+w365/wz_w365/class_groups.py - last updated 2024-03-23
 
 Manage class and group data.
 
@@ -84,7 +84,7 @@ def read_groups(w365_db):
         iglist = [(*id2gtag[w365id], w365id) for w365id in gidlist]
         iglist = [(g, g365) for lp, g, g365 in sorted(iglist)]
         id2div[node[_Id]] = (float(node[_ListPosition]), name, iglist)
-        print(f" -- {name} = {iglist}")
+        #print(f" -- {name} = {iglist}")
     g365_info = {}  # collect group references for each class
     for node in w365_db.scenario[_Year]:    # Waldorf365: "Grade"
         clevel = node[_Level]
@@ -113,11 +113,11 @@ def read_groups(w365_db):
                 divlist.append((divlp, divname, glist))
             divlist.sort()
             divlist = [[n, gl] for lp, n, gl in divlist]
-        print(f'+++ {cltag}: {divlist}')
+        #print(f'+++ {cltag}: {divlist}')
         xnode["DIVISIONS"] = divlist
 #?
         xnode["$GROUP_ATOMS"] = make_class_groups(divlist)
-        print("  *** $GROUP_ATOMS:", xnode["$GROUP_ATOMS"])
+        #print("  *** $GROUP_ATOMS:", xnode["$GROUP_ATOMS"])
         constraints = {
             f: node[f]
             for f in (
@@ -145,7 +145,7 @@ def read_groups(w365_db):
             group_map[g365] = (yid, g)
 #?
     w365_db.group_map = group_map
-    print("§group_map:", group_map)
+    #print("§group_map:", group_map)
 
 
 class AG(frozenset):

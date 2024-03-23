@@ -1,16 +1,65 @@
+"""
+w365/fet/constraints_subject_separation.py - last updated 2024-03-23
+
+Handle prevention of multiple lessons in one subject on any day.
 
 
-#TODO: Handle prevention of multiple lessons in one subject on any day.
+=+LICENCE=================================
+Copyright 2024 Michael Towers
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+=-LICENCE=================================
+"""
 
 
-from fet_support import AG_SEP
+#TODO: Constraint generation, tidying
+
+
+#from fet_support import AG_SEP
+from w365.wz_w365.class_groups import AG_SEP
 
 
 class SubjectGroupActivities:
-    def __init__(self, class_group_atoms: dict[str, dict]):
-        self.class_group_atoms = class_group_atoms
+#    def __init__(self, class_group_atoms: dict[str, dict]):
+#        self.class_group_atoms = class_group_atoms
+    def __init__(self):
         self.subject_activities = {}
 
+    def add_activities(self,
+        sid: str,
+        groups: list[str],
+        activity_ids: list[str]
+    ) -> None:
+        """Add groups/activities to the collection for the given subject.
+        """
+        try:
+            aid_glist = self.subject_activities[sid]
+        except KeyError:
+            aid_glist = {}
+            self.subject_activities[sid] = aid_glist
+        for a in activity_ids:
+            aid_glist[a] = groups
+
+#TODO--?
+    def __str__(self):
+        lines = []
+        for sid, aid_glist in self.subject_activities.items():
+            lines.append(f"$$$ {sid}")
+            for a, glist in aid_glist.items():
+                lines.append(f"   {a:4}: {glist}")
+        return "\n".join(lines)
+
+#--
     def subject_group_activity(self,
         sid: str,
         groups: list[str],

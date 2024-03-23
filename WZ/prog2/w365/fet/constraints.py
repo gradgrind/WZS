@@ -1,3 +1,27 @@
+"""
+w365/fet/constraints.py - last updated 2024-03-23
+
+Add constraints to the fet file.
+
+
+=+LICENCE=================================
+Copyright 2024 Michael Towers
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+=-LICENCE=================================
+"""
+
+
 from w365.wz_w365.w365base import (
     _Absences,
     _Categories,
@@ -9,18 +33,14 @@ from w365.wz_w365.w365base import (
     _ForceFirstHour,
 )
 from w365.fet.fet_support import (
-    AG_SEP,
     SUBJECT_LUNCH_BREAK,
     SUBJECT_FREE_AFTERNOON,
     next_activity_id,
 )
+from w365.wz_w365.class_groups import AG_SEP
 
 #TODO: There could be a clash between the current implementation of
 # lunch breaks and the max-gaps settings.
-
-#TODO: Need to define somehow what an afternoon is!!!
-# Where does this get set?
-AFTERNOON_LESSONS = [6, 7, 8]   # 0-based indexes to period list
 
 
 def EXTRA_SUBJECTS():
@@ -30,20 +50,23 @@ def EXTRA_SUBJECTS():
     ]
 
 
-def get_time_constraints(constraint_list, idmap, daylist, periodlist):
+def get_time_constraints(db, constraint_list, daylist, periodlist):
     # Note that <constraint_list> is actually a mapping!
-
-    afternoon_hours = {periodlist[h] for h in AFTERNOON_LESSONS}
-    lunchbreak = idmap["__LUNCHPERIODS__"] # list of period indexes (ints, not tags)
+    afternoon_start = db.config["AFTERNOON_START_PERIOD"]
+    if afternoon_start >= 0:
+        afternoon_hours = set(periodlist[afternoon_start:])
+    else:
+        afternoon_hours = set()
+    lunchbreak = db.config["LUNCHBREAK"] # list of period indexes (ints, not tags)
     lunchbreak_hours = {periodlist[h] for h in lunchbreak}
+    #print("§lb", lunchbreak_hours)
+    #print("§pm", afternoon_hours)
     n_days = len(daylist)
     n_hours = len(periodlist)
 #TODO: New (old) approach to lunch-breaks, with dummy lessons:
     # Each atomic group gets a lunch break on days where the class is
     # available in the whole range.
 #!!! It needs the absences, which are done further below !!!
-
-    class_group_atoms = idmap["__CLASS_GROUP_ATOMS__"]
 
 #TODO: This only accepts contiguous break slots:
     if lunchbreak:
@@ -87,10 +110,15 @@ def get_time_constraints(constraint_list, idmap, daylist, periodlist):
     t_maxgapsperday_list = []  # teachers, max gaps per day
     t_minlessonsperday_list = []  # teachers, min lesson periods per day
     t_afternoon_list = []   # teachers, max teaching afternoons
-    for tid, cdata in idmap["__TEACHER_CONSTRAINTS__"].items():
+
+#    return
+#?
+    for node in db.tables["TEACHERS"]:
 #        if tid not in used:
 #            continue
 # ...
+        tid = node["ID"]
+        cdata = node["$$CONSTRAINTS"]
         afternoons = cdata[_NumberOfAfterNoonDays]
         n_afternoons = int(afternoons)
         # If "0" afternoons is set this should be set as absence, not as
@@ -116,38 +144,40 @@ def get_time_constraints(constraint_list, idmap, daylist, periodlist):
         else:
             n_maxdays = n_days
         if n_afternoons < n_maxdays:
+            assert afternoon_start >= 0
             if n_afternoons == 0:
-                for day in daylist:
-                    absences[day] = {periodlist[p] for p in AFTERNOON_LESSONS}
+                for d in range(len(daylist)):
+                    absences[d] = afternoon_hours.copy()
             else:
                 t_afternoon_list.append({
                     "Weight_Percentage": "100",
                     "Teacher_Name": tid,
-                    "Interval_Start_Hour": periodlist[AFTERNOON_LESSONS[0]],
+                    "Interval_Start_Hour": periodlist[afternoon_start],
                     "Interval_End_Hour": None,  # end of day
                     "Max_Days_Per_Week": afternoons,
                     "Active": "true",
                     "Comments": "",
                 })
-        cdata_absences = cdata[_Absences]
+        cdata_absences = node.get("NOT_AVAILABLE")
         if cdata_absences:
             for d, plist in cdata_absences.items():
-                day = daylist[d]
                 try:
-                    pset = absences[day]
+                    pset = absences[d]
                 except KeyError:
                     pset = {periodlist[h] for h in plist}
-                    absences[day] = pset
+                    absences[d] = pset
                 else:
                     pset.update(periodlist[h] for h in plist)
         if absences:
             natlist = []
-            for d, pset in absences.items():
+            for d in sorted(absences):
+                day = daylist[d]
+                pset = absences[d]
                 for h in periodlist:
                     if h in pset:
                         natlist.append({
-                            "Day": d,   # e.g. "Do."
-                            "Hour": h   # e.g. "B"
+                            "Day": day,     # e.g. "Do."
+                            "Hour": h       # e.g. "B"
                         })
             t_absence_list.append({
                 "Weight_Percentage": "100",
@@ -191,8 +221,7 @@ def get_time_constraints(constraint_list, idmap, daylist, periodlist):
             })
 
 #TODO
-        categories = cdata[_Categories]
-
+#        categories = cdata[_Categories]
 
     constraint_list["ConstraintTeacherIntervalMaxDaysPerWeek"] = t_afternoon_list
     constraint_list["ConstraintTeacherNotAvailableTimes"] = t_absence_list
@@ -209,7 +238,13 @@ def get_time_constraints(constraint_list, idmap, daylist, periodlist):
     #cl_maxgapsperday_list = []  # classes, max gaps per day
     cl_minlessonsperday_list = []  # classes, min lesson periods per day
     week_gaps_list = []
-    for clid, cdata in idmap["__YEAR_CONSTRAINTS__"].items():
+
+#?    class_group_atoms = idmap["__CLASS_GROUP_ATOMS__"]
+
+
+    for node in db.tables["CLASSES"]:
+        clid = node["ID"]
+        cdata = node["$$CONSTRAINTS"]
 #TODO!!!!! Could there be a filter for classes with too few subjects?
         if clid in ("12", "13"):
             week_gaps_list.append({
@@ -224,15 +259,10 @@ def get_time_constraints(constraint_list, idmap, daylist, periodlist):
         # If "0" afternoons is set this should be set as absence, not as
         # an additional constraint here.
         absences = {}
-
-        if n_afternoons == 0:
-            for day in daylist:
-                absences[day] = {periodlist[p] for p in AFTERNOON_LESSONS}
-
         if n_afternoons < n_days:
             if n_afternoons == 0:
-                for day in daylist:
-                    absences[day] = {periodlist[p] for p in AFTERNOON_LESSONS}
+                for d in range(len(daylist)):
+                    absences[d] = afternoon_hours.copy()
 #            else:
 #TODO: Do I want to rather, in combination with lunchbreaks, add special
 # dummy last-of-day lessons (filling the afternoon slots)?
@@ -246,31 +276,32 @@ def get_time_constraints(constraint_list, idmap, daylist, periodlist):
 #                    "Comments": "",
 #                })
 
-        cdata_absences = cdata[_Absences]
+        cdata_absences = node.get("NOT_AVAILABLE")
         if cdata_absences:
             for d, plist in cdata_absences.items():
-                day = daylist[d]
                 try:
-                    pset = absences[day]
+                    pset = absences[d]
                 except KeyError:
                     pset = {periodlist[h] for h in plist}
-                    absences[day] = pset
+                    absences[d] = pset
                 else:
                     pset.update(periodlist[h] for h in plist)
         lbdays = set(daylist)
         aftdays = set(daylist)
         if absences:
             natlist = []
-            for d, pset in absences.items():
+            for d in sorted(absences):
+                day = daylist[d]
+                pset = absences[d]
                 if lunchbreak_hours & pset:
-                    lbdays.remove(d)
+                    lbdays.remove(day)
                 if afternoon_hours <= pset:
-                    aftdays.remove(d)
+                    aftdays.remove(day)
                 for h in periodlist:
                     if h in pset:
                         natlist.append({
-                            "Day": d,   # e.g. "Do."
-                            "Hour": h   # e.g. "B"
+                            "Day": day,     # e.g. "Do."
+                            "Hour": h       # e.g. "B"
                         })
             cl_absence_list.append({
                 "Weight_Percentage": "100",
@@ -285,6 +316,15 @@ def get_time_constraints(constraint_list, idmap, daylist, periodlist):
         #print("§absences:", absences)
 
         ## Do lunch-breaks and afternoons
+
+#TODO:???
+        kags = [
+            f"{clid}{AG_SEP}{ag}"
+            for ag in node["$GROUP_ATOMS"][""]
+        ] or [clid]
+        print("§clid:", clid, kags)
+        continue
+
         aclist = idmap["__ACTIVITIES__"]
         nosdlist = constraint_list["ConstraintMinDaysBetweenActivities"]
         if n_afternoons:

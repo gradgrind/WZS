@@ -1,5 +1,5 @@
 """
-w365/wz_w365/timeslots.py - last updated 2024-03-21
+w365/wz_w365/timeslots.py - last updated 2024-03-23
 
 Manage time slots (for timetable).
 
@@ -92,14 +92,16 @@ def read_periods(w365_db):
     lb = []
     w365_db.config["LUNCHBREAK"] = lb
     for _, _id, xnode in plist:
-        i += 1
-        xnode["#"] = i
-        xnode["ID"] = xnode["TAG"] or str(i)
-        w365id_nodes.append((node[_Id], xnode))
+        # These are 0-based indexes
         if xnode.pop("_lb"):
             lb.append(i)
         if xnode.pop("_pm"):
             w365_db.config["AFTERNOON_START_PERIOD"] = i
+        # These use 1-based indexes
+        i += 1
+        xnode["#"] = i
+        xnode["ID"] = xnode["TAG"] or str(i)
+        w365id_nodes.append((node[_Id], xnode))
     # Add to database
     w365_db.add_nodes(table, w365id_nodes)
 
