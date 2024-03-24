@@ -271,6 +271,11 @@ def get_activities(db, fetout):
             slist = node["SUBJECTS"]
         except KeyError:
             sbj = node["BLOCK"]
+            if sbj not in db.sids:
+                # Invent a new subject
+                sbjlist = fetout["Subjects_List"]["Subject"]
+                sbjlist.append({"Name": sbj, "Comments": f"BLOCK_{sbj}"})
+                db.sids.add(sbj)
         else:
             sbj = ",".join(db.key2node[s]["ID"] for s in slist)
             if len(slist) > 1 and sbj not in multisubjects:
@@ -353,8 +358,6 @@ def get_activities(db, fetout):
 
 
 def build_fet_file(wzdb):
-#TODO ...
-
     fetout = {
         "@version": FET_VERSION,
         "Mode": "Official",
@@ -382,199 +385,6 @@ def build_fet_file(wzdb):
         }
     }
     fetout["Space_Constraints_List"] = scmap
-
-    return xmltodict.unparse(fetbase, pretty=True, indent="  ")
-
-
-
-    scenario = indata["__SCENARIOS__"][school_state[_EditedScenario]]
-    scenario_data = scenario.pop("__SCENARIO__")
-    fetout["Comments"] = scenario_data[_Name]
-
-    days = get_days(idmap, fetout, scenario)
-    periods = get_periods(idmap, fetout, scenario)
-    get_subjects(idmap, fetout, scenario)
-    get_teachers(idmap, fetout, scenario)
-    get_groups(idmap, fetout, scenario)
-    fetout["Buildings_List"] = ""
-    get_rooms(idmap, fetout, scenario)
-    get_activities(idmap, fetout, scenario)
-
-    ### Time constraints
-    tcmap = {
-        "ConstraintBasicCompulsoryTime": {
-            "Weight_Percentage": "100",
-            "Active": "true",
-            "Comments": None,
-        },
-        "ConstraintMinDaysBetweenActivities": [],
-    }
-    day_list = [d["Name"] for d in days]        # day-tag list
-    hour_list = [p["Name"] for p in periods]    # period-tag list
-    ttconstraints = get_time_constraints(tcmap, idmap, day_list, hour_list)
-    fetout["Time_Constraints_List"] = tcmap
-
-#TODO: ### Space constraints
-    scmap = {
-        "ConstraintBasicCompulsorySpace": {
-            "Weight_Percentage": "100",
-            "Active": "true",
-            "Comments": None,
-        }
-    }
-    fetout["Space_Constraints_List"] = scmap
-
-#TODO: Need to specify which "Schedule" to use
-    schedules = [
-        (node[_ListPosition], node[_Name], node[_Lessons])
-        for node in scenario[_Schedule]
-    ]
-    #for _, n, _ in schedules:
-    #    print(" +++", n)
-
-# The "Vorlage" might have only fixed lessons.
-# If adding or deleting lessons, the Lessons field of the Schedule
-# must be updated.
-
-# Assume the last schedule?
-    lesson_set = set(schedules[-1][-1].split(LIST_SEP))
-
-    #print("\n ****** LESSONS:")
-    id2group = idmap["__ID2GROUP__"]
-    clist = []
-    elist = []
-    course_times = {}
-    epoch_times = {}
-    # NOTE that I am only picking up fixed Epochenstunden ...
-#TODO: Non-fixed ones cannot at present be forced to be double lessons,
-# so their use is a bit limited.
-    for node in scenario[_Lesson]:
-        if node[_Id] not in lesson_set:
-            continue
-        if node[_Fixed] == "true":
-            c = node.get(_Course)
-            slot = (node[_Day], node[_Hour])
-            if c:
-                try:
-                    course_times[c].append(slot)
-                except KeyError:
-                    course_times[c] = [slot]
-            else:
-                ep = node[_EpochPlan]
-                try:
-                    epoch_times[ep].add(slot)
-                except KeyError:
-                    epoch_times[ep] = {slot}
-
-#TODO: Might want to record the ids of non-fixed lessons as these entries
-# might get changed?
-
-# Do I need the EpochPlan to discover which teachers are involved in an
-# Epoch, or can I get it from the Course entries somehow? No, this is really
-# not ideal. There is a tenuous connection between Epochenschienen and courses
-# only when an Epochenplan has been generated: there are then lessons
-# which point to the course. Maybe for now I should collect the block
-# times associated with the classes (I suppose using the EpochPlan to
-# identify the classes is best? – it also supplies the name tag), then
-# go through the block courses to find those in a block (test EpochWeeks?)
-# and hence any other infos ... especially the teachers, I suppose.
-
-    starttimes = {}
-    aclist = fetout["Activities_List"]["Activity"]
-    sids = idmap["__SUBJECT_SET__"]
-    subjects = fetout["Subjects_List"]["Subject"]
-    for ep, times in epoch_times.items():
-        node = idmap[ep]
-        lesson_times = process_lesson_times(times)
-        #print(" -e-", node[_Shortcut], lesson_times)
-        cl_list = [id2group[id] for id in node[_Groups].split(LIST_SEP)]
-        #print("   :::", ", ".join(cl_list))
-        sid = node[_Shortcut]
-        if sid not in sids:
-            subjects.append({"Name": sid, "Comments": node[_Name]})
-            sids.add(sid)
-        td = 0
-        dhn = []
-        for n, dh in lesson_times.items():
-            for d, h in dh:
-                dhn.append((d, h, n))
-                td += n
-        id0 = str(next_activity_id())
-        aid = id0
-        activity = {
-            "Id": aid,
-            #"Teacher": None,
-            "Subject": sid,
-            "Students": cl_list,
-            "Active": "true",
-            "Total_Duration": str(td),
-            "Activity_Group_Id": id0 if len(dhn) > 1 else "0",
-            "Comments": f"BLOCK:{node[_Name]}",
-        }
-        cpy = False
-        for d, h, n in dhn:
-            if cpy:
-                activity = activity.copy()
-                aid = str(next_activity_id())
-                activity["Id"] = aid
-            else:
-                cpy = True
-            activity["Duration"] = str(n)
-            aclist.append(activity)
-            starttimes[aid]= {
-                "Weight_Percentage": "100",
-                "Activity_Id": aid,
-                "Preferred_Day": day_list[d],
-                "Preferred_Hour": hour_list[h],
-                "Permanently_Locked": "true",
-                "Active": "true",
-                "Comments": None,
-            }
-
-#TODO: Might want to represent the Epochs as single course items in fet?
-# That would be necessary if the teachers are included (but consider also
-# the possibility of being involved in other Epochen (e.g. Mittelstufe),
-# which might be different ... That's difficult to handle anyway.
-# Perhaps it's easier to put no teachers in and block the teachers
-# concerned in "Absences"?
-
-# The c-tags below identify fixed lessons. <c> is the w365-Course-id. So I
-# would need a mapping Course-id to the activities associated with it.
-
-    course2activities = idmap["__COURSE2ACTIVITIES__"]
-    for c, times in course_times.items():
-        lesson_times = process_lesson_times(times)
-        #print(" -c-", c, lesson_times)
-        try:
-            cacts = course2activities[c]
-        except KeyError:
-            print("****** course2activities[c] ******:", c)
-            continue
-        for activity in course2activities[c]:
-            n = int(activity["Duration"])
-            dhl = lesson_times.get(n)
-            if dhl:
-                d, h = dhl.pop()
-                aid = activity["Id"]
-                starttimes[aid] = {
-                    "Weight_Percentage": "100",
-                    "Activity_Id": aid,
-                    "Preferred_Day": day_list[d],
-                    "Preferred_Hour": hour_list[h],
-                    "Permanently_Locked": "true",
-                    "Active": "true",
-                    "Comments": None,
-                }
-# That assumes the input data has matching items
-    tcmap["ConstraintActivityPreferredStartingTime"] = list(starttimes.values())
-
-#TODO
-    idmap["__STARTTIMES__"] = starttimes
-
-    idmap["__SUBJECT_ACTIVITIES__"].constraint_day_separation(
-        starttimes,
-        tcmap["ConstraintMinDaysBetweenActivities"]
-    )
 
     return xmltodict.unparse(fetbase, pretty=True, indent="  ")
 

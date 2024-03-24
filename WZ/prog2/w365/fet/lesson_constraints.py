@@ -40,6 +40,7 @@ class SubjectGroupActivities:
         activity_ids: list[str]
     ) -> None:
         """Add groups/activities to the collection for the given subject.
+        Use "atomic" groups rather than the normal "division" groups.
         """
         for g in groups:
             for ag in self.atomic_groups[g]:
@@ -48,6 +49,23 @@ class SubjectGroupActivities:
                     self.sid_g_aids[sid_g].update(activity_ids)
                 except KeyError:
                     self.sid_g_aids[sid_g] = set(activity_ids)
+
+    def get_activity_groups(self):
+        """<self.sid_g_aids.values()> probably contains many duplicate
+        activity groups. Convert these groups to frozensets to filter
+        out duplicates. Collect the resulting sets of frozensets
+        according to number of entries (activity-ids).
+        """
+        activity_groups = {}
+        for ags in self.sid_g_aids.values():
+            ll = len(ags)
+            if ll > 1:
+                fs = frozenset(ags)
+                try:
+                    activity_groups[ll].add(fs)
+                except KeyError:
+                    activity_groups[ll] = {fs}
+        return activity_groups
 
 
 def lesson_constraints(db, fetout, daylist, periodlist):
@@ -94,54 +112,16 @@ def lesson_constraints(db, fetout, daylist, periodlist):
     #    print("\n  ***", aid)
     #    print(node)
 
-    print("\n§subject_activities:")
-    print(db.subject_activities.sid_g_aids)
+    # Collect the activity-id sets according to their length
+    activity_groups = db.subject_activities.get_activity_groups()
+    #print("\n  ==>>", activity_groups)
 
-# db.subject_activities.sid_g_aids.values() produces sets which
-# probably include duplicates. Convert these to frozensets and add them
-# to the initial collection
-
-#TODO: rather make a dict with length as key? (see below)
-    activity_groups = {
-        frozenset(ags)
-        for ags in db.subject_activities.sid_g_aids.values()
-        if len(ags) > 1
-    }
-    print("\n  ==>>", activity_groups)
-
-#TODO--
-    return
-
-# Need to associate the lessons with the corresponding activities
-
-# I need to map a class_group to its atoms (including class prefix):
-# db.full_atomic_groups
-# Then for every subject and atomic group I should have a list/set of
-# activities. These need to be constrained.
-
-#???
-    # Order according to set length
-    kag2aids: dict[str, list[str]]
-    aids: set[str]
-    aidset_map: dict[int, set[frozenset[str]]] = {}
-
-
-
-    for sid, aid_group in db.subject_activities.items():
-        for aids in kag2aids.values():
-            n = len(aids)
-            if n > 1:   # skip sets with only one element
-                aids_fs = frozenset(aids)
-                try:
-                    aidset_map[n].add(aids_fs)
-                except KeyError:
-                    aidset_map[n] = {aids_fs}
     ### Eliminate subsets
-    lengths = sorted(aidset_map, reverse = True)
-    newsets = aidset_map[lengths[0]]  # the largest sets
+    lengths = sorted(activity_groups, reverse = True)
+    newsets = activity_groups[lengths[0]]  # the largest sets
     for l in lengths[1:]:
         xsets = set()
-        for aidset in aidset_map[l]:
+        for aidset in activity_groups[l]:
             for s in newsets:
                 if aidset < s:
                     break
@@ -149,15 +129,16 @@ def lesson_constraints(db, fetout, daylist, periodlist):
                 xsets.add(aidset)
         newsets.update(xsets)
     ### Sort the sets, build the constraint
+    fet_daybetween = constraint_list["ConstraintMinDaysBetweenActivities"]
     aids_list = sorted([sorted(s) for s in newsets])
     for aids in aids_list:
-        for a in aids:
+        for aid in aids:
 #TODO: This may not be optimal. Fixed lessons could rather be handled by
 # blocking their days for the others. This would leave fewer to be
 # mutually exclusive, if < 2 no further constraint would then be needed.
-            # If all are locked, no constraint is at all.
-            if a not in starttimes:
-                constraints.append(
+            # If all are locked, no constraint is needed.
+            if aid not in fixed_activities:
+                fet_daybetween.append(
                     {
                         "Weight_Percentage": "100",
                         "Consecutive_If_Same_Day": "true",
