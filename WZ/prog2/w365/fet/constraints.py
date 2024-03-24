@@ -1,5 +1,5 @@
 """
-w365/fet/constraints.py - last updated 2024-03-23
+w365/fet/constraints.py - last updated 2024-03-24
 
 Add constraints to the fet file.
 
@@ -37,6 +37,7 @@ from w365.fet.fet_support import (
     SUBJECT_FREE_AFTERNOON,
     next_activity_id,
 )
+from w365.fet.lesson_constraints import lesson_constraints
 from w365.wz_w365.class_groups import AG_SEP
 
 #TODO: There could be a clash between the current implementation of
@@ -50,8 +51,18 @@ def EXTRA_SUBJECTS():
     ]
 
 
-def get_time_constraints(db, constraint_list, daylist, periodlist):
+def get_time_constraints(db, fetout, daylist, periodlist):
     # Note that <constraint_list> is actually a mapping!
+    not_on_same_day_list = []
+    constraint_list = {
+        "ConstraintBasicCompulsoryTime": {
+            "Weight_Percentage": "100",
+            "Active": "true",
+            "Comments": None,
+        },
+        "ConstraintMinDaysBetweenActivities": not_on_same_day_list,
+    }
+    fetout["Time_Constraints_List"] = constraint_list
     afternoon_start = db.config["AFTERNOON_START_PERIOD"]
     if afternoon_start >= 0:
         afternoon_hours = set(periodlist[afternoon_start:])
@@ -68,7 +79,7 @@ def get_time_constraints(db, constraint_list, daylist, periodlist):
     # available in the whole range.
 #!!! It needs the absences, which are done further below !!!
 
-#TODO: This only accepts contiguous break slots:
+#TODO: This only accepts contiguous lunch-break slots:
     if lunchbreak:
         lblist = sorted(lunchbreak, reverse = True)
         p0 = lblist.pop()
@@ -92,16 +103,14 @@ def get_time_constraints(db, constraint_list, daylist, periodlist):
             "Comments": None,
         }
 
-#TODO: This is a problem for gap limiting
-#        # Lunch breaks for all students
-#        constraint_list["ConstraintStudentsMaxHoursDailyInInterval"] = {
-#            "Weight_Percentage": "100",
-#            "Interval_Start_Hour": periodlist[p0],
-#            "Interval_End_Hour": periodlist[p + 1],
-#            "Maximum_Hours_Daily": str(p - p0),
-#            "Active": "true",
-#            "Comments": None,
-#        }
+# This constraint can come into conflict with gap limiting. That is
+# probably less of a problem for teachers than for classes. It could
+# well be that classes should have no gaps at all, so the constraint
+# "ConstraintStudentsMaxHoursDailyInInterval" is not used. Dummy
+# lunch-break lessons are used instead. However, it may be that some
+# more consideration of this point is necessary: for example, why is
+# a free lesson not acceptable while a lunch-break (essentially a free
+# lesson!) is compulsory?
 
     ### Teacher constraints
     t_absence_list = []     # teachers, not-available times
@@ -239,9 +248,7 @@ def get_time_constraints(db, constraint_list, daylist, periodlist):
     cl_minlessonsperday_list = []  # classes, min lesson periods per day
     week_gaps_list = []
 
-#?    class_group_atoms = idmap["__CLASS_GROUP_ATOMS__"]
-
-
+    atomic_groups = db.full_atomic_groups
     for node in db.tables["CLASSES"]:
         clid = node["ID"]
         cdata = node["$$CONSTRAINTS"]
@@ -315,33 +322,19 @@ def get_time_constraints(db, constraint_list, daylist, periodlist):
         #print("§§§§lb:", lbdays)
         #print("§absences:", absences)
 
-        ## Do lunch-breaks and afternoons
-
-#TODO:???
-        kags = [
-            f"{clid}{AG_SEP}{ag}"
-            for ag in node["$GROUP_ATOMS"][""]
-        ] or [clid]
-        print("§clid:", clid, kags)
-        continue
-
-        aclist = idmap["__ACTIVITIES__"]
-        nosdlist = constraint_list["ConstraintMinDaysBetweenActivities"]
+        ## Do lunch-breaks, afternoons and basic days-between activities
+        kags = sorted(atomic_groups[clid])
+        #print("\n§kags:", clid, kags)
+        activities = fetout["Activities_List"]["Activity"]
         if n_afternoons:
             n_ad = len(aftdays)
-            agset = class_group_atoms[clid][""]
-            if agset:
-                kags = [f"{clid}{AG_SEP}{ag}" for ag in agset]
-            else:
-                kags = [clid]
+            # I am assuming that a free afternoon requires no lunch break
             if n_afternoons < n_ad:
                 n_lb = n_afternoons
                 n_blocker = n_ad - n_afternoons
-# I am assuming that a free afternoon requires no lunch break
             else:
                 n_lb = n_ad
                 n_blocker = 0
-
             aftlen = str(len(afternoon_hours))
             # Generate blockers for all atomic groups
             for kag in kags:
@@ -350,7 +343,7 @@ def get_time_constraints(db, constraint_list, daylist, periodlist):
                 for i in range(n_blocker):
                     # Add activity
                     aid = str(next_activity_id())
-                    aclist.append({
+                    activities.append({
                         "Id": aid,
                         #"Teacher": None,
                         "Subject": SUBJECT_FREE_AFTERNOON,
@@ -362,12 +355,12 @@ def get_time_constraints(db, constraint_list, daylist, periodlist):
                         "Comments": "",
                     })
                     aids.append(aid)
-# Might also need to constrain starting time
+#TODO: Might also need to constrain starting time
                 # lunch breaks
                 for i in range(n_lb):
                     # Add activity
                     aid = str(next_activity_id())
-                    aclist.append({
+                    activities.append({
                         "Id": aid,
                         #"Teacher": None,
                         "Subject": SUBJECT_LUNCH_BREAK,
@@ -381,7 +374,7 @@ def get_time_constraints(db, constraint_list, daylist, periodlist):
                     aids.append(aid)
                 # Constrain to different days
                 if len(aids) > 1:
-                    nosdlist.append({
+                    not_on_same_day_list.append({
                         "Weight_Percentage": "100",
                         "Consecutive_If_Same_Day": "true",
                         "Number_of_Activities": str(len(aids)),
@@ -421,8 +414,11 @@ def get_time_constraints(db, constraint_list, daylist, periodlist):
             })
 
 #TODO
-        categories = cdata[_Categories]
+        categories = node.get("$$EXTRA")
+        if categories:
+            print("$$EXTRA:", categories)
 
+    lesson_constraints(db, fetout, daylist, periodlist)
     constraint_list["ConstraintStudentsSetIntervalMaxDaysPerWeek"] = cl_afternoon_list
     constraint_list["ConstraintStudentsSetNotAvailableTimes"] = cl_absence_list
     constraint_list["ConstraintStudentsSetEarlyMaxBeginningsAtSecondHour"] = cl_hour0_list
@@ -456,6 +452,7 @@ def get_time_constraints(db, constraint_list, daylist, periodlist):
             "Active": "true",
             "Comments": "",
         },
+        # This is an attempt to get the lunch-break as late as possible:
         {
             "Weight_Percentage": "70",
             "Teacher_Name": None,
@@ -473,6 +470,3 @@ def get_time_constraints(db, constraint_list, daylist, periodlist):
 #   <Active>true</Active>
 #   <Comments></Comments>
 #</ConstraintStudentsMaxGapsPerWeek>
-
-
-    return constraint_list

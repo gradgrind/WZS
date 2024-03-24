@@ -1,7 +1,7 @@
 """
-w365/fet/make_fet_file.py - last updated 2024-03-23
+w365/fet/make_fet_file.py - last updated 2024-03-24
 
-Build a fet-file from the timetable data in the database.
+Build a fet-file from timetable data derived from Waldorf365.
 
 
 =+LICENCE=================================
@@ -45,7 +45,7 @@ import xmltodict
 from w365.wz_w365.class_groups import AG_SEP
 from w365.fet.fet_support import next_activity_id
 from w365.fet.constraints import get_time_constraints, EXTRA_SUBJECTS
-from w365.fet.constraints_subject_separation import SubjectGroupActivities
+from w365.fet.lesson_constraints import SubjectGroupActivities
 
 ###-----
 
@@ -198,12 +198,27 @@ def get_subjects(db, fetout):
 
 
 def get_groups(db, fetout):
-    ylist = []  # Collect class data for fet
+    # Build a mapping of all groups (with class prefix) to
+    # their "atomic" groups (also with class prefix)
+    atomic_groups = {}
+    # Collect class data for fet
+    ylist = []
     for node in db.tables["CLASSES"]:
         #print(" ***", node)
         ylist.append(class_groups(node))
+
+        clid = node["ID"]
+        group_atoms = node["$GROUP_ATOMS"]
+        ag_kag = {
+            ag: f"{clid}{AG_SEP}{ag}"
+            for ag in group_atoms[""]
+        }
+        for g, ags in group_atoms.items():
+            kg = f"{clid}{AG_SEP}{g}" if g else clid
+            atomic_groups[kg] = {ag_kag[ag] for ag in ags} or {clid}
+
     fetout["Students_List"] = {"Year": ylist}
-    #return ylist
+    return atomic_groups
 
 
 def get_rooms(db, fetout):
@@ -250,7 +265,7 @@ def get_activities(db, fetout):
     fetlist = []
     next_activity_id(reset = True)
     multisubjects = set()
-    subject_activities = SubjectGroupActivities()
+    subject_activities = SubjectGroupActivities(db.full_atomic_groups)
     for node in db.tables["COURSES"]:
         try:
             slist = node["SUBJECTS"]
@@ -293,6 +308,8 @@ def get_activities(db, fetout):
 # How would a "course" with no lessons look? (A bodge to cater for
 # extra workloads/payments)
 
+        activity_list = []
+        node["$ACTIVITIES"] = activity_list
         id0 = str(next_activity_id())
         aid_list = [id0]
         activity = {
@@ -313,6 +330,7 @@ def get_activities(db, fetout):
                 aid_list.append(aid)
             activity["Duration"] = str(ll)
             fetlist.append(activity)
+            activity_list.append(activity)
         subject_activities.add_activities(sbj, gidlist, aid_list)
     db.set_subject_activities(subject_activities)
 
@@ -348,22 +366,22 @@ def build_fet_file(wzdb):
     periods = get_periods(wzdb, fetout)
     get_teachers(wzdb, fetout)
     get_subjects(wzdb, fetout)
-    get_groups(wzdb, fetout)
+    wzdb.set_atomic_groups(get_groups(wzdb, fetout))
     fetout["Buildings_List"] = ""
     get_rooms(wzdb, fetout)
     get_activities(wzdb, fetout)
 
-    ### Time constraints
-    tcmap = {
-        "ConstraintBasicCompulsoryTime": {
+    get_time_constraints(wzdb, fetout, days, periods)
+
+#TODO: ### Space constraints
+    scmap = {
+        "ConstraintBasicCompulsorySpace": {
             "Weight_Percentage": "100",
             "Active": "true",
             "Comments": None,
-        },
-        "ConstraintMinDaysBetweenActivities": [],
+        }
     }
-    ttconstraints = get_time_constraints(wzdb, tcmap, days, periods)
-    fetout["Time_Constraints_List"] = tcmap
+    fetout["Space_Constraints_List"] = scmap
 
     return xmltodict.unparse(fetbase, pretty=True, indent="  ")
 

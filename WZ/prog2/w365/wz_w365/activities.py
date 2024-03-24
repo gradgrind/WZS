@@ -1,5 +1,5 @@
 """
-w365/wz_w365/activities.py - last updated 2024-03-23
+w365/wz_w365/activities.py - last updated 2024-03-24
 
 Manage data concerning the "activities" (courses, lessons, etc.).
 
@@ -264,6 +264,8 @@ def read_activities(w365_db):
                     #print("     ++", xnode)
     # Add to database
     w365_db.add_nodes("LESSONS", w365id_nodes)
+#TODO: Note that if I am only including "fixed" lessons, I don't need
+# them to have a "FIXED" field!
 
 
 #TODO: Might want to record the ids of non-fixed lessons as these entries
