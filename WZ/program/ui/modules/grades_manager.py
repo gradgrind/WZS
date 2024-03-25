@@ -278,6 +278,9 @@ class GroupDataProxy(QObject):
         else:
             return self.table.item(row, col).text()
 
+    def write(self, row: int, col: int, val: str) -> bool:
+        return self.write_dp(row, col, val)
+
     def write_dp(self, row: int, col: int, val: str) -> bool:
         """Write to a group data field, and thus also (potentially) to the
         corresponding grade table cells.
@@ -433,6 +436,11 @@ class ManageGradesPage(QObject):
         else:
             return self.ui.grade_table.item(row, col).text()
 
+    def write(self, row: int, col: int, val: str) -> bool:
+        return self.write_dp(row, col, val)
+
+#TODO: Why have I used "write_dp" instead of "write" in this module?
+# "write" is used in pasting, so I need that too!
     def write_dp(self, row: int, col: int, val: str) -> bool:
         #print("§CHANGED:", row, col, val)
         # Set data in underlying table
