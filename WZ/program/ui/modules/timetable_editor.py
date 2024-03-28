@@ -31,9 +31,11 @@ if __name__ == "__main__":
     appdir = os.path.dirname(os.path.dirname(this))
     sys.path[0] = appdir
     basedir = os.path.dirname(appdir)
-    from core.base import start
+    from core.base import setup
+    setup(os.path.join(basedir, 'TESTDATA'))
+#    from core.base import start
     from ui.ui_base import StandalonePage as Page
-    start.setup(os.path.join(basedir, 'TESTDATA'))
+#    start.setup(os.path.join(basedir, 'TESTDATA'))
 else:
     from ui.ui_base import StackPage as Page
 
@@ -43,6 +45,10 @@ T = TRANSLATIONS("ui.modules.timetable_editor")
 
 from ui.timetable_grid import GridPeriodsDays
 from core.basic_data import (
+    get_database,
+    CONFIG,
+    CALENDAR,
+
     clear_cache,
     get_days,
     get_periods,
@@ -521,6 +527,7 @@ class WeekGrid(GridPeriodsDays):
 if __name__ == '__main__':
     from core.db_access import open_database
     from ui.ui_base import run
+    _db = get_database()
 
     widget = TimetableEditor()
     widget.enter()

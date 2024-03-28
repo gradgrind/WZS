@@ -1,13 +1,13 @@
 """
-ui/timetable_grid.py
+ui/canvas.py
 
-Last updated:  2024-03-27
+Last updated:  2024-03-28
 
-A grid widget for the timetable displays.
+Provide some basic canvas support using the QGraphics framework.
 
 
 =+LICENCE=============================
-Copyright 2023 Michael Towers
+Copyright 2024 Michael Towers
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -24,8 +24,6 @@ Copyright 2023 Michael Towers
 =-LICENCE========================================
 """
 
-#TODO: Probably needs a lot of fixing ...
-
 if __name__ == "__main__":
     import sys, os
     this = sys.path[0]
@@ -35,26 +33,32 @@ if __name__ == "__main__":
     from core.base import setup
     setup(os.path.join(basedir, 'TESTDATA'))
 
+### +++++
+
+import re
+
 #TODO ...
 from ui.ui_base import (
     APP,
     # QtWidgets
     QGraphicsScene,
     QGraphicsRectItem,
-    QGraphicsLineItem,
     QGraphicsSimpleTextItem,
     QGraphicsView,
-    QMenu,
     # QtCore
     Qt,
     # QtGui
-    QIcon,
+    QColor,
+    QFont,
+    QBrush,
+    QPen,
     QPainter,
     QTransform,
+    QRectF,
 )
-from ui.grid_support import StyleCache
 
-### +++++
+CHIP_MARGIN = 3
+CHIP_SPACER = 10
 
 MM2PT = 2.83464549
 PT2MM = 0.3527778
@@ -62,44 +66,6 @@ PT2MM = 0.3527778
 # Sizes in points
 A4 = (841.995, 595.35)
 A3 = (1190.7, 841.995)
-PAGE_SIZE = A4
-
-_MARGIN_LEFT = 30
-_MARGIN_RIGHT = 30
-_MARGIN_TOP = 50
-_MARGIN_BOTTOM = 50
-_HEADER = 40
-_FOOTER = 25
-
-_TIMEWIDTH = 82
-_BOXWIDTH = 142
-_BOXHEIGHT = 51
-_LINEWIDTH = 2
-_TITLEHEIGHT = 30
-_TITLEWIDTH = 82
-
-_SUBTEXTGAP = 10    # minimum horizontal space between tile "subtexts"
-
-# Fonts
-FONT_HEADER_SIZE = 14
-FONT_CENTRE_SIZE = 18
-FONT_CORNER_SIZE = 11
-
-# Colours (rrggbb)
-BORDER_COLOUR = 'b0b0b0' # '12c6f8'
-HEADER_COLOUR = 'f0f0f0'
-MARGIN_LINE_COLOUR = '000000'
-BREAK_COLOUR = '606060' # '6060d0'
-#CELL_HIGHLIGHT_COLOUR = 'a0a0ff'
-SELECT_COLOUR = 'ff0000'
-
-# Tile corner enum
-TILE_TOP_LEFT = 0
-TILE_TOP_RIGHT = 1
-TILE_BOTTOM_RIGHT = 2
-TILE_BOTTOM_LEFT = 3
-
-SIZES = {}
 
 ### -----
 
@@ -130,33 +96,7 @@ class GridView(QGraphicsView):
         #print("PDPI:", self.pdpi)
 # Scaling the scene by pdpi/ldpi should display the correct size ...
         #self.MM2PT = self.ldpi / 25.4
-#        self.scene = QGraphicsScene()
-#        self.setScene(self.scene)
-
-        ### Set up sizes (globally)
-        SIZES["TITLEHEIGHT"] = self.pt2px(_TITLEHEIGHT)
-        SIZES["TITLEWIDTH"] = self.pt2px(_TITLEWIDTH)
-        SIZES["LINEWIDTH"] = self.pt2px(_LINEWIDTH)
-        SIZES["SUBTEXTGAP"] = self.pt2px(_SUBTEXTGAP)
-
-        SIZES["MARGIN_LEFT"] = self.pt2px(_MARGIN_LEFT)
-        SIZES["MARGIN_RIGHT"] = self.pt2px(_MARGIN_RIGHT)
-        SIZES["MARGIN_TOP"] = self.pt2px(_MARGIN_TOP)
-        SIZES["MARGIN_BOTTOM"] = self.pt2px(_MARGIN_BOTTOM)
-        SIZES["HEADER"] = self.pt2px(_HEADER)
-        SIZES["FOOTER"] = self.pt2px(_FOOTER)
-
-        SIZES["TABLEHEIGHT"] = (
-            self.pt2px(
-                PAGE_SIZE[1]) - SIZES["MARGIN_TOP"]
-                - SIZES["MARGIN_BOTTOM"] - SIZES["HEADER"]
-                - SIZES["FOOTER"]
-        )
-        SIZES["TABLEWIDTH"] = (
-            self.pt2px(PAGE_SIZE[0]) - SIZES["MARGIN_LEFT"]
-            - SIZES["MARGIN_RIGHT"]
-        )
-        print("§TABLE SIZE (pixels):", SIZES["TABLEWIDTH"], SIZES["TABLEHEIGHT"])
+        self.setScene(QGraphicsScene())
 
     def pt2px(self, pt) -> int:
         px = int(self.ldpi * pt / 72.0 + 0.5)
@@ -233,8 +173,9 @@ class GridViewHFit(GridView):
 #        self.fitInView(qrect, Qt.AspectRatioMode.KeepAspectRatio)
 
 
+#TODO--
 class GridPeriodsDays(QGraphicsScene):
-    font_header = StyleCache.getFont(fontSize = FONT_HEADER_SIZE)
+#    font_header = StyleCache.getFont(fontSize = FONT_HEADER_SIZE)
 
     def __init__(self, days, periods, breaks):
         self.tiles = {}
@@ -419,131 +360,222 @@ class GridPeriodsDays(QGraphicsScene):
         self.select.show()
 
 
-class Tile(QGraphicsRectItem):
+class Chip(QGraphicsRectItem):
     __slots__ = (
         "tag",
-        "duration",
         "width",
         "height",
-        "x",
-        "text_item",
+        "extras",
     )
-    font_centre = StyleCache.getFont(fontSize=FONT_CENTRE_SIZE)
-    font_corner = StyleCache.getFont(fontSize=FONT_CORNER_SIZE)
+    """A rectangular box with border colour, border width and background
+    colour.
+    The default fill is none (transparent), the default pen is a black
+    line with width = 1 (the width of a <QPen> can be set to an <int> or
+    a <float>).
+    The item's coordinate system starts at (0, 0), fixed by passing
+    this origin to the <QGraphicsRectItem> constructor.
+    The box is then moved to the desired location using method "place".
+    It can have a centred simple text item and also a text item in each
+    of the four corners:
+        "tl" – top left     "tr" – top right
+        "bl" – bottom left  "br" – bottom right
+    The font and colour of the centred text can be set separately from
+    those of the corners.
+    """
 
-    def __init__(self, tag, duration, nmsg, offset, total, text, colour):
-        #   duration: number of periods
-        #   nmsg: number of "minimal subgroups"
-        #   total: number of all "minimal subgroups"
-        # Thus nmsg / total builds a fraction of the total box width.
-        #   offset: starting offset as number of "minimal subgroups"
-        # Thus offset + nmsg must be smaller than or equal to total.
-        #   text: the text for the central position
-        #   colour: the box background colour (<None> => white)
+    def __init__(
+        self,
+        scene: QGraphicsScene,
+        tag: str,
+        width: int,
+        height: int
+    ):
         self.tag = tag
-        self.duration = duration
-#        self.width = SIZES["BOXWIDTH"] * nmsg / total - SIZES["SIZES["LINEWIDTH"]"]
-        self.width = (SIZES["BOXWIDTH"] - SIZES["LINEWIDTH"]) * nmsg / total
-        self.x = SIZES["BOXWIDTH"] * offset / total + SIZES["LINEWIDTH"]/2
-        self.height = SIZES["BOXHEIGHT"] * duration # can vary on placement
-        super().__init__(
-            self.x,
-            SIZES["LINEWIDTH"]/2,
-            self.width,
-            self.height - SIZES["LINEWIDTH"]
-        )
-#TODO? Set "ffffff" for a white (opaque) background, which hides grid lines.
-# Leaving it as <None> would make the background transparent.
+        self.width = width
+        self.height = height
+        self.extras = {}    # all the optional bits
+        super().__init__(0.0, 0.0, float(width), float(height))
+        scene.addItem(self)
+
+#        self.setAcceptHoverEvents(True)
+
+#TODO
+    def hoverEnterEvent(self, event):
+        print("Enter", self.tag)
+
+    def hoverLeaveEvent(self, event):
+        print("Leave", self.tag)
+
+
+# Size? Would this be fixed? Quite possibly, considering the text field
+# specification ... If boxed single-text items are needed, that should
+# probably be another class.
+
+# What about sizing and scaling? In QGraphicsView this is not necessarily
+# a big issue, as scaling is easy. Also, it is not always clear what the
+# best way to specify sizes really is. If printing to PDF is a goal, then
+# something related to this (say, points or mm) might be sensible, but
+# scaling to a page size is possible here, too.
+
+# (Not really essential for this base module:) Considering a timetable
+# view, something like a "pixel"-per-minute approach might make sense.
+# Font scaling must always be considered, though, so using points has
+# advantages too. At 8 hours per day, 1 point per minute would be 480
+# points. That is not far off the width of an A4 sheet. A small scaling
+# adjustment might still be necessary, but it might be a good basis.
+
+#    font_centre = StyleCache.getFont(fontSize=FONT_CENTRE_SIZE)
+#    font_corner = StyleCache.getFont(fontSize=FONT_CORNER_SIZE)
+
+    def set_background(self, colour: str):
+        """Change the background, which is initially transparent.
+        This uses <StyleCache>, which accepts colours as "RRGGBB" strings.
+        As a special case, calling this with an empty colour string
+        produces an opaque white background.
+        """
         if not colour:
             colour = "ffffff"
         self.setBrush(StyleCache.getBrush(colour))
-        self.text_item = QGraphicsSimpleTextItem(self)
-        self.text_item.setFont(self.font_centre)
-        self.set_text(text)
-        self.setZValue(5)
-        self.hide()
-        self.corners = [None] * 4
 
-    def set_text(self, text):
-        self.text_item.setText(text)
-        text_rect = self.text_item.boundingRect()
-        text_width = text_rect.width()
-        part = text_width / (self.width - SIZES["LINEWIDTH"])
-        if part > 1:
-            self.text_item.setScale(1 / part)
-            text_rect = self.text_item.mapRectToParent(text_rect)
-            text_width = text_rect.width()
-        text_height = text_rect.height()
-        xshift = self.x + (self.width - text_width) / 2
-        yshift = (self.height - text_height) / 2
-        self.text_item.setPos(xshift, yshift)
-
-    def set_cell(self, x, y):
-        self.setPos(x, y)
-        self.show()
-
-    def set_corner(self, corner, text):
-        """Place a text item in one of the four corners.
+    def set_border(self, width: int = 1, colour: str = ""):
+        """Set the border width and colour, which is initially black with
+        width = 1.
+        This uses <StyleCache>, which accepts colours as "RRGGBB" strings.
         """
-        text_item = self.corners[corner]
-        if not text_item:
-            text_item = QGraphicsSimpleTextItem(self)
-            text_item.setFont(self.font_corner)
-            self.corners[corner] = text_item
-        text_item.setText(text)
-        if corner == TILE_TOP_LEFT:
-            self.fit_corners(text_item, self.corners[TILE_TOP_RIGHT], True)
-        elif corner == TILE_TOP_RIGHT:
-            self.fit_corners(self.corners[TILE_TOP_LEFT], text_item, True)
-        elif corner == TILE_BOTTOM_RIGHT:
-            self.fit_corners(self.corners[TILE_BOTTOM_LEFT], text_item, False)
-        elif corner == TILE_BOTTOM_LEFT:
-            self.fit_corners(text_item, self.corners[TILE_BOTTOM_RIGHT], False)
-        else:
-            raise Bug(f"Invalid Tile Corner: {corner}")
+        self.setPen(StyleCache.getPen(width, colour))
 
-#TODO: I might need some sort of line wrapping if the text is very long ...
-    def fit_corners(self, left, right, is_top):
-        width = self.width - SIZES["LINEWIDTH"] - SIZES["SUBTEXTGAP"]
-        if left:
-            br = left.boundingRect()
-            left_width = br.width()
-            left_height = br.height()
+    def place(self, x: int, y: int):
+        """The QGraphicsItem method "setPos" takes "float" coordinates,
+        either as setPos(x, y) or as setPos(QPointF). It sets the position
+        of the item in parent coordinates. For items with no parent, scene
+        coordinates are used.
+        The position of the item describes its origin (local coordinate
+        (0, 0)) in parent coordinates.
+        """
+        self.setPos(float(x), float(y))
+
+    def set_text(
+        self,
+        text: str,
+        corner: str = "c",      # default is centre
+        font: str = "",
+        size: int = 0,
+        bold: bool = False,
+        italic: bool = False,
+        colour: str = "",
+    ):
+        try:
+            text_item = self.extras[corner]
+        except KeyError:
+            assert corner in {"tl", "tr", "c", "bl", "br"}
+            text_item = QGraphicsSimpleTextItem(text, self)
+            self.extras[corner] = text_item
+            text_item.setFont(StyleCache.getFont(
+                family = font, size = size, bold = bold, italic = italic
+            ))
+            if colour:
+                text_item.setBrush(StyleCache.getBrush(colour))
         else:
-            left_width = 0
-            left_height = 0
-        if right:
-            br = right.boundingRect()
-            right_width = br.width()
-            right_height = br.height()
+            # For existing items only the text can be changed
+            text_item.setText(text)
+        text_rect = text_item.boundingRect()
+        text_width = text_rect.width()
+        # Handle positioning
+        if corner == "c":
+            part = (self.width - CHIP_MARGIN * 2) / text_width
+            if part < 1.0:
+#--
+                print("§???1", text_rect)
+                text_item.setScale(part)
+                text_rect = text_item.mapRectToParent(text_rect)
+#--
+                print("§???2", text_rect, text_item.boundingRect())
+                text_width = text_rect.width()
+            text_height = text_rect.height()
+            xshift = (self.width - text_width) / 2
+            yshift = (self.height - text_height) / 2
+            text_item.setPos(xshift, yshift)
         else:
-            right_width = 0
-            right_height = 0
-        part = (left_width + right_width) / width
-        scale = 1 / part if part > 1 else 1
-        if left:
-            left.setScale(scale)
-            left_width *= scale
-            if is_top:
-                left.setPos(self.x + SIZES["LINEWIDTH"], SIZES["LINEWIDTH"])
-            else:
-                left.setPos(
-                    self.x + SIZES["LINEWIDTH"],
-                    self.height - SIZES["LINEWIDTH"] - left_height
-                )
-        if right:
-            right.setScale(scale)
-            right_width *= scale
-            if is_top:
-                right.setPos(
-                    self.x + self.width - SIZES["LINEWIDTH"] - right_width,
-                    SIZES["LINEWIDTH"]
-                )
-            else:
-                right.setPos(
-                    self.x + self.width - SIZES["LINEWIDTH"] - right_width,
-                    self.height - SIZES["LINEWIDTH"] - right_height
-                )
+            w0 = self.width - CHIP_MARGIN*2 - CHIP_SPACER
+            if corner[0] == "t":
+                # Top of chip
+                if corner == "tl":
+                    xl = text_item
+                    xlrect = xl.boundingRect()
+                    try:
+                        xr = self.extras["tr"]
+                        xrrect = xr.boundingRect()
+                    except KeyError:
+                        xr = None
+                        xrrect = QRectF()
+                else:   # corner == "tr"
+                    xr = text_item
+                    xrrect = xr.boundingRect()
+                    try:
+                        xl = self.extras["tl"]
+                        xlrect = xl.boundingRect()
+                    except KeyError:
+                        xl = None
+                        xlrect = QRectF()
+                xlw = xlrect.width()
+                xlh = xlrect.height()
+                xrw = xrrect.width()
+                xrh = xrrect.height()
+                part = w0 / (xlw + xrw)
+                if part < 1.0:
+                    if xr:
+                        xr.setScale(part)
+                        xrw = xr.mapRectToParent(xrrect).width()
+                    if xl:
+                        xl.setScale(part)
+                        xlw = xl.mapRectToParent(xlrect).width()
+                if xl:
+                    xl.setPos(CHIP_MARGIN, CHIP_MARGIN)
+                if xr:
+                    xrx = self.width - CHIP_MARGIN - xrw
+                    xr.setPos(xrx, CHIP_MARGIN)
+            else:   # corner[0] == "b"
+                # Bottom of chip
+                if corner == "bl":
+                    xl = text_item
+                    xlrect = xl.boundingRect()
+                    try:
+                        xr = self.extras["br"]
+                        xrrect = xr.boundingRect()
+                    except KeyError:
+                        xr = None
+                        xrrect = QRectF()
+                else:   # corner == "br"
+                    xr = text_item
+                    xrrect = xr.boundingRect()
+                    try:
+                        xl = self.extras["bl"]
+                        xlrect = xl.boundingRect()
+                    except KeyError:
+                        xl = None
+                        xlrect = QRectF()
+                xlw = xlrect.width()
+                xlh = xlrect.height()
+                xrw = xrrect.width()
+                xrh = xrrect.height()
+                part = w0 / (xlw + xrw)
+                if part < 1.0:
+                    if xr:
+                        xr.setScale(part)
+                        xrr = xr.mapRectToParent(xrrect)
+                        xrw = xrr.width()
+                        xrh = xrr.height()
+                    if xl:
+                        xl.setScale(part)
+                        xlr = xl.mapRectToParent(xlrect)
+                        xlw = xlr.width()
+                        xlh = xlr.height()
+                if xl:
+                    xl.setPos(CHIP_MARGIN, self.height - CHIP_MARGIN - xlh)
+                if xr:
+                    xrx = self.width - CHIP_MARGIN - xrw
+                    xr.setPos(xrx, self.height - CHIP_MARGIN - xrh)
+
 
 #TODO: May be useful (to get screen coordinates)?
 #def get_pos(view, item, point):
@@ -558,104 +590,97 @@ class Tile(QGraphicsRectItem):
 #        print("Action triggered from {}".format(self.tag))
 
 
-class Box(QGraphicsRectItem):
-    """A rectangle with adjustable borderwidth.
-    The item's coordinate system starts at (0, 0), fixed by passing
-    this origin to the <QGraphicsRectItem> constructor.
-    The box is then moved to the desired location using <setPos>.
-    """
-    __slots__ = (
-        "text_item",
-    )
-    def __init__(self, x, y, w, h, width=None, colour=None):
-        super().__init__(0, 0, w, h)
-        self.setPos(x, y)
-        self.setPen(StyleCache.getPen(width, colour or BORDER_COLOUR))
-#
-    def set_text(self, text, font=None):
-        """Set a centred text item. Calling the function a second time
-        updates the text.
-        """
-        try:
-            item = self.text_item
-        except AttributeError:
-            item = QGraphicsSimpleTextItem(self)
-            self.text_item = item
-        if font:
-            item.setFont(font)
-        item.setText(text)
-        bdrect = item.boundingRect()
-        #print("§§§", text, bdrect)
-        wt = bdrect.width()
-        ht = bdrect.height()
-        rect = self.rect()
-        xshift = (rect.width() - wt) / 2
-        yshift = (rect.height() - ht) / 2
-        item.setPos(xshift, yshift)
-
-    def set_background(self, colour):
-        """Set the cell background colour.
-        <colour> can be <None> ("no fill") or a colour in the form 'RRGGBB'.
-        """
-        self.setBrush(StyleCache.getBrush(colour))
-
-###
-
-class Cell(Box):
-    """This is a rectangle representing a single period slot. It is used
-    to construct the basic timetable grid.
-    It is a <Box> whose background colour is settable and which supports
-    hover events.
-    """
-    __slots__ = (
-        "x0",
-        "y0",
-        "cell",
-    )
-#TODO: highlighting by emphasizing the border:
-#    selected = None
-
-#    @classmethod
-#    def setup(cls):
-#        cls.nBrush = StyleCache.getBrush(None)
-#        cls.hBrush = StyleCache.getBrush(CELL_HIGHLIGHT_COLOUR)
-#        cls.nPen = StyleCache.getPen(SIZES["SIZES["LINEWIDTH"]"] + 2, BORDER_COLOUR)
-#        cls.sPen = StyleCache.getPen(SIZES["SIZES["LINEWIDTH"]"] + 2, SELECT_COLOUR)
-
-#    @classmethod
-#    def select(cls, cell):
-#        if cls.selected:
-#            cls.selected.setPen(cls.nPen)
-#            cls.selected.setZValue(0)
-#            cls.selected = None
-#        if cell:
-#            cell.setPen(cls.sPen)
-#            cell.setZValue(20)
-#            cls.selected = cell
-
-    def __init__(self, x, y, w, h, irow, icol):
-        """Create a box at scene coordinates (x, y) with width w and
-        height h. irow and icol are row and column indexes.
-        """
-        super().__init__(x, y, w, h, width=SIZES["LINEWIDTH"])
-        self.x0 = x
-        self.y0 = y
-        self.cell = (icol, irow)
-#        self.setAcceptHoverEvents(True)
-#        print ("Cell", icol, irow, x, y)
 
 #TODO
-    def contextmenu(self, event):
-        print(f"CONTEXT MENU @ (col: {self.cell[0]} | row: {self.cell[1]})")
-        return True # propagate down (though a <Cell> should be the lowest ...)
+#    def contextmenu(self, event):
+#        print(f"CONTEXT MENU @ (col: {self.cell[0]} | row: {self.cell[1]})")
+#        return True # propagate down (though a <Cell> should be the lowest #...)
 
-#TODO: It may be more appropriate to have the hover events handled in
-# <Tile>.
-#    def hoverEnterEvent(self, event):
-#        print("Enter", self.cell)
 
-#    def hoverLeaveEvent(self, event):
-#        print("Leave", self.cell)
+
+class StyleCache:
+    """Manage allocation of style resources using caches."""
+
+    __fonts = {}  # cache for QFont items
+    __brushes = {}  # cache for QBrush items
+    __pens = {}  # cache for QPen items
+
+    @classmethod
+    def getPen(cls, width: int, colour: str = "") -> QPen:
+        """Manage a cache for pens of different width and colour.
+        <width> should be a small integer. If it is 0 a "NoPen" will
+        be returned, colour being ignored.
+        <colour> is a colour in the form 'RRGGBB'. If it is not supplied,
+        black is assumed.
+        """
+        if width:
+            if colour:
+                assert re.match("^[0-9a-fA-F]{6}$", colour)
+            else:
+                colour = "000000"
+            wc = (width, colour)
+            try:
+                return cls.__pens[wc]
+            except KeyError:
+                pass
+            pen = QPen(QColor("#FF" + colour))
+            pen.setWidth(width)
+            cls.__pens[wc] = pen
+            return pen
+        else:
+            try:
+                return cls.__pens["*"]
+            except KeyError:
+                pen = QPen(Qt.PenStyle.NoPen)
+                cls.__pens["*"] = pen
+                return pen
+
+    @classmethod
+    def getBrush(cls, colour: str = "") -> QBrush:
+        """Manage a cache for brushes of different colour.
+        <colour> is a colour in the form 'RRGGBB'. If no colour is
+        supplied, return a "non-brush" (transparent).
+        """
+        try:
+            return cls.__brushes[colour or "*"]
+        except KeyError:
+            pass
+        if colour:
+            assert re.match("^[0-9a-fA-F]{6}$", colour)
+            brush = QBrush(QColor("#FF" + colour))
+            cls.__brushes[colour] = brush
+        else:
+            brush = QBrush()  # no fill
+            cls.__brushes["*"] = brush
+        return brush
+
+    @classmethod
+    def getFont(
+        cls,
+        family: str = "",
+        size: int = 0,
+        bold: bool = False,
+        italic: bool = False,
+    ) -> QFont:
+        """Manage a cache for fonts. The font parameters are passed as
+        arguments.
+        """
+        ftag = (family, size, bold, italic)
+        try:
+            return cls.__fonts[ftag]
+        except KeyError:
+            pass
+        font = QFont()
+        if family:
+            font.setFamily(family)
+        if size:
+            font.setPointSizeF(size)
+        if bold:
+            font.setBold(True)
+        if italic:
+            font.setItalic(True)
+        cls.__fonts[ftag] = font
+        return font
 
 
 #--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
@@ -675,9 +700,6 @@ def main(args):
     #WINDOW = GridViewHFit()
     #WINDOW = GridView()
 
-    # Set up grid
-    grid = GridPeriodsDays(DAYS, PERIODS, BREAKS)
-    WINDOW.setScene(grid)
 
 #### Actually, I'm not sure what sort of scaling makes sense ...
 #### Probably best to use GridViewRescaling
@@ -688,7 +710,7 @@ def main(args):
 ##    WINDOW.setTransform(t)
 
 #TODO: Only standalone!
-    APP.setWindowIcon(QIcon(APPDATAPATH("icons/tt.svg")))
+#    APP.setWindowIcon(QIcon(APPDATAPATH("icons/tt.svg")))
     screen = APP.primaryScreen()
     screensize = screen.availableSize()
     print("§screensize =", screensize)
@@ -701,43 +723,35 @@ def main(args):
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
 
 if __name__ == '__main__':
-    from core.basic_data import get_database, CONFIG, CALENDAR
-#    from core.db_access import open_database
-    _db = get_database()
-
-    DAYS = ('Mo', 'Di', 'Mi', 'Do', 'Fr')
-    PERIODS = ('A', 'B', '1', '2', '3', '4', '5', '6', '7')
-    BREAKS = ('1', '3', '5')
+    print("§§§§", APP.font().family())
 
     WINDOW = main(set(sys.path[1:]))
-    grid = WINDOW.scene()
-
-    t1 = grid.new_tile("T1", duration=1, nmsg=1, offset=1, total=4, text="De p1 xx", colour="FFFF44")
-    grid.place_tile("T1", (2, 3))
-    t2 = grid.new_tile("T2", duration=2, nmsg=1, offset=0, total=4, text="tg B", colour="FFE0F0")
-    t2.set_corner(0, "AB / CD / EF / GH / IJ")
-    t2.set_corner(1, "B")
-    grid.place_tile("T2", (0, 2))
-    t3 = grid.new_tile("T3", duration=2, nmsg=1, offset=0, total=4, text="---", colour="E0F0FF")
-    grid.place_tile("T3", (2, 3))
-    t4 = grid.new_tile("T4", duration=1, nmsg=2, offset=2, total=4, text="Ma")
-    t4.set_corner(0, "AB / CD / EF / GH / IJ")
-    t4.set_corner(1, "B")
-    grid.place_tile("T4", (2, 3))
-    t5 = grid.new_tile("T5", duration=2, nmsg=1, offset=0, total=1, text="Hu")
-    t5.set_corner(0, "BTH / WS\nAR / PQ")
-    t5.set_corner(1, "alle")
-    grid.place_tile("T5", (4, 0))
-    t6 = grid.new_tile("T6", duration=1, nmsg=1, offset=0, total=2, text="Ta")
-    t6.set_corner(0, "BMW")
-    t6.set_corner(1, "A")
-    t6.set_corner(2, "r10G")
-    t6.set_corner(3, "?")
-    grid.place_tile("T6", (3, 5))
-
-    grid.select_cell((1,6))
-
-    #for k, v in SIZES.items():
-    #    print(f"SIZE (mm) {k:16}: {WINDOW.px2mm(v)}")
-
+    scene = WINDOW.scene()
+    A4rect = QRectF(0.0, 0.0, A4[0], A4[1])
+    scene.addItem(QGraphicsRectItem(A4rect))
+    WINDOW.rescale()
+    c1 = Chip(scene, "CHIP_001", width = 200, height = 50)
+    c1.set_text(
+        "Hello, world!",
+        font = "Droid Sans",
+#        bold = True,
+#        italic = True,
+        colour = "ff0000"
+    )
+    c1.set_background("fff0f0")
+    c1.place(20, 50)
+    c2 = Chip(scene, "CHIP_002", width = 200, height = 50)
+    c2.set_text(
+        "Il: Much, much more than just a Hello, world!",
+#        font = "Droid Sans",
+        bold = True,
+#        italic = True,
+        colour = "ff0000"
+    )
+    c2.set_background("fff0f0")
+    c2.set_text("TOP LEFT is a really great place to be", "tl")
+    c2.set_text("TOP RIGHT and a lot more", "tr")
+    c2.set_text("BOTTOM LEFT", "bl")
+    c2.set_text("BOTTOM RIGHT", "br")
+    c2.place(40, 90)
     sys.exit(APP.exec())
