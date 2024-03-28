@@ -404,6 +404,7 @@ if __name__ == "__main__":
 
     dbpath = DATAPATH("db365.sqlite", "w365_data")
     w365path = DATAPATH("test.w365", "w365_data")
+#    w365path = DATAPATH("fwsb.w365", "w365_data")
     print("DATABASE FILE:", dbpath)
     print("W365 FILE:", w365path)
     try:
