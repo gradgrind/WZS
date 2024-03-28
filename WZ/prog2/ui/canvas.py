@@ -45,6 +45,8 @@ from ui.ui_base import (
     QGraphicsRectItem,
     QGraphicsSimpleTextItem,
     QGraphicsView,
+
+    QMenu,
     # QtCore
     Qt,
     # QtGui
@@ -68,6 +70,7 @@ A4 = (841.995, 595.35)
 A3 = (1190.7, 841.995)
 
 ### -----
+
 
 class GridView(QGraphicsView):
     """This is the "view" widget for the grid.
@@ -96,7 +99,7 @@ class GridView(QGraphicsView):
         #print("PDPI:", self.pdpi)
 # Scaling the scene by pdpi/ldpi should display the correct size ...
         #self.MM2PT = self.ldpi / 25.4
-        self.setScene(QGraphicsScene())
+        self.setScene(GraphicsScene())
 
     def pt2px(self, pt) -> int:
         px = int(self.ldpi * pt / 72.0 + 0.5)
@@ -173,90 +176,16 @@ class GridViewHFit(GridView):
 #        self.fitInView(qrect, Qt.AspectRatioMode.KeepAspectRatio)
 
 
-#TODO--
-class GridPeriodsDays(QGraphicsScene):
-#    font_header = StyleCache.getFont(fontSize = FONT_HEADER_SIZE)
+class GraphicsScene(QGraphicsScene):
 
-    def __init__(self, days, periods, breaks):
-        self.tiles = {}
+    def __init__(self):
         super().__init__()
-        SIZES["BOXWIDTH"] = (
-            SIZES["TABLEWIDTH"] - SIZES["TITLEWIDTH"]
-        ) / len(days)
-        SIZES["BOXHEIGHT"] = (
-            SIZES["TABLEHEIGHT"] - SIZES["TITLEHEIGHT"]
-        ) / len(periods)
-        self.xslots = [0]    # x-coordinate of column left side
-        self.yslots = [0]    # y-coordinate of row top side
-        # Cell at top left-hand corner
-        self.addItem(Cell(0, 0, SIZES["TITLEWIDTH"], SIZES["TITLEHEIGHT"], -1, -1))
-        # Add column headers
-        x = SIZES["TITLEWIDTH"]
-        icol = 0
-        for col_header in days:
-            self.xslots.append(x)
-            cell = Cell(x, 0, SIZES["BOXWIDTH"], SIZES["TITLEHEIGHT"], -1, icol)
-            cell.set_text(col_header, self.font_header)
-            cell.set_background(HEADER_COLOUR)
-            self.addItem(cell)
-            icol += 1
-            x += SIZES["BOXWIDTH"]
-        self.grid_width = x
-        # Add row headers and rows
-        self.cell_matrix = []
-        irow = 0
-        y = SIZES["TITLEHEIGHT"]
-        for row_header in periods:
-            if row_header in breaks:
-                line = QGraphicsLineItem(0, y, self.grid_width, y)
-                line.setPen(StyleCache.getPen(SIZES["LINEWIDTH"], BREAK_COLOUR))
-                self.addItem(line)
-                line.setZValue(1)
-            day_list = []
-            self.cell_matrix.append(day_list)
-            self.yslots.append(y)
-            # row header
-            cell = Cell(0, y, SIZES["TITLEWIDTH"], SIZES["BOXHEIGHT"], irow, -1)
-            cell.set_text(row_header, self.font_header)
-            cell.set_background(HEADER_COLOUR)
-            self.addItem(cell)
-            # day cells
-            for i in range(icol):
-                cell = Cell(self.xslots[i + 1], y, SIZES["BOXWIDTH"], SIZES["BOXHEIGHT"], irow, i)
-                day_list.append(cell)
-                self.addItem(cell)
-            irow += 1
-            y += SIZES["BOXHEIGHT"]
-        self.grid_height = y
-        # Set colour of main border lines
-        for y in 0, SIZES["TITLEHEIGHT"], self.grid_height:
-            line = QGraphicsLineItem(0, y, self.grid_width, y)
-            line.setPen(StyleCache.getPen(SIZES["LINEWIDTH"], MARGIN_LINE_COLOUR))
-            self.addItem(line)
-            line.setZValue(10)
-        for x in *self.xslots, self.grid_width:
-            line = QGraphicsLineItem(x, 0, x, self.grid_height)
-            line.setPen(StyleCache.getPen(SIZES["LINEWIDTH"], MARGIN_LINE_COLOUR))
-            self.addItem(line)
-            line.setZValue(10)
-
-# Not using the selection rectangle from grid_support?
-        # Make a rectangle for the "selected" marking
-        self.select = QGraphicsRectItem(0, 0, SIZES["BOXWIDTH"], SIZES["BOXHEIGHT"])
-        self.select.setPen(StyleCache.getPen(SIZES["LINEWIDTH"]*2, SELECT_COLOUR))
-        self.select.setZValue(20)
-        self.select.hide()
-        self.addItem(self.select)
-
         self.make_context_menu()
 
     def make_context_menu(self):
         self.context_menu = QMenu()
         Action = self.context_menu.addAction("I am context Action 1")
         Action.triggered.connect(self.context_1)
-
-    def get_cell(self, row, col):
-        return self.cell_matrix[row][col]
 
     def mousePressEvent(self, event):
         point = event.scenePos()
@@ -285,7 +214,7 @@ class GridPeriodsDays(QGraphicsScene):
                 item0 = None
                 for item in items:
                     try:
-                        cell = item.cell
+                        cell = item.tag
                         item0 = item
                     except AttributeError:
                         tiles.append(item)
@@ -298,8 +227,8 @@ class GridPeriodsDays(QGraphicsScene):
                             return
                     except AttributeError:
                         pass
-                if cell:
-                    print (f"Cell – left press{shift}{ctrl}{alt} @ {item.cell}")
+                if item0:
+                    print(f"Left press{shift}{ctrl}{alt} @ {cell}")
 # Note that ctrl-click is for context menu on OSX ...
                     if shift:
 #???
@@ -332,32 +261,6 @@ class GridPeriodsDays(QGraphicsScene):
 
     def context_1(self):
         print(self.context_tag)
-
-    def new_tile(self, tag, duration, nmsg, offset, total, text, colour=None):
-        t = Tile(tag, duration, nmsg, offset, total, text, colour)
-        self.addItem(t)
-        self.tiles[tag] = t
-        return t
-
-    def remove_tiles(self):
-        for tag, tile in self.tiles.items():
-            self.removeItem(tile)
-        self.tiles.clear()
-
-    def place_tile(self, tag, cell):
-        tile = self.tiles[tag]
-        col, row = cell
-        x = self.xslots[col + 1]    # first cell is header
-        y = self.yslots[row + 1]    # first cell is header
-        tile.set_cell(x, y)
-#TODO: It might be useful for a tile to know where it is placed.
-#        tile.cell = cell
-
-    def select_cell(self, cell):
-        x = self.xslots[cell[0] + 1]    # first cell is header
-        y = self.yslots[cell[1] + 1]    # first cell is header
-        self.select.setPos(x, y)
-        self.select.show()
 
 
 class Chip(QGraphicsRectItem):
