@@ -66,7 +66,7 @@ from ui.ui_base import (
     EventFilter,
 )
 
-CHIP_MARGIN = 3
+CHIP_MARGIN = 2
 CHIP_SPACER = 10
 
 MM2PT = 2.83464549

@@ -76,6 +76,7 @@
         "prog2/core/time_slots.py",
         "prog2/core/courses.py",
         "prog2/ui/canvas.py",
-        "prog2/ui/ui_base.py"
+        "prog2/ui/ui_base.py",
+        "prog2/ui/timetable_grid.py"
     ]
 }
