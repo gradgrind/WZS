@@ -1,7 +1,7 @@
 """
 ui/canvas.py
 
-Last updated:  2024-03-28
+Last updated:  2024-03-29
 
 Provide some basic canvas support using the QGraphics framework.
 
@@ -45,10 +45,14 @@ from ui.ui_base import (
     QGraphicsRectItem,
     QGraphicsSimpleTextItem,
     QGraphicsView,
+    QWidget,
 
     QMenu,
     # QtCore
     Qt,
+    QEvent,
+    QObject,
+    QTimer,
     # QtGui
     QColor,
     QFont,
@@ -57,6 +61,9 @@ from ui.ui_base import (
     QPainter,
     QTransform,
     QRectF,
+    # other
+    HoverRectItem,
+    EventFilter,
 )
 
 CHIP_MARGIN = 3
@@ -72,34 +79,37 @@ A3 = (1190.7, 841.995)
 ### -----
 
 
-class GridView(QGraphicsView):
-    """This is the "view" widget for the grid.
-    The actual grid is implemented as a "scene".
+class Canvas:
+    """This is the "view" widget for the canvas.
+    The actual canvas is implemented as a "scene".
     """
-    def __init__(self, parent=None):
-        super().__init__(parent=parent)
+    def __init__(self, view: QGraphicsView):
+        self.view = view
         # Change update mode: The default, MinimalViewportUpdate, seems
         # to cause artefacts to be left, i.e. it updates too little.
         # Also BoundingRectViewportUpdate seems not to be 100% effective.
-        # self.setViewportUpdateMode(
+        # view.setViewportUpdateMode(
         #     QGraphicsView.ViewportUpdateMode.BoundingRectViewportUpdate
         # )
-        self.setViewportUpdateMode(
+        view.setViewportUpdateMode(
             QGraphicsView.ViewportUpdateMode.FullViewportUpdate
         )
-        # self.setRenderHints(
+        # view.setRenderHints(
         #     QPainter.RenderHint.Antialiasing
         #     | QPainter.RenderHint.SmoothPixmapTransform
         # )
-        self.setRenderHints(QPainter.RenderHint.Antialiasing)
-        # self.setRenderHints(QPainter.RenderHint.TextAntialiasing)
-        self.ldpi = self.logicalDpiX()
-        self.pdpi = self.physicalDpiX()
+        view.setRenderHints(QPainter.RenderHint.Antialiasing)
+        # view.setRenderHints(QPainter.RenderHint.TextAntialiasing)
+        self.ldpi = view.logicalDpiX()
+        self.pdpi = view.physicalDpiX()
         #print("LDPI:", self.ldpi)
         #print("PDPI:", self.pdpi)
 # Scaling the scene by pdpi/ldpi should display the correct size ...
         #self.MM2PT = self.ldpi / 25.4
-        self.setScene(GraphicsScene())
+
+#TODO: change to use straight QGraphicsScene
+        self.scene = CanvasScene(view)
+        #view.setScene(self.scene)
 
     def pt2px(self, pt) -> int:
         px = int(self.ldpi * pt / 72.0 + 0.5)
@@ -112,84 +122,100 @@ class GridView(QGraphicsView):
         return mm
 
 
-class GridViewRescaling(GridView):
-    """An QGraphicsView that automatically adjusts the scaling of its
+class CanvasRescaling(Canvas):
+    """A QGraphicsView that automatically adjusts the scaling of its
     scene to fill the viewing window.
     """
-    def __init__(self, parent=None):
-        super().__init__(parent=parent)
+    def __init__(self, view):
+        super().__init__(view)
         # Disable the scrollbars when using this resizing scheme. They
         # should not appear anyway, but this might avoid problems.
-        self.setHorizontalScrollBarPolicy(
+        view.setHorizontalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAlwaysOff
         )
-        self.setVerticalScrollBarPolicy(
+        view.setVerticalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAlwaysOff
         )
+        self.event_filter = EventFilter(view, self.event_handler)
 
-    def resizeEvent(self, event):
-        self.rescale()
-        return super().resizeEvent(event)
+    def event_handler(self, w: QWidget, event: QEvent):
+        if event.type() == QEvent.Type.Resize:
+            QTimer.singleShot(0, self.rescale)
+        return False
 
     def rescale(self):
-        #qrect = self._sceneRect
-        scene = self.scene()
-        if scene:
-            qrect = scene.sceneRect()
-            self.fitInView(qrect, Qt.AspectRatioMode.KeepAspectRatio)
+        scene = self.view.scene()
+        qrect = scene.sceneRect()
+        self.view.fitInView(qrect, Qt.AspectRatioMode.KeepAspectRatio)
 
 
-# Experimental!
-class GridViewHFit(GridView):
+class CanvasHFit(Canvas):
     """A QGraphicsView that automatically adjusts the scaling of its
     scene to fill the width of the viewing window.
     """
-    def __init__(self):
-        super().__init__()
-        self.setHorizontalScrollBarPolicy(
+    def __init__(self, view):
+        super().__init__(view)
+        view.setHorizontalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAlwaysOff
         )
-        # Avoid problems at on/off transition:
-        self.setVerticalScrollBarPolicy(
+        # Avoid glitches / problems at on/off transition:
+        view.setVerticalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAlwaysOn
         )
+        self.event_filter = EventFilter(view, self.event_handler)
 
-    def resizeEvent(self, event):
-        self.rescale()
-        return super().resizeEvent(event)
+    def event_handler(self, w: QWidget, event: QEvent):
+        if event.type() == QEvent.Type.Resize:
+            QTimer.singleShot(0, self.rescale)
+        return False
 
     def rescale(self):
-        #qrect = self._sceneRect
-        qrect = self.scene().sceneRect()
-        size = self.size()
-        vsb = self.verticalScrollBar()
+        view = self.view
+        scene = view.scene()
+        qrect = scene.sceneRect()
+        size = view.size()
+        vsb = view.verticalScrollBar()
         w = size.width()
-# This might be problematic at the point where the scrollbar appears or
-# disappears ...
-# Initially the scrollbar is reported as invisible, even when it is
-# clearly visible, so the calculation is wrong.
+# This might be problematic at the point where the vertical scrollbar
+# appears or disappears, so a permanent scrollbar is recommended.
         if vsb.isVisible():
             w -= vsb.size().width()
         scale = w / qrect.width()
         t = QTransform().scale(scale, scale)
-        self.setTransform(t)
-#        self.fitInView(qrect, Qt.AspectRatioMode.KeepAspectRatio)
+        view.setTransform(t)
 
 
-class GraphicsScene(QGraphicsScene):
-
-    def __init__(self):
-        super().__init__()
+#TODO: features not yet settled
+class CanvasScene:
+    def __init__(self, view):
+        self._scene = QGraphicsScene()
+        view.setScene(self._scene)
+        self.items = {}
+        self.event_filter = EventFilter(self._scene, self.event_handler)
         self.make_context_menu()
+
+    def event_handler(self, obj: QObject, event: QEvent):
+        et = event.type()
+        if et == QEvent.Type.GraphicsSceneMousePress:
+            self.mouse_press_event(event)
+            return True
+        if et == QEvent.Type.GraphicsSceneContextMenu:
+            self.context_menu_event(event)
+            return True
+        return False
+
+    def add_item(self, item, tag):
+        self.items[tag] = item
+        self._scene.addItem(item._item)
 
     def make_context_menu(self):
         self.context_menu = QMenu()
         Action = self.context_menu.addAction("I am context Action 1")
         Action.triggered.connect(self.context_1)
 
-    def mousePressEvent(self, event):
+    def mouse_press_event(self, event):
         point = event.scenePos()
-        items = self.items(point)
+        items = self._scene.items(point)
         if items:
             if event.button() == Qt.MouseButton.LeftButton:
 #TODO ...
@@ -230,15 +256,16 @@ class GraphicsScene(QGraphicsScene):
                 if item0:
                     print(f"Left press{shift}{ctrl}{alt} @ {cell}")
 # Note that ctrl-click is for context menu on OSX ...
+# Note that alt-click is intercepted by some window managers on Linux ...
                     if shift:
 #???
                         self.place_tile("T2", cell)
                     if alt:
                         self.select_cell(cell)
 
-    def contextMenuEvent(self, event):
+    def context_menu_event(self, event):
         point = event.scenePos()
-        items = self.items(point)
+        items = self._scene.items(point)
         if items:
             for item in items:
                 try:
@@ -263,9 +290,9 @@ class GraphicsScene(QGraphicsScene):
         print(self.context_tag)
 
 
-class Chip(QGraphicsRectItem):
+class Chip:
     __slots__ = (
-        "tag",
+        "_item",
         "width",
         "height",
         "extras",
@@ -288,27 +315,21 @@ class Chip(QGraphicsRectItem):
 
     def __init__(
         self,
-        scene: QGraphicsScene,
+        scene: CanvasScene,
         tag: str,
         width: int,
-        height: int
+        height: int,
+        hover = None,
     ):
-        self.tag = tag
         self.width = width
         self.height = height
         self.extras = {}    # all the optional bits
-        super().__init__(0.0, 0.0, float(width), float(height))
-        scene.addItem(self)
-
-#        self.setAcceptHoverEvents(True)
-
-#TODO
-    def hoverEnterEvent(self, event):
-        print("Enter", self.tag)
-
-    def hoverLeaveEvent(self, event):
-        print("Leave", self.tag)
-
+        self._item = HoverRectItem(
+            0.0, 0.0, float(width), float(height),
+            hover = hover
+        )
+        self._item.tag = tag
+        scene.add_item(self, tag)
 
 # Size? Would this be fixed? Quite possibly, considering the text field
 # specification ... If boxed single-text items are needed, that should
@@ -327,9 +348,6 @@ class Chip(QGraphicsRectItem):
 # points. That is not far off the width of an A4 sheet. A small scaling
 # adjustment might still be necessary, but it might be a good basis.
 
-#    font_centre = StyleCache.getFont(fontSize=FONT_CENTRE_SIZE)
-#    font_corner = StyleCache.getFont(fontSize=FONT_CORNER_SIZE)
-
     def set_background(self, colour: str):
         """Change the background, which is initially transparent.
         This uses <StyleCache>, which accepts colours as "RRGGBB" strings.
@@ -338,14 +356,14 @@ class Chip(QGraphicsRectItem):
         """
         if not colour:
             colour = "ffffff"
-        self.setBrush(StyleCache.getBrush(colour))
+        self._item.setBrush(StyleCache.getBrush(colour))
 
     def set_border(self, width: int = 1, colour: str = ""):
         """Set the border width and colour, which is initially black with
         width = 1.
         This uses <StyleCache>, which accepts colours as "RRGGBB" strings.
         """
-        self.setPen(StyleCache.getPen(width, colour))
+        self._item.setPen(StyleCache.getPen(width, colour))
 
     def place(self, x: int, y: int):
         """The QGraphicsItem method "setPos" takes "float" coordinates,
@@ -355,7 +373,7 @@ class Chip(QGraphicsRectItem):
         The position of the item describes its origin (local coordinate
         (0, 0)) in parent coordinates.
         """
-        self.setPos(float(x), float(y))
+        self._item.setPos(float(x), float(y))
 
     def set_text(
         self,
@@ -371,7 +389,7 @@ class Chip(QGraphicsRectItem):
             text_item = self.extras[corner]
         except KeyError:
             assert corner in {"tl", "tr", "c", "bl", "br"}
-            text_item = QGraphicsSimpleTextItem(text, self)
+            text_item = QGraphicsSimpleTextItem(text, self._item)
             self.extras[corner] = text_item
             text_item.setFont(StyleCache.getFont(
                 family = font, size = size, bold = bold, italic = italic
@@ -479,26 +497,13 @@ class Chip(QGraphicsRectItem):
                     xrx = self.width - CHIP_MARGIN - xrw
                     xr.setPos(xrx, self.height - CHIP_MARGIN - xrh)
 
-
-#TODO: May be useful (to get screen coordinates)?
+# May be useful (to get screen coordinates)?
 #def get_pos(view, item, point):
 #        scenePos = item.mapToScene(point)
 #        viewportPos = view.mapFromScene(scenePos)
 #        viewPos = view.viewport().mapToParent(viewportPos)
 #        globalViewPos = view.mapToGlobal(QPoint(0, 0))
 #        return globalViewPos.x + viewPos.x, globalViewPos.y + viewPos.y
-
-#TODO
-#    def printName(self):
-#        print("Action triggered from {}".format(self.tag))
-
-
-
-#TODO
-#    def contextmenu(self, event):
-#        print(f"CONTEXT MENU @ (col: {self.cell[0]} | row: {self.cell[1]})")
-#        return True # propagate down (though a <Cell> should be the lowest #...)
-
 
 
 class StyleCache:
@@ -599,10 +604,12 @@ def main(args):
     #from qtpy.QtGui import QFontInfo
     #qfi = QFontInfo(font)
     #print("FONT PIXELS / POINTS:", qfi.pixelSize(), qfi.pointSize())
-    WINDOW = GridViewRescaling()
-    #WINDOW = GridViewHFit()
-    #WINDOW = GridView()
+    WINDOW = QGraphicsView()
+    window = CanvasRescaling(WINDOW)
+    #window = CanvasHFit(WINDOW)
+    #window = Canvas(WINDOW)
 
+    return window
 
 #### Actually, I'm not sure what sort of scaling makes sense ...
 #### Probably best to use GridViewRescaling
@@ -612,28 +619,24 @@ def main(args):
 #    t = QTransform().scale(scale, scale)
 ##    WINDOW.setTransform(t)
 
-#TODO: Only standalone!
-#    APP.setWindowIcon(QIcon(APPDATAPATH("icons/tt.svg")))
-    screen = APP.primaryScreen()
-    screensize = screen.availableSize()
-    print("§screensize =", screensize)
-    WINDOW.resize(int(screensize.width()*0.6), int(screensize.height()*0.75))
-    WINDOW.show()
-
-    return WINDOW
-
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
 
 if __name__ == '__main__':
     print("§§§§", APP.font().family())
 
-    WINDOW = main(set(sys.path[1:]))
-    scene = WINDOW.scene()
+    def test_hover(item, enter):
+        print("§HOVER:", item.tag, enter)
+
+    window = main(set(sys.path[1:]))
+    _scene = window.view.scene()
     A4rect = QRectF(0.0, 0.0, A4[0], A4[1])
-    scene.addItem(QGraphicsRectItem(A4rect))
-    WINDOW.rescale()
-    c1 = Chip(scene, "CHIP_001", width = 200, height = 50)
+    _scene.addItem(QGraphicsRectItem(A4rect))
+    frame = QGraphicsRectItem(A4rect.adjusted(-5.0, -5.0, 10.0, 10.0))
+    frame.setPen(StyleCache.getPen(0))
+    _scene.addItem(frame)
+    scene = window.scene
+    c1 = Chip(scene, "CHIP_001", width = 200, height = 50, hover = test_hover)
     c1.set_text(
         "Hello, world!",
         font = "Droid Sans",
@@ -657,4 +660,14 @@ if __name__ == '__main__':
     c2.set_text("BOTTOM LEFT", "bl")
     c2.set_text("BOTTOM RIGHT", "br")
     c2.place(40, 90)
+
+    screen = APP.primaryScreen()
+    screensize = screen.availableSize()
+    print("§screensize =", screensize)
+    window.view.resize(
+        int(screensize.width()*0.6),
+        int(screensize.height()*0.75)
+    )
+    window.view.show()
+
     sys.exit(APP.exec())

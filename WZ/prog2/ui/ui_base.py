@@ -1,7 +1,7 @@
 """
 ui/ui_base.py
 
-Last updated:  2024-02-15
+Last updated:  2024-03-29
 
 Support stuff for the GUI: application initialization, dialogs, etc.
 
@@ -214,6 +214,45 @@ def get_ui(
                     obj = getattr(ui, widget)
                 getattr(obj, sig).connect(getattr(wrapper, name))
     return ui
+
+
+class EventFilter(QObject):
+    """Implement an event filter for a given widget.
+    """
+    def __init__(self, obj: QObject, handler):
+        super().__init__()
+        self.handler = handler
+        obj.installEventFilter(self)
+
+    def eventFilter(self, obj: QObject, event: QEvent) -> bool:
+        return self.handler(obj, event)
+        #if event.type() == QEvent.Type.KeyPress:
+        #    key = event.key()
+        #    if key == Qt.Key.Key_Space:
+        #        do_something()
+        #        return True
+        ## otherwise standard event processing
+        #return False
+
+
+class HoverRectItem(QGraphicsRectItem):
+    """
+    """
+    def __init__(self, *args, hover = None, **kargs):
+        """<handler> should be a function like
+            def hover_handler(graphicsitem: QGraphicsItem, enter: bool):
+                print("ENTER:", enter)
+        """
+        self.handler = hover
+        super().__init__(*args, **kargs)
+        if hover:
+            self.setAcceptHoverEvents(True)
+
+    def hoverEnterEvent(self, event):
+        self.handler(self, True)
+
+    def hoverLeaveEvent(self, event):
+        self.handler(self, False)
 
 
 class Singleton:
