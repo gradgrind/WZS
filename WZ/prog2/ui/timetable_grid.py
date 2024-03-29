@@ -57,8 +57,10 @@ from ui.ui_base import (
     QRectF,
 )
 from ui.canvas import (
+    Canvas,
     CanvasRescaling,
     StyleCache,
+    Chip,
     CHIP_MARGIN,
 
 #?
@@ -67,11 +69,16 @@ from ui.canvas import (
     A4,
 )
 
-_DAYWIDTH = 140
-_VHEADERWIDTH = 80
-_HHEADERHEIGHT = 40
-_GRIDLINEWIDTH = 1
+_DAYWIDTH = 140.0
+_VHEADERWIDTH = 80.0
+_HHEADERHEIGHT = 40.0
+_GRIDLINEWIDTH = 1.0
 _GRIDLINECOLOUR = 'b0b0b0'
+
+# Fonts
+#FONT_HEADER_SIZE = 14
+FONT_CENTRE_SIZE = 18
+#FONT_CORNER_SIZE = 11
 
 #?
 _MARGIN_LEFT = 30
@@ -90,16 +97,11 @@ _TITLEWIDTH = 82
 
 _SUBTEXTGAP = 10    # minimum horizontal space between tile "subtexts"
 
-# Fonts
-FONT_HEADER_SIZE = 14
-FONT_CENTRE_SIZE = 18
-FONT_CORNER_SIZE = 11
-
 # Colours (rrggbb)
-BORDER_COLOUR = 'b0b0b0' # '12c6f8'
+BORDER_COLOUR = 'b0b0b0'    # '12c6f8'
 HEADER_COLOUR = 'f0f0f0'
 MARGIN_LINE_COLOUR = '000000'
-BREAK_COLOUR = '606060' # '6060d0'
+BREAK_COLOUR = '606060'     # '6060d0'
 #CELL_HIGHLIGHT_COLOUR = 'a0a0ff'
 SELECT_COLOUR = 'ff0000'
 
@@ -128,10 +130,11 @@ class GridView(CanvasRescaling):
             mm1 = h1 * 60 + m1
             if not x0:
                 x0 = mm0
-            hlines.append((mm0 - x0, mm1 - x0))
+            hlines.append((float(mm0 - x0), float(mm1 - x0)))
         #print("???", hlines)
+        self.ylines = hlines
         dlines = []
-        d = 0
+        d = 0.0
         for tag in days:
             dlines.append(d)
             d += _DAYWIDTH
@@ -147,7 +150,7 @@ class GridView(CanvasRescaling):
         )
         _scene.addItem(weekbox)
         weekbox.setPen(StyleCache.getPen(_GRIDLINEWIDTH))
-        weekbox.setZValue(100)
+        weekbox.setZValue(10)
         for x in dlines:
             line = QGraphicsLineItem(x, -_HHEADERHEIGHT, x, h0)
             if x:
@@ -157,7 +160,8 @@ class GridView(CanvasRescaling):
             else:
                 line.setPen(StyleCache.getPen(_GRIDLINEWIDTH))
             _scene.addItem(line)
-            #line.setZValue(50)
+            #line.setZValue(-5)
+        self.xlines = dlines
         for y01 in hlines:
             for y in y01:
                 line = QGraphicsLineItem(-_VHEADERWIDTH, y, w0, y)
@@ -168,7 +172,7 @@ class GridView(CanvasRescaling):
                 else:
                     line.setPen(StyleCache.getPen(_GRIDLINEWIDTH))
                 _scene.addItem(line)
-                #line.setZValue(50)
+                #line.setZValue(-5)
 
         dpfont = StyleCache.getFont(size = 12)
         for i, d in enumerate(days):
@@ -206,25 +210,11 @@ class GridView(CanvasRescaling):
             text_height = text_rect.height()
             xpos = -(_VHEADERWIDTH + text_width) / 2
             ypos = y1 - text_height - CHIP_MARGIN
-            print("$$$", y0, y1, text_height)
+            #print("$$$", y0, y1, text_height)
             text_item.setPos(xpos, ypos)
 
 
-#        SIZES["TABLEHEIGHT"] = (
-#            self.pt2px(
-#                PAGE_SIZE[1]) - SIZES["MARGIN_TOP"]
-#                - SIZES["MARGIN_BOTTOM"] - SIZES["HEADER"]
-#                - SIZES["FOOTER"]
-#        )
-#        SIZES["TABLEWIDTH"] = (
-#            self.pt2px(PAGE_SIZE[0]) - SIZES["MARGIN_LEFT"]
-#            - SIZES["MARGIN_RIGHT"]
-#        )
-#        print("§TABLE SIZE (pixels):", SIZES["TABLEWIDTH"], SIZES["TABLEHEIGHT"])
-
-
-
-
+#TODO--
 class GridPeriodsDays(QGraphicsScene):
 #    font_header = StyleCache.getFont(fontSize = FONT_HEADER_SIZE)
 
@@ -411,65 +401,37 @@ class GridPeriodsDays(QGraphicsScene):
         self.select.show()
 
 
-class Tile(QGraphicsRectItem):
+#TODO
+class Tile(Chip):
     __slots__ = (
-        "tag",
         "duration",
-        "width",
-        "height",
-        "x",
-        "text_item",
     )
-#    font_centre = StyleCache.getFont(fontSize=FONT_CENTRE_SIZE)
-#    font_corner = StyleCache.getFont(fontSize=FONT_CORNER_SIZE)
 
-    def __init__(self, tag, duration, nmsg, offset, total, text, colour):
-        #   duration: number of periods
-        #   nmsg: number of "minimal subgroups"
-        #   total: number of all "minimal subgroups"
-        # Thus nmsg / total builds a fraction of the total box width.
-        #   offset: starting offset as number of "minimal subgroups"
-        # Thus offset + nmsg must be smaller than or equal to total.
-        #   text: the text for the central position
-        #   colour: the box background colour (<None> => white)
-        self.tag = tag
+    def __init__(
+        self,
+        canvas: Canvas,
+        tag: str,               # tile tag (id)
+        duration: int,          # number of periods
+        groups: list[str],      # group tags
+        div_groups: list[str],  # all group tags in division
+        text: str,              # central text
+        colour: str = None,     # "RRGGBB" (<None> => white)
+    ):
         self.duration = duration
-#        self.width = SIZES["BOXWIDTH"] * nmsg / total - SIZES["SIZES["LINEWIDTH"]"]
-        self.width = (SIZES["BOXWIDTH"] - SIZES["LINEWIDTH"]) * nmsg / total
-        self.x = SIZES["BOXWIDTH"] * offset / total + SIZES["LINEWIDTH"]/2
-        self.height = SIZES["BOXHEIGHT"] * duration # can vary on placement
         super().__init__(
-            self.x,
-            SIZES["LINEWIDTH"]/2,
-            self.width,
-            self.height - SIZES["LINEWIDTH"]
+            canvas, tag, width = 100.0, height = 100.0,
+            hover = None,
         )
-#TODO? Set "ffffff" for a white (opaque) background, which hides grid lines.
-# Leaving it as <None> would make the background transparent.
-        if not colour:
-            colour = "ffffff"
-        self.setBrush(StyleCache.getBrush(colour))
-        self.text_item = QGraphicsSimpleTextItem(self)
-        self.text_item.setFont(self.font_centre)
-        self.set_text(text)
-        self.setZValue(5)
+#TODO
+
+        self.set_background(colour)
+        self.set_text(text, size = FONT_CENTRE_SIZE)
+        #self.setZValue(5)
+#?
         self.hide()
-        self.corners = [None] * 4
 
-    def set_text(self, text):
-        self.text_item.setText(text)
-        text_rect = self.text_item.boundingRect()
-        text_width = text_rect.width()
-        part = text_width / (self.width - SIZES["LINEWIDTH"])
-        if part > 1:
-            self.text_item.setScale(1 / part)
-            text_rect = self.text_item.mapRectToParent(text_rect)
-            text_width = text_rect.width()
-        text_height = text_rect.height()
-        xshift = self.x + (self.width - text_width) / 2
-        yshift = (self.height - text_height) / 2
-        self.text_item.setPos(xshift, yshift)
 
+#TODO
     def set_cell(self, x, y):
         self.setPos(x, y)
         self.show()

@@ -312,28 +312,31 @@ class Chip:
     The font and colour of the centred text can be set separately from
     those of the corners.
     """
-
     def __init__(
         self,
-        scene: CanvasScene,
+        canvas: Canvas,
         tag: str,
-        width: int,
-        height: int,
+        width: float,
+        height: float,
         hover = None,
     ):
         self.width = width
         self.height = height
         self.extras = {}    # all the optional bits
         self._item = HoverRectItem(
-            0.0, 0.0, float(width), float(height),
+            0.0, 0.0, width, height,
             hover = hover
         )
         self._item.tag = tag
-        scene.add_item(self, tag)
+        canvas.scene.add_item(self, tag)
 
 # Size? Would this be fixed? Quite possibly, considering the text field
 # specification ... If boxed single-text items are needed, that should
 # probably be another class.
+#TODO:
+# However, when using multiple-period tiles, it is possible that the
+# size changes. In this case it would be necessary to recalculate all the
+# text fields.
 
 # What about sizing and scaling? In QGraphicsView this is not necessarily
 # a big issue, as scaling is easy. Also, it is not always clear what the
@@ -358,29 +361,57 @@ class Chip:
             colour = "ffffff"
         self._item.setBrush(StyleCache.getBrush(colour))
 
-    def set_border(self, width: int = 1, colour: str = ""):
+    def set_border(self, width: float = None, colour: str = None):
         """Set the border width and colour, which is initially black with
         width = 1.
         This uses <StyleCache>, which accepts colours as "RRGGBB" strings.
         """
-        self._item.setPen(StyleCache.getPen(width, colour))
+        if width:
+            self._item.setPen(StyleCache.getPen(width, colour))
+        elif colour:
+            self._item.setPen(StyleCache.getPen(1.0, colour))
+        else:
+            self._item.setPen(StyleCache.getPen())
 
-    def place(self, x: int, y: int):
+    def place(self, x: float, y: float, w: float = None, h: float = None):
         """The QGraphicsItem method "setPos" takes "float" coordinates,
         either as setPos(x, y) or as setPos(QPointF). It sets the position
         of the item in parent coordinates. For items with no parent, scene
         coordinates are used.
         The position of the item describes its origin (local coordinate
         (0, 0)) in parent coordinates.
+        The size of the chip can be changed by supplying new width and/or
+        height values.
         """
-        self._item.setPos(float(x), float(y))
+        self._item.setPos(x, y)
+        if w is None:
+            if h is None:
+                return
+            self.height = h
+        elif h is None:
+            self.width = w
+        else:
+            self.height = h
+            self.width = w
+        # Handle the text field placement and potential shrinking
+        c = self.extras.get("c")
+        if c:
+            self._set_centre_text(c)
+        tl = self.extras.get("tl")
+        tr = self.extras.get("tr")
+        if tl or tr:
+            self._set_top_text(tl, tr)
+        bl = self.extras.get("bl")
+        br = self.extras.get("br")
+        if bl or br:
+            self._set_bottom_text(bl, br)
 
     def set_text(
         self,
         text: str,
         corner: str = "c",      # default is centre
         font: str = "",
-        size: int = 0,
+        size: float = None,
         bold: bool = False,
         italic: bool = False,
         colour: str = "",
@@ -399,103 +430,85 @@ class Chip:
         else:
             # For existing items only the text can be changed
             text_item.setText(text)
+        if corner == "c":
+            self._set_centre_text(text_item)
+        elif corner == "tl":
+            self._set_top_text(text_item, self.extras.get("tr"))
+        elif corner == "bl":
+            self._set_bottom_text(text_item, self.extras.get("br"))
+        elif corner == "tr":
+            self._set_top_text(self.extras.get("tl"), text_item)
+        elif corner == "br":
+            self._set_bottom_text(self.extras.get("bl"), text_item)
+
+    def _set_centre_text(self, text_item):
         text_rect = text_item.boundingRect()
         text_width = text_rect.width()
-        # Handle positioning
-        if corner == "c":
-            part = (self.width - CHIP_MARGIN * 2) / text_width
-            if part < 1.0:
-#--
-                print("§???1", text_rect)
-                text_item.setScale(part)
-                text_rect = text_item.mapRectToParent(text_rect)
-#--
-                print("§???2", text_rect, text_item.boundingRect())
-                text_width = text_rect.width()
-            text_height = text_rect.height()
-            xshift = (self.width - text_width) / 2
-            yshift = (self.height - text_height) / 2
-            text_item.setPos(xshift, yshift)
+        part = (self.width - CHIP_MARGIN * 2) / text_width
+        if part < 1.0:
+            text_item.setScale(part)
+            text_rect = text_item.mapRectToParent(text_rect)
+            text_width = text_rect.width()
+        text_height = text_rect.height()
+        xshift = (self.width - text_width) / 2
+        yshift = (self.height - text_height) / 2
+        text_item.setPos(xshift, yshift)
+
+    def _set_top_text(self, xl, xr):
+        w0 = self.width - CHIP_MARGIN*2 - CHIP_SPACER
+        if xl:
+            xlrect = xl.boundingRect()
         else:
-            w0 = self.width - CHIP_MARGIN*2 - CHIP_SPACER
-            if corner[0] == "t":
-                # Top of chip
-                if corner == "tl":
-                    xl = text_item
-                    xlrect = xl.boundingRect()
-                    try:
-                        xr = self.extras["tr"]
-                        xrrect = xr.boundingRect()
-                    except KeyError:
-                        xr = None
-                        xrrect = QRectF()
-                else:   # corner == "tr"
-                    xr = text_item
-                    xrrect = xr.boundingRect()
-                    try:
-                        xl = self.extras["tl"]
-                        xlrect = xl.boundingRect()
-                    except KeyError:
-                        xl = None
-                        xlrect = QRectF()
-                xlw = xlrect.width()
-                xlh = xlrect.height()
-                xrw = xrrect.width()
-                xrh = xrrect.height()
-                part = w0 / (xlw + xrw)
-                if part < 1.0:
-                    if xr:
-                        xr.setScale(part)
-                        xrw = xr.mapRectToParent(xrrect).width()
-                    if xl:
-                        xl.setScale(part)
-                        xlw = xl.mapRectToParent(xlrect).width()
-                if xl:
-                    xl.setPos(CHIP_MARGIN, CHIP_MARGIN)
-                if xr:
-                    xrx = self.width - CHIP_MARGIN - xrw
-                    xr.setPos(xrx, CHIP_MARGIN)
-            else:   # corner[0] == "b"
-                # Bottom of chip
-                if corner == "bl":
-                    xl = text_item
-                    xlrect = xl.boundingRect()
-                    try:
-                        xr = self.extras["br"]
-                        xrrect = xr.boundingRect()
-                    except KeyError:
-                        xr = None
-                        xrrect = QRectF()
-                else:   # corner == "br"
-                    xr = text_item
-                    xrrect = xr.boundingRect()
-                    try:
-                        xl = self.extras["bl"]
-                        xlrect = xl.boundingRect()
-                    except KeyError:
-                        xl = None
-                        xlrect = QRectF()
-                xlw = xlrect.width()
-                xlh = xlrect.height()
-                xrw = xrrect.width()
-                xrh = xrrect.height()
-                part = w0 / (xlw + xrw)
-                if part < 1.0:
-                    if xr:
-                        xr.setScale(part)
-                        xrr = xr.mapRectToParent(xrrect)
-                        xrw = xrr.width()
-                        xrh = xrr.height()
-                    if xl:
-                        xl.setScale(part)
-                        xlr = xl.mapRectToParent(xlrect)
-                        xlw = xlr.width()
-                        xlh = xlr.height()
-                if xl:
-                    xl.setPos(CHIP_MARGIN, self.height - CHIP_MARGIN - xlh)
-                if xr:
-                    xrx = self.width - CHIP_MARGIN - xrw
-                    xr.setPos(xrx, self.height - CHIP_MARGIN - xrh)
+            xlrect = QRectF()
+        if xr:
+            xrrect = xr.boundingRect()
+        else:
+            xrrect = QRectF()
+        xlw = xlrect.width()
+        #xlh = xlrect.height()
+        xrw = xrrect.width()
+        #xrh = xrrect.height()
+        part = w0 / (xlw + xrw)
+        if part < 1.0:
+            if xr:
+                xr.setScale(part)
+                xrw = xr.mapRectToParent(xrrect).width()
+            if xl:
+                xl.setScale(part)
+                xlw = xl.mapRectToParent(xlrect).width()
+        if xl:
+            xl.setPos(CHIP_MARGIN, CHIP_MARGIN)
+        if xr:
+            xrx = self.width - CHIP_MARGIN - xrw
+            xr.setPos(xrx, CHIP_MARGIN)
+
+    def _set_bottom_text(self, xl, xr):
+        w0 = self.width - CHIP_MARGIN*2 - CHIP_SPACER
+        if xl:
+            xlrect = xl.boundingRect()
+        else:
+            xlrect = QRectF()
+        if xr:
+            xrrect = xr.boundingRect()
+        else:
+            xrrect = QRectF()
+        xlw = xlrect.width()
+        xlh = xlrect.height()
+        xrw = xrrect.width()
+        xrh = xrrect.height()
+        part = w0 / (xlw + xrw)
+        if part < 1.0:
+            if xr:
+                xr.setScale(part)
+                xrw = xr.mapRectToParent(xrrect).width()
+            if xl:
+                xl.setScale(part)
+                xlw = xl.mapRectToParent(xlrect).width()
+        if xl:
+            xl.setPos(CHIP_MARGIN, self.height - CHIP_MARGIN - xlh)
+        if xr:
+            xrx = self.width - CHIP_MARGIN - xrw
+            xr.setPos(xrx, self.height - CHIP_MARGIN - xrh)
 
 # May be useful (to get screen coordinates)?
 #def get_pos(view, item, point):
@@ -514,7 +527,7 @@ class StyleCache:
     __pens = {}  # cache for QPen items
 
     @classmethod
-    def getPen(cls, width: int, colour: str = "") -> QPen:
+    def getPen(cls, width: float = None, colour: str = None) -> QPen:
         """Manage a cache for pens of different width and colour.
         <width> should be a small integer. If it is 0 a "NoPen" will
         be returned, colour being ignored.
@@ -532,7 +545,7 @@ class StyleCache:
             except KeyError:
                 pass
             pen = QPen(QColor("#FF" + colour))
-            pen.setWidth(width)
+            pen.setWidthF(width)
             cls.__pens[wc] = pen
             return pen
         else:
@@ -565,8 +578,8 @@ class StyleCache:
     @classmethod
     def getFont(
         cls,
-        family: str = "",
-        size: int = 0,
+        family: str = None,
+        size: float = None,
         bold: bool = False,
         italic: bool = False,
     ) -> QFont:
@@ -628,15 +641,17 @@ if __name__ == '__main__':
     def test_hover(item, enter):
         print("§HOVER:", item.tag, enter)
 
-    window = main(set(sys.path[1:]))
-    _scene = window.view.scene()
+    canvas = main(set(sys.path[1:]))
+    _scene = canvas.view.scene()
     A4rect = QRectF(0.0, 0.0, A4[0], A4[1])
     _scene.addItem(QGraphicsRectItem(A4rect))
-    frame = QGraphicsRectItem(A4rect.adjusted(-5.0, -5.0, 10.0, 10.0))
-    frame.setPen(StyleCache.getPen(0))
+    frame = QGraphicsRectItem(A4rect.adjusted(-5.0, -5.0, 5.0, 5.0))
+    frame.setPen(StyleCache.getPen())
     _scene.addItem(frame)
-    scene = window.scene
-    c1 = Chip(scene, "CHIP_001", width = 200, height = 50, hover = test_hover)
+#    scene = canvas.scene
+    c1 = Chip(
+        canvas, "CHIP_001", width = 200, height = 50, hover = test_hover
+    )
     c1.set_text(
         "Hello, world!",
         font = "Droid Sans",
@@ -646,7 +661,7 @@ if __name__ == '__main__':
     )
     c1.set_background("fff0f0")
     c1.place(20, 50)
-    c2 = Chip(scene, "CHIP_002", width = 200, height = 50)
+    c2 = Chip(canvas, "CHIP_002", width = 200, height = 50)
     c2.set_text(
         "Il: Much, much more than just a Hello, world!",
 #        font = "Droid Sans",
@@ -664,10 +679,10 @@ if __name__ == '__main__':
     screen = APP.primaryScreen()
     screensize = screen.availableSize()
     print("§screensize =", screensize)
-    window.view.resize(
+    canvas.view.resize(
         int(screensize.width()*0.6),
         int(screensize.height()*0.75)
     )
-    window.view.show()
+    canvas.view.show()
 
     sys.exit(APP.exec())
