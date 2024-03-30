@@ -1,7 +1,7 @@
 """
 ui/canvas.py
 
-Last updated:  2024-03-29
+Last updated:  2024-03-30
 
 Provide some basic canvas support using the QGraphics framework.
 
@@ -46,13 +46,7 @@ from ui.ui_base import (
     QGraphicsSimpleTextItem,
     QGraphicsView,
     QWidget,
-
     QMenu,
-    # QtCore
-    Qt,
-    QEvent,
-    QObject,
-    QTimer,
     # QtGui
     QColor,
     QFont,
@@ -61,13 +55,18 @@ from ui.ui_base import (
     QPainter,
     QTransform,
     QRectF,
+    # QtCore
+    Qt,
+    QEvent,
+    QObject,
+    QTimer,
     # other
     HoverRectItem,
     EventFilter,
 )
 
-CHIP_MARGIN = 2
-CHIP_SPACER = 10
+CHIP_MARGIN = 1.5
+CHIP_SPACER = 10.0
 
 MM2PT = 2.83464549
 PT2MM = 0.3527778
@@ -330,14 +329,6 @@ class Chip:
         self._item.tag = tag
         canvas.scene.add_item(self, tag)
 
-# Size? Would this be fixed? Quite possibly, considering the text field
-# specification ... If boxed single-text items are needed, that should
-# probably be another class.
-#TODO:
-# However, when using multiple-period tiles, it is possible that the
-# size changes. In this case it would be necessary to recalculate all the
-# text fields.
-
 # What about sizing and scaling? In QGraphicsView this is not necessarily
 # a big issue, as scaling is easy. Also, it is not always clear what the
 # best way to specify sizes really is. If printing to PDF is a goal, then
@@ -393,6 +384,7 @@ class Chip:
         else:
             self.height = h
             self.width = w
+        self._item.setRect(0, 0, self.width, self.height)
         # Handle the text field placement and potential shrinking
         c = self.extras.get("c")
         if c:
@@ -415,6 +407,7 @@ class Chip:
         bold: bool = False,
         italic: bool = False,
         colour: str = "",
+        no_place: bool = False,
     ):
         try:
             text_item = self.extras[corner]
@@ -430,6 +423,8 @@ class Chip:
         else:
             # For existing items only the text can be changed
             text_item.setText(text)
+        if no_place:
+            return
         if corner == "c":
             self._set_centre_text(text_item)
         elif corner == "tl":
