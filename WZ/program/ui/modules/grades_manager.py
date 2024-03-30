@@ -42,7 +42,8 @@ T = Tr("ui.modules.grades_manager")
 ### +++++
 
 from ui.ui_base import (
-    load_ui,
+    #load_ui,
+    get_ui,
     ### QtWidgets:
     QTableWidget,
     QTableWidgetItem,
@@ -341,7 +342,8 @@ class ManageGradesPage(QObject):
     def __init__(self, parent = None):
         super().__init__()
         self._colours = {}
-        self.ui = load_ui("grades.ui", parent, self)
+        #self.ui = load_ui("grades.ui", parent, self)
+        self.ui = get_ui("grades.ui", parent, self)
         # group-data table
         dtw = self.ui.date_table
         self.group_data_proxy = GroupDataProxy(dtw, self)

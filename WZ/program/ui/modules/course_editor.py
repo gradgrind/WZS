@@ -40,7 +40,8 @@ T = Tr("ui.modules.course_editor")
 ### +++++
 
 from ui.ui_base import (
-    load_ui,
+    #load_ui,
+    get_ui,
     ### QtWidgets:
     QWidget,
     QHeaderView,
@@ -110,7 +111,8 @@ def display_parallel(lesson_rec: db_TableRow) -> str:
 class CourseEditorPage(QObject):
     def __init__(self, parent=None):
         super().__init__()
-        self.ui = load_ui("course_editor.ui", parent, self)
+        #self.ui = load_ui("course_editor.ui", parent, self)
+        self.ui = get_ui("course_editor.ui", parent, self)
         self.ui.course_table.horizontalHeader().setSectionResizeMode(
             QHeaderView.ResizeMode.ResizeToContents
         )
