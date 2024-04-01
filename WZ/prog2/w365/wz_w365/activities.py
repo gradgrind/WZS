@@ -1,5 +1,5 @@
 """
-w365/wz_w365/activities.py - last updated 2024-03-24
+w365/wz_w365/activities.py - last updated 2024-04-01
 
 Manage data concerning the "activities" (courses, lessons, etc.).
 
@@ -80,7 +80,11 @@ def read_activities(w365_db):
     group_map = w365_db.group_map
     for node in w365_db.scenario[_Course]:
         course_id = node[_Id]
-        tlist = node[_Teachers].split(LIST_SEP)
+        tlist0 = node.get(_Teachers)
+        if tlist0:
+            tlist = tlist0.split(LIST_SEP)
+        else:
+            tlist = []
         slist = node[_Subjects].split(LIST_SEP)
         glist = node[_Groups].split(LIST_SEP)
         _pr = node.get(_PreferredRooms)
@@ -191,9 +195,10 @@ def read_activities(w365_db):
                 lesson_times.add(slot)
         if lesson_times:
             node = w365_db.idmap[ep_id]
+            w365groups = node[_Groups].split(LIST_SEP)
             cl_list = [
                 w365_db.group_map[_id]
-                for _id in node[_Groups].split(LIST_SEP)
+                for _id in w365groups
             ]
 # I think only whole classes are permitted in "Epochen", so I could drop
 # the groups (but see previous use of "GROUPS" field and consider
@@ -214,7 +219,8 @@ def read_activities(w365_db):
                 "NAME": node[_Name],
                 "LESSONS": llengths,
                 "$W365ID": ep_id,
-#TODO: Field "ID"?
+# This is needed for building EpochPlan lessons (at present):
+                "$W365Groups": w365groups,
             }
             #print("§XNODE:", xnode)
             w365id_nodes.append((ep_id, xnode))

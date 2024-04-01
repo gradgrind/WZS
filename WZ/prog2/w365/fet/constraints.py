@@ -1,5 +1,5 @@
 """
-w365/fet/constraints.py - last updated 2024-03-24
+w365/fet/constraints.py - last updated 2024-04-01
 
 Add constraints to the fet file.
 
@@ -43,6 +43,10 @@ from w365.wz_w365.class_groups import AG_SEP
 #TODO: There could be a clash between the current implementation of
 # lunch breaks and the max-gaps settings.
 
+#TODO: Note that in fet it might be better to not implement stuff like
+# "max. afternoons" directly, but rather to do multiple runs with
+# different fixed afternoons. This might also make dealing with lunch
+# breaks easier.
 
 def EXTRA_SUBJECTS():
     return [
@@ -253,14 +257,13 @@ def get_time_constraints(db, fetout, daylist, periodlist):
         clid = node["ID"]
         cdata = node["$$CONSTRAINTS"]
 #TODO!!!!! Could there be a filter for classes with too few subjects?
-        if clid in ("12", "13"):
-            week_gaps_list.append({
-                "Weight_Percentage": "100",
-                "Max_Gaps": "0",
-                "Students": clid,
-                "Active": "true",
-                "Comments": "",
-            })
+        week_gaps_list.append({
+            "Weight_Percentage": "100",
+            "Max_Gaps": "0",
+            "Students": clid,
+            "Active": "true",
+            "Comments": "",
+        })
         afternoons = cdata[_NumberOfAfterNoonDays]
         n_afternoons = int(afternoons)
         # If "0" afternoons is set this should be set as absence, not as
@@ -452,7 +455,11 @@ def get_time_constraints(db, fetout, daylist, periodlist):
             "Active": "true",
             "Comments": "",
         },
-        # This is an attempt to get the lunch-break as late as possible:
+        # This is an attempt to get the lunch-break as late as possible.
+        # This can help prevent lunch-breaks being allocated before the
+        # last lesson on days where no afternoons would be necessary.
+        # But it is not ideal, especially when the lunch-breaks should be
+        # more evenly distributed!
         {
             "Weight_Percentage": "70",
             "Teacher_Name": None,

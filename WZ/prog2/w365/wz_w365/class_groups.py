@@ -1,5 +1,5 @@
 """
-w365/wz_w365/class_groups.py - last updated 2024-03-23
+w365/wz_w365/class_groups.py - last updated 2024-03-30
 
 Manage class and group data.
 
@@ -79,7 +79,8 @@ def read_groups(w365_db):
     }
     id2div = {}
     for node in w365_db.scenario[_YearDiv]: # Waldorf365: "GradePartiton" (sic)
-        name = node[_Name]
+#TODO:
+        name = node.get(_Name) or "???"
         gidlist = node[_Groups].split(LIST_SEP)
         iglist = [(*id2gtag[w365id], w365id) for w365id in gidlist]
         iglist = [(g, g365) for lp, g, g365 in sorted(iglist)]

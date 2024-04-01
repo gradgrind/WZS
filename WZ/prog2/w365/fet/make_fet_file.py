@@ -1,5 +1,5 @@
 """
-w365/fet/make_fet_file.py - last updated 2024-03-24
+w365/fet/make_fet_file.py - last updated 2024-04-01
 
 Build a fet-file from timetable data derived from Waldorf365.
 
@@ -269,8 +269,10 @@ def get_activities(db, fetout):
     for node in db.tables["COURSES"]:
         try:
             slist = node["SUBJECTS"]
+            block = None
         except KeyError:
             sbj = node["BLOCK"]
+            block = node["$W365Groups"]
             if sbj not in db.sids:
                 # Invent a new subject
                 sbjlist = fetout["Subjects_List"]["Subject"]
@@ -325,8 +327,12 @@ def get_activities(db, fetout):
             "Active": "true",
             "Total_Duration": str(total_duration),
             "Activity_Group_Id": id0 if len(durations) > 1 else "0",
-            "Comments": node["$W365ID"],
         }
+        if block is None:
+            activity["Comments"] = node["$W365ID"]
+        else:
+            clist = ",".join(block)
+            activity["Comments"] = f'{node["$W365ID"]}+{clist}'
         for i, ll in enumerate(durations):
             if i > 0:
                 activity = activity.copy()
@@ -361,7 +367,8 @@ def build_fet_file(wzdb):
     fetout = {
         "@version": FET_VERSION,
         "Mode": "Official",
-        "Institution_Name": wzdb.config["SCHOOL"]
+        "Institution_Name": wzdb.config["SCHOOL"],
+        "Comments": wzdb.scenario["$$SCENARIO"]["Id"],
     }
     fetbase = {"fet": fetout}
 
@@ -404,7 +411,7 @@ if __name__ == "__main__":
 
     dbpath = DATAPATH("db365.sqlite", "w365_data")
     w365path = DATAPATH("test.w365", "w365_data")
-#    w365path = DATAPATH("fwsb.w365", "w365_data")
+    w365path = DATAPATH("fwsb.w365", "w365_data")
     print("DATABASE FILE:", dbpath)
     print("W365 FILE:", w365path)
     try:
