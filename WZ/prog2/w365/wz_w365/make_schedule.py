@@ -255,6 +255,7 @@ if __name__ == "__main__":
     import xmltodict
     from core.base import DATAPATH
     source = DATAPATH("fwsb_data_and_timetable.fet", "w365_data")
+    source = DATAPATH("fms_data_and_timetable.fet", "w365_data")
     with open(source, "r", encoding = "utf-8") as fh:
         xmlin = fh.read()
     data = xmltodict.parse(xmlin)
@@ -278,6 +279,7 @@ if __name__ == "__main__":
     )
     print("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$")
     out = DATAPATH("fwsb_extend", "w365_data")
+    out = DATAPATH("fms_extend", "w365_data")
     with open(out, "w", encoding = "utf-8") as fh:
         fh.write(schedule)
     print("  -->>", out)

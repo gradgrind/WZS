@@ -1,5 +1,5 @@
 """
-w365/wz_w365/class_groups.py - last updated 2024-03-30
+w365/wz_w365/class_groups.py - last updated 2024-04-08
 
 Manage class and group data.
 
@@ -136,6 +136,7 @@ def read_groups(w365_db):
         if c:
             xnode["$$EXTRA"] = c
     # Add classes to database
+    w365id_nodes.sort(key = lambda x: x[1]["SORTING"])
     w365_db.add_nodes(table, w365id_nodes)
     # Construct a look-up mapping for class/group (w365id) -> wz-form
     group_map = {}

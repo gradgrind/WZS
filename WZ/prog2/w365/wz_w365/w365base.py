@@ -1,5 +1,5 @@
 """
-w365/wz_w365/w365base.py - last updated 2024-03-24
+w365/wz_w365/w365base.py - last updated 2024-04-06
 
 Basic functions for:
     Reading a Waldorf365 file.
@@ -131,6 +131,7 @@ class W365_DB:
             if _id:
                 self.id2key[_id] = k
             self.key2node[k] = n
+            n["$KEY"] = k
             tlist.append(n)
 
     def config2db(self):
