@@ -1,5 +1,5 @@
 """
-timetable/constraints.py - last updated 2024-04-08
+timetable/constraints.py - last updated 2024-04-09
 
 Prepare constraints for activity allocation.
 
@@ -48,6 +48,168 @@ def EXTRA_SUBJECTS():
         {"Name": SUBJECT_LUNCH_BREAK, "Comments": "Mittagspause"},
         {"Name": SUBJECT_FREE_AFTERNOON, "Comments": "Freier Nachmittag"}
     ]
+
+def collect_teacher_constraints(constraints, n_days):
+    """Process Waldorf365 teacher constraints.
+    """
+    absence_list = []           # not-available times
+    max_days_list = []          # max days per week
+    maxlessonsperday_list = []  # max lesson periods per day
+    maxgapsperday_list = []     # max gaps per day
+    minlessonsperday_list = []  # min lesson periods per day
+    afternoon_list = []         # max teaching afternoons
+
+#    return
+#?
+    for node in d.tables["TEACHERS"]:
+#        if tid not in used:
+#            continue
+# ...
+        tid = node["ID"]
+        cdata = node["$$CONSTRAINTS"]
+
+
+#!
+        n_afternoons = int(constraints[_NumberOfAfterNoonDays])
+
+# Maybe rather start with the explicitly declared absences and see if
+# these already cover the free afternoons according to max-afternoons.
+# But the max-afternoons is perhaps a soft constraint so all that could
+# happen is that it might be rendered superfluous. However, a hard
+# max-afternoons might also be useful, when it doesn't really matter
+# which afternoons are chosen. Is a weighting available from W365? No,
+# none of the constraints in the teacher node have a weighting.
+# Maybe support hard and soft, choosing on the basis of the weighting,
+# or only support the soft constraint but allow a large penalty.
+# If "0" afternoons is set this should be set as absence, not as
+# an additional constraint here? But is it really a hard constraint?
+# Suggestion: Make the max-afternoons soft, the weighting would be a
+# global value (settable default). Possibly W365 has a means to set this
+# default. Another source might be able to set individual weightings.
+
+        # Check necessity for (soft) constraint
+        n_free = n_days
+        for dhours in node.get("NOT_AVAILABLE"):
+            if afternoon_set.issubset(dhours):
+                n_free -= 1
+        if n_free >  n_afternoons:
+            pass
+#TODO: add soft constraint with weighting (where would this be?),
+# or default weighting (where?)
+
+
+
+        absences = {}
+
+#TODO: This could lead to some tricky constraint interactions!
+# If there are fixed absences, the constraints could depend on exactly
+# which days are chosen – which, could be a big problem ...
+# Perhaps I should choose the days with the most free slots?
+# Actually, teachers can (mostly) be a bit more flexible than classes, so
+# perhaps the initial approach could work for them.
+
+#!
+        maxdays = constraints[_MaxDays]
+        n_maxdays = int(maxdays)
+
+        if n_maxdays < n_days:
+            t_max_days_list.append({
+                "Weight_Percentage": "100",
+                "Teacher_Name": tid,
+                "Max_Days_Per_Week": maxdays,
+                "Active": "true",
+                "Comments": "",
+            })
+        else:
+            n_maxdays = n_days
+        if n_afternoons < n_maxdays:
+            assert afternoon_start >= 0
+            if n_afternoons == 0:
+                for d in range(len(daylist)):
+                    absences[d] = afternoon_hours.copy()
+            else:
+                t_afternoon_list.append({
+                    "Weight_Percentage": "100",
+                    "Teacher_Name": tid,
+                    "Interval_Start_Hour": periodlist[afternoon_start],
+                    "Interval_End_Hour": None,  # end of day
+                    "Max_Days_Per_Week": afternoons,
+                    "Active": "true",
+                    "Comments": "",
+                })
+        cdata_absences = node.get("NOT_AVAILABLE")
+        if cdata_absences:
+            for d, plist in cdata_absences.items():
+                try:
+                    pset = absences[d]
+                except KeyError:
+                    pset = {periodlist[h] for h in plist}
+                    absences[d] = pset
+                else:
+                    pset.update(periodlist[h] for h in plist)
+        if absences:
+            natlist = []
+            for d in sorted(absences):
+                day = daylist[d]
+                pset = absences[d]
+                for h in periodlist:
+                    if h in pset:
+                        natlist.append({
+                            "Day": day,     # e.g. "Do."
+                            "Hour": h       # e.g. "B"
+                        })
+            t_absence_list.append({
+                "Weight_Percentage": "100",
+                "Teacher": tid,
+                "Number_of_Not_Available_Times": str(len(natlist)),
+                "Not_Available_Time": natlist,
+                "Active": "true",
+                "Comments": "",
+            })
+
+        maxlessonsperday = cdata[_MaxLessonsPerDay]
+        if int(maxlessonsperday) < n_hours:
+            t_maxlessonsperday_list.append({
+                # Can be < 100, but not really recommended:
+                "Weight_Percentage": "100",
+                "Teacher_Name": tid,
+                "Maximum_Hours_Daily": maxlessonsperday,
+                "Active": "true",
+                "Comments": "",
+            })
+
+        maxgapsperday = cdata[_MaxGapsPerDay]
+        if int(maxgapsperday) < n_hours:
+            t_maxgapsperday_list.append({
+                "Weight_Percentage": "100",
+                "Teacher_Name": tid,
+                "Max_Gaps": maxgapsperday,
+                "Active": "true",
+                "Comments": "",
+            })
+
+        minlessonsperday = cdata[_MinLessonsPerDay]
+        if int(minlessonsperday) > 1:
+            t_minlessonsperday_list.append({
+                "Weight_Percentage": "100",
+                "Teacher_Name": tid,
+                "Minimum_Hours_Daily": minlessonsperday,
+                "Allow_Empty_Days": "true",
+                "Active": "true",
+                "Comments": "",
+            })
+
+#TODO
+#        categories = cdata[_Categories]
+
+    constraint_list["ConstraintTeacherIntervalMaxDaysPerWeek"] = t_afternoon_list
+    constraint_list["ConstraintTeacherNotAvailableTimes"] = t_absence_list
+    constraint_list["ConstraintTeacherMaxDaysPerWeek"] = t_max_days_list
+    constraint_list["ConstraintTeacherMaxHoursDaily"] = t_maxlessonsperday_list
+    constraint_list["ConstraintTeacherMaxGapsPerDay"] = t_maxgapsperday_list
+    constraint_list["ConstraintTeacherMinHoursDaily"] = t_minlessonsperday_list
+
+
 
 
 def get_time_constraints(data, ndays, nhours):
@@ -139,31 +301,18 @@ def get_time_constraints(data, ndays, nhours):
 # perhaps the initial approach could work for them.
         maxdays = cdata[_MaxDays]
         n_maxdays = int(maxdays)
-        if n_maxdays < n_days:
-            t_max_days_list.append({
-                "Weight_Percentage": "100",
-                "Teacher_Name": tid,
-                "Max_Days_Per_Week": maxdays,
-                "Active": "true",
-                "Comments": "",
-            })
-        else:
+        if n_maxdays > n_days:
             n_maxdays = n_days
         if n_afternoons < n_maxdays:
+#? afternoon_start? afternoon_hours (set!)?
             assert afternoon_start >= 0
             if n_afternoons == 0:
-                for d in range(len(daylist)):
+                for d in range(n_days):
                     absences[d] = afternoon_hours.copy()
-            else:
-                t_afternoon_list.append({
-                    "Weight_Percentage": "100",
-                    "Teacher_Name": tid,
-                    "Interval_Start_Hour": periodlist[afternoon_start],
-                    "Interval_End_Hour": None,  # end of day
-                    "Max_Days_Per_Week": afternoons,
-                    "Active": "true",
-                    "Comments": "",
-                })
+        else:
+#?
+            n_afternoons = -1
+
         cdata_absences = node.get("NOT_AVAILABLE")
         if cdata_absences:
             for d, plist in cdata_absences.items():

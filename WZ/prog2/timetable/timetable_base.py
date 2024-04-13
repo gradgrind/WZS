@@ -1,5 +1,5 @@
 """
-timetable/timetable_base.py - last updated 2024-04-08
+timetable/timetable_base.py - last updated 2024-04-13
 
 Build a timetable with data derived from Waldorf365.
 
@@ -99,18 +99,37 @@ class TimetableBase:
         self.class_indexes = {}
         for i, node in enumerate(self.classes):
             self.class_indexes[node["$KEY"]] = i
-            print("?class:", node)
+            #print("?class:", node)
 # The divisions may or may not be named (currently if there is no name,
-# "???" is used). Unfortunately, in W365 the order of groups within a
-# division cannot (currently) be specified reliably. This would be
-# important for timetable displays. As a temporary hack, I could sort
-# the groups, but the sorting should be removed sometime and the source
-# (W365) fixed.
+# "???" is used).
+#TODO: Build bitmaps for all groups in the divisions, or do any other
+# preparation for the collision tests.
 
 # In classes with no divisions, the empty set of atomic groups cannot
 # be used for conflict tests. If the tesing is done class-for-class, it
 # could be replaced by {"*"} or all full-class activities could be
 # handled separately, conflicting with anything.
+
+            agmap = node["$GROUP_ATOMS"]
+            agset = agmap[""]
+            g2bits = {}
+            if agset:
+                i = 1
+                ag2bit = {}
+                # The ordering can be different each time!
+                for ag in agset:
+                    ag2bit[ag] = i
+                    i <<= 1
+                for g, ags in agmap.items():
+                    b = 0
+                    for ag in ags:
+                        b |= ag2bit[ag]
+                    g2bits[g] = b
+            else:
+                # The class has no divisions
+                g2bits[""] = 1
+            node["§GROUP_BITS"] = g2bits
+            #print("?g2bits:", g2bits)
 
 
 
@@ -461,6 +480,11 @@ if __name__ == "__main__":
     filedata = read_active_scenario(w365path)
     w365 = W365_DB(dbpath, filedata)
 
+    print("?????")
+    for i in filedata["$$SCENARIO"]["UserConstraint"]:
+        print(" ---", i)
+    #quit(2)
+
     read_days(w365)
     read_periods(w365)
     read_groups(w365)
@@ -482,3 +506,9 @@ if __name__ == "__main__":
     print("\n $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$")
     from timetable.constraints import get_time_constraints
     get_time_constraints(w365, len(timetable_base.days), len(timetable_base.hours))
+
+
+# I think I possibly need to handle only/primrily concrete absences as
+# hard constraints in the primary runs. I could start with that and see
+# if anything needs adding. What about the consequences of fixed lessons,
+# though?
