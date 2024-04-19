@@ -1,5 +1,5 @@
 """
-w365/wz_w365/activities.py - last updated 2024-04-19
+w365/wz_w365/activities.py - last updated 2024-04-17
 
 Manage data concerning the "activities" (courses, lessons, etc.).
 
@@ -87,21 +87,15 @@ def read_activities(w365_db):
             tlist = tlist0.split(LIST_SEP)
         else:
             tlist = []
-        # There must be exactly one subject. Courses with multiple
-        # subjects should be replaced by (defined) blocks.
+#TODO: What about not accepting courses with multiple subjects?
+# I could insist that these are replaced by (defined) blocks.
         slist = node[_Subjects].split(LIST_SEP)
-        sklist = [w365_db.id2key[s] for s in slist]
-        if len(sklist) != 1:
-            stlist = ",".join(db.key2node[s]["ID"] for s in sklist)
-#TODO
-            REPORT_ERROR(f'Ungültiges Fach: „{stlist}“')
-            continue
-        subject = sklist[0]
         glist = node[_Groups].split(LIST_SEP)
         _pr = node.get(_PreferredRooms)
         rlist = _pr.split(LIST_SEP) if _pr else []
         tklist = [w365_db.id2key[t] for t in tlist]
         gidlist = [group_map[g] for g in glist]
+        sklist = [w365_db.id2key[s] for s in slist]
         rklist = [w365_db.id2key[r] for r in rlist]
         workload = node[_HandWorkload]
         if workload == "555.555":   # (automatic!)
@@ -126,11 +120,15 @@ def read_activities(w365_db):
         xnode = {
             "TEACHERS": tklist,
             "GROUPS": gidlist,
-            "SUBJECT": subject,
+            "SUBJECTS": sklist,
             "ROOM_WISH":  rklist,
             "WORKLOAD": workload,
             "$W365ID": course_id,
         }
+        if len(sklist) != 1:
+#TODO
+            REPORT_ERROR(f'Ungültiges Fach: {pr_course(w365_db, xnode)}')
+            continue
         cat = categories(w365_db.idmap, node)
         xnode["$$EXTRA"] = cat
         #print("\n???", cat)
@@ -141,7 +139,7 @@ def read_activities(w365_db):
 # a limit, one should probably extend something else!
         # Is the node connected with a block?
         try:
-            b = cat.pop("Block")    # category-id of block tag
+            b = cat["Block"]
         except KeyError:
             b = None
         else:
@@ -152,18 +150,14 @@ def read_activities(w365_db):
                 block_entries[b] = block_entry
         epweeks = node[_EpochWeeks]
         if total_duration == 0:
+            if b:
+                block_entry[1].append(xnode)
             if epweeks != "0.0":
                 # Block ("Epoche")
                 if not b:
 #TODO: Maybe this should be an error?
                     REPORT_WARNING(f"Epoche ohne Kennzeichen: {pr_course(w365_db, xnode)}")
                 xnode["BLOCK_WEEKS"] = epweeks
-            if b:
-                block_entry[1].append(xnode)
-                # Don't immediately add block members to the database,
-                # wait until the block-base-course keys are available,
-                # so that a link can be included.
-                continue
         elif epweeks != "0.0":
 #TODO
             REPORT_ERROR(f"Kurs mit Epochen- und Stundenanteil: {pr_course(w365_db, xnode)}")
@@ -171,7 +165,7 @@ def read_activities(w365_db):
         else:
             if b:
                 if block_entry[0]:
-                    REPORT_ERROR(f"Epochenschiene {w365_db.idmap[b]} hat zwei Kurse mit Stunden")
+                    REPORT_ERROR(f"Epochenschiene {b} hat zwei Kurse mit Stunden")
                     continue    # ignore this entry!
                 block_entry[0] = xnode
             xnode["LESSONS"] = lessons
@@ -181,21 +175,12 @@ def read_activities(w365_db):
         w365id_nodes.append((course_id, xnode))
     # Add to database
     w365_db.add_nodes(table, w365id_nodes)
-    # Add block members
-    w365id_nodes.clear()
-    for b, v in block_entries.items():
-        n0, mlist = v
-        k = w365_db.id2key[n0["$W365ID"]]
-        #print("\n%%%%%%%%%%", k, b)
-        n0["$MEMBERS"] = mlist
-        for n in mlist:
-            n["BLOCK_ROOT"] = k
-            #print(" ++", n)
-            # In member courses the W365 course-id is not needed
-            w365id_nodes.append((n.pop("$W365ID"), n))
-        #print("\n%%%%%%%%%%", n0)
-    # Add to database
-    w365_db.add_nodes(table, w365id_nodes)
+
+#TODO: Handle <block_entries>
+    #for k, v in block_entries.items():
+    #    print(f"§BLOCK {k}:", v)
+
+    ## The blocks ("Epochen") must be handled separately (at present).
 
 #TODO: Need to specify which "Schedule" to use
     schedules = [
@@ -223,24 +208,96 @@ def read_activities(w365_db):
 
 # My current preference is to ignore the W365 Epochen, using tagged
 # "normal" courses instead.
+#TODO--?
+    block_lessons = {}
+    for ep in w365_db.scenario[_EpochPlan]:
+        #print("????ep:", ep)
+        block_lessons[ep[_Id]] = []
 
+    # NOTE that I am only picking up fixed Epochenstunden ...
+#TODO: Non-fixed ones cannot at present be forced to be double lessons,
+# so their use is a bit limited.
     for lid in lesson_ids:
         node = w365_db.idmap[lid]
-        try:
-            course_id = node[_Course]
-        except KeyError:
-#TODO
-            REPORT_WARNING("Zeiten für Epochenschienen werden nicht berücksichtigt")
-            continue
+        course_id = node.get(_Course)
         if node[_Fixed] == "true":
             slot = (node[_Day], node[_Hour])
         else:
             slot = None
-        # Add lesson id and time slot (if fixed) to course
-        course_lessons[course_id].append((lid, slot))
+        if course_id:
+            # Add lesson id and time slot (if fixed) to course
+            course_lessons[course_id].append((lid, slot))
+#TODO--? Treat an Epoch time as an error?
+        else:
+            # Add lesson id and time slot (if fixed) to block
+            ep_id = node[_EpochPlan]
+            block_lessons[ep_id].append((lid, slot))
+
+    w365id_nodes.clear()
+#TODO--?
+    ep_times = {}
+    for ep_id, epl in block_lessons.items():
+        #print("????ep_id:", ep_id)
+        lesson_times = set()
+        for l_id, slot in epl:
+            #print("    ", l_id, slot)
+            if slot:
+                lesson_times.add(slot)
+        if lesson_times:
+            node = w365_db.idmap[ep_id]
+            w365groups = node[_Groups].split(LIST_SEP)
+            cl_list = [
+                w365_db.group_map[_id]
+                for _id in w365groups
+            ]
+# I think only whole classes are permitted in "Epochen", so I could drop
+# the groups (but see previous use of "GROUPS" field and consider
+# future changes).
+#        print("    or just classes:", [cl for cl, _ in cl_list])
+            #print(" -e-", node, lesson_times)
+            pltimes = process_lesson_times(lesson_times)
+            llengths = []
+            ltlist = []
+            for ll, times in pltimes.items():
+                for d, p in times:
+                    llengths.append(ll)
+                    ltlist.append((ll, d, p))
+            ep_times[ep_id] = ltlist
+            xnode = {
+                "GROUPS": cl_list,
+                "BLOCK": node[_Shortcut],
+                "NAME": node[_Name],
+                "LESSONS": llengths,
+                "$W365ID": ep_id,
+# This is needed for building EpochPlan lessons (at present):
+                "$W365Groups": w365groups,
+            }
+            #print("§XNODE:", xnode)
+            w365id_nodes.append((ep_id, xnode))
+
+# At present it seems best not to attempt to deal with "Epochen" for which
+# no times are set. It is all too complicated.
+
+    # Add to database
+    w365_db.add_nodes(table, w365id_nodes)
 
     # Now deal with the individual lessons
     w365id_nodes.clear()
+#TODO--?
+    for ep_id, ltlist in ep_times.items():
+        k = w365_db.id2key[ep_id]
+        for ll, d, p in ltlist:
+            xnode =  {
+                "LENGTH": str(ll),
+                "_Course": k,
+                "DAY": str(d),
+                "PERIOD": str(p),
+                "FIXED": "true",
+                #"_Parallel": 0,
+            }
+            w365id_nodes.append(("", xnode))
+            #print("     ++", xnode)
+
     for course_id, lslots in course_lessons.items():
         if lslots:
             lesson_times = set()

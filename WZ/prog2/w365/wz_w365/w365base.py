@@ -1,5 +1,5 @@
 """
-w365/wz_w365/w365base.py - last updated 2024-04-06
+w365/wz_w365/w365base.py - last updated 2024-04-17
 
 Basic functions for:
     Reading a Waldorf365 file.
@@ -219,8 +219,8 @@ def absences(idmap, node):
     absences = {}
     if a0:
         alist = []
-        for id in a0.split(LIST_SEP):
-            a = idmap[id]
+        for w365id in a0.split(LIST_SEP):
+            a = idmap[w365id]
             alist.append((int(a[_day]), int(a[_hour])))
         alist.sort()
         for day, hour in alist:
@@ -232,10 +232,48 @@ def absences(idmap, node):
 
 
 def categories(idmap, node):
-#TODO
     c = node.get(_Categories)
-    catlist = []
+    cat = {
+        "WorkloadFactor": 1.0,
+    }
     if c:
-        for id in c.split(LIST_SEP):
-            catlist.append(idmap[id])
-    return catlist
+        wf = False
+        role = 0
+        notcolliding = False
+        ctag = False
+        for w365id in c.split(LIST_SEP):
+            cnode = idmap[w365id]
+            wf_ = cnode["WorkloadFactor"]
+            if wf_ != "1.0":
+#TODO
+                assert not wf
+                wf = True
+                cat["WorkloadFactor"] = float(wf_)
+            if cnode["Colliding"] == "false":
+                cat["NotColliding"] = "true"
+            r = cnode["Role"]
+            role |= int(r)
+
+
+            if "_" in cnode["Shortcut"]:
+#TODO
+                assert not ctag
+                ctag = True
+                cat["Block"] = w365id
+
+        if role & 1:
+            cat["CanSubstitute"] = "true"   # to mark a special subject as
+                            # representing "available for substitutions"
+        if role & 2:
+            cat["NoReport"] = "true"        # Course with no report
+        if role & 4:
+            cat["NotRegistered"] = "true"   # Course with no register
+                                            # (Klassenbuch) entry
+        if role & 8:
+            cat["WholeDayBlock"] = "true"   # for "Epoch" definitions
+        if role & 16:
+            cat["NoTeacher"] = "true"       # to mark a "dummy" teacher
+        if notcolliding:
+            cat["NotColliding"] = "true"
+
+    return cat

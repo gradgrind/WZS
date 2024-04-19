@@ -1,5 +1,5 @@
 """
-timetable/timetable_base.py - last updated 2024-04-17
+timetable/timetable_base.py - last updated 2024-04-14
 
 Build a timetable with data derived from Waldorf365.
 
@@ -141,21 +141,57 @@ class TimetableBase:
 #        next_activity_id(reset = True)
 
 
-        # It is possible in W365 to have courses with multiple subjects.
-        # These are not supported here. It is assumed that these are
-        # handled by (named) blocks instead (at present, 2024-04-17,
-        # using special "Categories", but that might change.
+# It is possible in W365 to have courses with multiple subjects.
+# It might be better to handle this by means of blocks, but the current
+# (2024.04.07) support for blocks in W365 is limited.
+        multisubjects = set()
 
 #?
 #        subject_activities = SubjectGroupActivities(data.full_atomic_groups)
 
-        # Both blocks and their members are included as courses, but
-        # the block-course itself has lessons and the members refer to
-        # this, they themselves having no lessons, but an indication of
-        # the worload. The teachers, class-groups and rooms would be
-        # supplied by the block members.
+# The weakness of block handling in W365 is causing me problems here.
+# Currently I am only really supporting a single block, HU-OS. I am not
+# directly recording any links between blocks and their courses (because
+# this is so weak in W365 and I hope it will change ...).
+# Perhaps the most promising approach would be to include both blocks
+# and their members in the courses list. The blocks themselves would
+# need no subjects (except the block tag and name), no teachers and no
+# class-groups. The teachers and class-groups would be supplied by the
+# block members. These would have no lessons, but an indication of the
+# workload (Epochen or, as in W365, Epochen-Wochen) and they would
+# reference the block to which they belong.
         for node in data.tables["COURSES"]:
-            sbj_key = node["SUBJECT"]
+            try:
+                slist = node["SUBJECTS"]
+                block = None
+            except KeyError:
+                sbj = node["BLOCK"]
+                print("§Block:", node)
+
+#W365
+                block = node["$W365Groups"]
+                if sbj not in data.sids:
+                    # Invent a new subject
+                    i = len(self.subjects)
+                    self.subjects.append({
+                        "ID": sbj,
+                        "NAME": f'BLOCK: {node["NAME"]}',
+                        #"#": ?
+                    })
+# Make it into a dict supplying the index?
+                    data.sids.add(sbj)
+            else:
+                sbj = ",".join(data.key2node[s]["ID"] for s in slist)
+                if len(slist) > 1 and sbj not in multisubjects:
+                    # Invent a new subject
+                    i = len(self.subjects)
+                    self.subjects.append({
+                        "ID": sbj,
+                        "NAME": f'MULTIPLE: {sbj}',
+                        #"#": ?
+                    })
+# Make it into a dict supplying the index?
+                    multisubjects.add(sbj)
 # What to do with the subject index?
 
         return
