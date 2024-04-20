@@ -1,7 +1,8 @@
 """
-w365/wz_w365/class_groups.py - last updated 2024-04-08
+timetable/w365/class_groups.py - last updated 2024-04-20
 
 Manage class and group data.
+
 
 =+LICENCE=================================
 Copyright 2024 Michael Towers
@@ -20,25 +21,14 @@ Copyright 2024 Michael Towers
 =-LICENCE=================================
 """
 
-if __name__ == "__main__":
-    import sys, os
-
-    this = sys.path[0]
-    appdir = os.path.dirname(os.path.dirname(this))
-    sys.path[0] = appdir
-    basedir = os.path.dirname(appdir)
-    from core.base import setup
-    setup(basedir)
-
 #from core.base import Tr
-#T = Tr("w365.wz_w365.class_groups")
+#T = Tr("timetable.w365.class_groups")
 
 ### +++++
 
 from itertools import product
 
-from w365.wz_w365.w365base import (
-    W365_DB,
+from timetable.w365.w365base import (
     _Shortcut,
     _Name,
     _Id,
@@ -60,12 +50,13 @@ from w365.wz_w365.w365base import (
     categories,
 )
 
+#TODO: Somewhere else? Something else?
+# It is currently needed as a global in this module.
 AG_SEP = "."
 
 ### -----
 
 
-#TODO
 def read_groups(w365_db):
     table = "CLASSES"
     w365id_nodes = []
@@ -79,8 +70,7 @@ def read_groups(w365_db):
     }
     id2div = {}
     for node in w365_db.scenario[_YearDiv]: # Waldorf365: "GradePartiton" (sic)
-#TODO:
-        name = node.get(_Name) or "???"
+        name = node.get(_Name) or ""
         gidlist = node[_Groups].split(LIST_SEP)
         iglist = [(*id2gtag[w365id], w365id) for w365id in gidlist]
         iglist = [(g, g365) for lp, g, g365 in sorted(iglist)]
@@ -116,7 +106,6 @@ def read_groups(w365_db):
             divlist = [[n, gl] for lp, n, gl in divlist]
         #print(f'+++ {cltag}: {divlist}')
         xnode["DIVISIONS"] = divlist
-#?
         xnode["$GROUP_ATOMS"] = make_class_groups(divlist)
         #print("  *** $GROUP_ATOMS:", xnode["$GROUP_ATOMS"])
         constraints = {
@@ -166,6 +155,12 @@ def make_class_groups(divs):
     divs1 = []
     divs1x = []
     for n, d in divs:
+
+#TODO-- (just testing)
+        if "BG" in d:
+            d.append("G=A+BG")
+            d.append("B=BG+R")
+
         gs = []
         xg = {}
         divs1.append(gs)
@@ -216,26 +211,3 @@ def make_class_groups(divs):
     # Add the atomic groups for the whole class
     g2ag[""] = set(aglist)
     return g2ag
-
-
-# --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
-
-# Remove existing database file, add classes and groups from w365.
-
-if __name__ == "__main__":
-    from core.base import DATAPATH
-    from w365.wz_w365.w365base import read_active_scenario
-
-    dbpath = DATAPATH("db365.sqlite", "w365_data")
-    w365path = DATAPATH("test.w365", "w365_data")
-    print("DATABASE FILE:", dbpath)
-    print("W365 FILE:", w365path)
-    try:
-        os.remove(dbpath)
-    except FileNotFoundError:
-        pass
-
-    filedata = read_active_scenario(w365path)
-    w365 = W365_DB(dbpath, filedata)
-
-    read_groups(w365)

@@ -42,13 +42,13 @@ if __name__ == "__main__":
 
 from lib import xmltodict
 
-#from w365.wz_w365.class_groups import AG_SEP
-#from w365.fet.fet_support import next_activity_id
+from timetable.w365.class_groups import AG_SEP
+from timetable.fet.fet_support import next_activity_id
 from timetable.fet.constraints import get_time_constraints, EXTRA_SUBJECTS
 
-# This is not fet-specific, all timetable processors would need at least
-# some of it. Factor it out.
-#from w365.fet.lesson_constraints import SubjectGroupActivities
+#TODO: This is not fet-specific, all timetable processors would need at
+# least some of it. Factor it out.
+from timetable.fet.lesson_constraints import SubjectGroupActivities
 
 ###-----
 
@@ -93,10 +93,13 @@ def class_groups(node):
     # fet-subgroups.
     # If there are "compound" groups, these will contain "normal"
     # groups, which then do not need additional fet-group entries.
+    #print("\n§CLASS", classtag, "::", [d[1] for d in divs])
     if len(divs) == 1:
         pending = []
         done = set()
         for g in sorted(g2ag):
+            if not g:
+                continue
             agl = g2ag[g]
             if len(agl) == 1:
                 pending.append(g)
@@ -127,6 +130,8 @@ def class_groups(node):
                 #print(f">>> {g}")
     else:
         for g in sorted(g2ag):
+            if not g:
+                continue
             agl = g2ag[g]
             subgroups = [
                 {
@@ -189,7 +194,7 @@ def get_teachers(data, fetout):
 
 def get_subjects(data, fetout):
     fetlist = EXTRA_SUBJECTS()
-    sids = set()
+#    sids = set()
     for node in data.tables["SUBJECTS"]:
         sid = node["ID"]
         fetlist.append({"Name": sid, "Comments": node["NAME"]})
@@ -198,35 +203,17 @@ def get_subjects(data, fetout):
 #    data.sids = sids
 
 
-def get_groups(db, fetout):
-    # Build a mapping of all groups (with class prefix) to
-    # their "atomic" groups (also with class prefix)
-    atomic_groups = {}
-    # Collect class data for fet
-    ylist = []
-    for node in db.tables["CLASSES"]:
-        #print(" ***", node)
-        ylist.append(class_groups(node))
-
-        clid = node["ID"]
-        group_atoms = node["$GROUP_ATOMS"]
-        ag_kag = {
-            ag: f"{clid}{AG_SEP}{ag}"
-            for ag in group_atoms[""]
-        }
-        for g, ags in group_atoms.items():
-            kg = f"{clid}{AG_SEP}{g}" if g else clid
-            atomic_groups[kg] = {ag_kag[ag] for ag in ags} or {clid}
-
-    fetout["Students_List"] = {"Year": ylist}
-    return atomic_groups
+def get_groups(data, fetout):
+    fetout["Students_List"] = {"Year": [
+        class_groups(node) for node in data.tables["CLASSES"]
+    ]}
 
 
-def get_rooms(db, fetout):
+def get_rooms(data, fetout):
     fetlist = []
     rconstraints = {}
     roomgroups = []
-    for node in db.tables["ROOMS"]:
+    for node in data.tables["ROOMS"]:
         #print("ROOM:", node)
         rid = node["ID"]
         rname = node["NAME"]
@@ -246,7 +233,7 @@ def get_rooms(db, fetout):
         roomlist = [
             {
                 "Number_of_Real_Rooms": "1",
-                "Real_Room": db.key2node[roomkey]["ID"],
+                "Real_Room": data.key2node[roomkey]["ID"],
             }
             for roomkey in rglist
         ]
@@ -262,40 +249,23 @@ def get_rooms(db, fetout):
     fetout["Rooms_List"] = {"Room": fetlist}
 
 
-def get_activities(db, fetout):
+def get_activities(data, fetout):
     fetlist = []
     next_activity_id(reset = True)
-    multisubjects = set()
-    subject_activities = SubjectGroupActivities(db.full_atomic_groups)
-    for node in db.tables["COURSES"]:
-        try:
-            slist = node["SUBJECTS"]
-            block = None
-        except KeyError:
-            sbj = node["BLOCK"]
-            block = node["$W365Groups"]
-            if sbj not in db.sids:
-                # Invent a new subject
-                sbjlist = fetout["Subjects_List"]["Subject"]
-                sbjlist.append({"Name": sbj, "Comments": f"BLOCK_{sbj}"})
-                db.sids.add(sbj)
-        else:
-            sbj = ",".join(db.key2node[s]["ID"] for s in slist)
-            if len(slist) > 1 and sbj not in multisubjects:
-                # Invent a new subject
-                sbjlist = fetout["Subjects_List"]["Subject"]
-                sbjlist.append({"Name": sbj, "Comments": f"MULTI_{sbj}"})
-                multisubjects.add(sbj)
+    subject_activities = SubjectGroupActivities(data.full_atomic_groups)
+    key2node = data.key2node
+    for node in data.tables["COURSES"]:
+        sbj = key2node[node["SUBJECT"]]["ID"]
         tlist = node.get("TEACHERS") or []
-        tidlist = [db.key2node[t]["ID"] for t in tlist]
+        tidlist = [key2node[t]["ID"] for t in tlist]
         gidlist = []
         for cx, g in node["GROUPS"]:
             if g:
-                gidlist.append(f'{db.key2node[cx]["ID"]}{AG_SEP}{g}')
+                gidlist.append(f'{key2node[cx]["ID"]}{AG_SEP}{g}')
             else:
-                gidlist.append(db.key2node[cx]["ID"])
+                gidlist.append(key2node[cx]["ID"])
         rlist = node.get("ROOM_WISH") or []
-        ridlist = [db.key2node[r]["ID"] for r in rlist]
+        ridlist = [key2node[r]["ID"] for r in rlist]
         ## Generate the activity or activities
         try:
             durations = node["LESSONS"]
@@ -305,14 +275,6 @@ def get_activities(db, fetout):
 #?
             continue
 #TODO
-
-# How are the courses and blocks linked??? Surely a block-course would
-# need a link to its block? At present I just haven't implemented this
-# because the Waldorf365 approach is so complicated. That means that the
-# block lessons (at least the fixed ones ...) can be associated with the
-# classes, but no other information is available. If teachers (etc.)
-# should be blocked by the blocks, this must be specified separately.
-
 # How would a "course" with no lessons look? (A bodge to cater for
 # extra workloads/payments)
 
@@ -329,11 +291,7 @@ def get_activities(db, fetout):
             "Total_Duration": str(total_duration),
             "Activity_Group_Id": id0 if len(durations) > 1 else "0",
         }
-        if block is None:
-            activity["Comments"] = node["$W365ID"]
-        else:
-            clist = ",".join(block)
-            activity["Comments"] = f'{node["$W365ID"]}+{clist}'
+        activity["Comments"] = node["$W365ID"]
         for i, ll in enumerate(durations):
             if i > 0:
                 activity = activity.copy()
@@ -344,7 +302,7 @@ def get_activities(db, fetout):
             fetlist.append(activity)
             activity_list.append(activity)
         subject_activities.add_activities(sbj, gidlist, aid_list)
-    db.set_subject_activities(subject_activities)
+    data.set_subject_activities(subject_activities)
 
 # Defining a set of lessons as an "Activity_Group" / subactivities
 # is a way of grouping activities which are split into a number
@@ -359,6 +317,27 @@ def get_activities(db, fetout):
 # is the sum of the Duration parameters of all the members.
 
     fetout["Activities_List"] = {"Activity": fetlist}
+
+
+#TODO: Is this needed only for fet, or elsewhere, too?
+# Possibly move it somewhere else, to be shared.
+def get_full_atomic_groups(data):
+    """Return a mapping of all groups (with class prefix) to
+    their "atomic" groups (also with class prefix).
+    """
+    atomic_groups = {}
+    for node in data.tables["CLASSES"]:
+        #print(" ***", node)
+        clid = node["ID"]
+        group_atoms = node["$GROUP_ATOMS"]
+        ag_kag = {
+            ag: f"{clid}{AG_SEP}{ag}"
+            for ag in group_atoms[""]
+        }
+        for g, ags in group_atoms.items():
+            kg = f"{clid}{AG_SEP}{g}" if g else clid
+            atomic_groups[kg] = {ag_kag[ag] for ag in ags} or {clid}
+    return atomic_groups
 
 
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -383,16 +362,15 @@ def build_fet_file(data):
     periods = get_periods(data, fetout)
     get_teachers(data, fetout)
     get_subjects(data, fetout)
-
-    return xmltodict.unparse(fetbase, pretty=True, indent="  ")
-
-
-
-    data.set_atomic_groups(get_groups(data, fetout))
+    get_groups(data, fetout)
     fetout["Buildings_List"] = ""
     get_rooms(data, fetout)
-    get_activities(data, fetout)
 
+#TODO?
+    # A mapping class-group -> full atomic groups is needed for constraints
+    data.set_atomic_groups(get_full_atomic_groups(data))
+
+    get_activities(data, fetout)
     get_time_constraints(data, fetout, days, periods)
 
 #TODO: ### Space constraints
@@ -426,9 +404,9 @@ if __name__ == "__main__":
     w365db = read_w365(w365path)
 
     fetxml = build_fet_file(w365db)
-    print("§XML:", fetxml)
 
-    quit(1)
+    #print("\n§XML:", fetxml)
+    #quit(1)
 
     outfile = f'{os.path.basename(w365path).rsplit(".", 1)[0]}.fet'
     outpath = os.path.join(os.path.dirname(w365path), outfile)

@@ -1,5 +1,5 @@
 """
-w365/fet/constraints.py - last updated 2024-04-01
+w365/fet/constraints.py - last updated 2024-04-20
 
 Add constraints to the fet file.
 
@@ -22,7 +22,7 @@ Copyright 2024 Michael Towers
 """
 
 
-from w365.wz_w365.w365base import (
+from timetable.w365.w365base import (
     _Absences,
     _Categories,
     _MaxDays,
@@ -32,13 +32,13 @@ from w365.wz_w365.w365base import (
     _NumberOfAfterNoonDays,
     _ForceFirstHour,
 )
-from w365.fet.fet_support import (
+from timetable.fet.fet_support import (
     SUBJECT_LUNCH_BREAK,
     SUBJECT_FREE_AFTERNOON,
     next_activity_id,
 )
-from w365.fet.lesson_constraints import lesson_constraints
-from w365.wz_w365.class_groups import AG_SEP
+from timetable.fet.lesson_constraints import lesson_constraints
+from timetable.w365.class_groups import AG_SEP
 
 #TODO: There could be a clash between the current implementation of
 # lunch breaks and the max-gaps settings.
