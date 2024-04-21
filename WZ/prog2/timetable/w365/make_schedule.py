@@ -1,5 +1,5 @@
 """
-w365/wz_w365/make_schedule.py - last updated 2024-04-01
+timetable/w365/make_schedule.py - last updated 2024-04-21
 
 Given lesson times and room data, generate Schedule and Lesson entries
 for Waldorf365.
@@ -33,15 +33,12 @@ if __name__ == "__main__":
     setup(basedir)
 
 #from core.base import Tr
-#T = Tr("w365.wz_w365.make_schedule)
+#T = Tr("timetable.w365.make_schedule)
 
 ### +++++
 
 import uuid
 from datetime import datetime
-
-
-#TODO ...
 
 from w365.wz_w365.w365base import (
     W365_DB,
@@ -63,97 +60,8 @@ def get_uuid():
 
 ### -----
 
-
-def make_schedule(
-    container_id: str,
-    placements: dict[str, dict],
-    schedule_index0 = 100.0,
-    lesson_index0 = 10000.0,
-):
-    date_time = datetime.today().isoformat().rsplit('.', 1)[0]
-    lessons = []
-    lesson_ids = []
-    lesson_index = lesson_index0
-    for aid, p in placements.items():
-        length = int(p["Length"])
-        cx = p["Course_x"]
-        try:
-            e, gl = cx.split("+", 1)
-        except ValueError:
-            # Normal course
-            h = p["Period"]
-            i = 1
-            while True:
-                lesson_index += 1.0
-                lid = get_uuid()
-                lesson_ids.append(lid)
-                lessons.extend([
-                    "*Lesson",
-                    f"ContainerId={container_id}",
-                    f'Course={cx}',
-                    f'Day={p["Day"]}',
-                    f'Hour={h}',
-                    f'Fixed={p["Fixed"]}',
-                    f"Id={lid}",
-                    f"LastChanged={date_time}",     # 2024-03-30T18:59:53
-                    f"ListPosition={lesson_index}",
-#TODO
-                    #f"LocalRooms={}", # 0b5413dc-1420-478f-b266-212fed8d2564
-                    "",
-                ])
-                if i >= length:
-                    break
-                i += 1
-                h = str(int(h) + 1)
-        else:
-            # Block (EpochPlan)
-            for g in gl.split(","):
-                h = p["Period"]
-                i = 1
-                while True:
-                    lesson_index += 1.0
-                    lid = get_uuid()
-                    lesson_ids.append(lid)
-                    lessons.extend([
-                        "*Lesson",
-                        f"ContainerId={container_id}",
-                        f"EpochPlan={e}",
-                        f"EpochPlanGrade={g}",
-                        f'Day={p["Day"]}',
-                        f'Hour={h}',
-                        f'Fixed={p["Fixed"]}',
-                        f"Id={lid}",
-                        f"LastChanged={date_time}",     # 2024-03-30T18:59:53
-                        f"ListPosition={lesson_index}",
-#TODO
-                        #f"LocalRooms={}", # 0b5413dc-1420-478f-b266-212fed8d2564
-                        "",
-                    ])
-                    if i >= length:
-                        break
-                    i += 1
-                    h = str(int(h) + 1)
-    schedule_name = "fet001"
-    schedule = [
-        "*Schedule",
-        f"ContainerId={container_id}",
-        #f"End=",   #01. 03. 2024    # unused?
-        f"Id={get_uuid()}",
-        f"LastChanged={date_time}",     # 2024-03-30T18:59:53
-        f"Lessons={'#'.join(lesson_ids)}",
-        f"ListPosition={schedule_index0 + 1.0}",
-        f"Name={schedule_name}",
-        "NumberOfManualChanges=0",
-        #f"Start=",  #01. 03. 2024  # unused?
-        "YearPercent=1.0",
-        "",
-    ]
-
-    schedule.extend(lessons)
-    nl = "\n"
-    return f'{nl.join(schedule)}'
-
-
+#***********************************************************************
+# All lessons must be referenced by a "Schedule"
 '''
 *Schedule
 ContainerId=1d2a58cf-d882-422d-a8a8-fe5f5ed82a84
@@ -169,6 +77,7 @@ Start=01. 03. 2024  # unused?
 YearPercent=1.0
 '''
 
+# Only "Course" lessons are handled, not "EpochPlan" ones.
 '''
 *Lesson
 ContainerId=1d2a58cf-d882-422d-a8a8-fe5f5ed82a84
@@ -180,12 +89,65 @@ Id=6ec9be89-50de-419b-a143-55205d7022b4
 LastChanged=2024-03-30T18:59:53
 ListPosition=1.0
 LocalRooms=0b5413dc-1420-478f-b266-212fed8d2564
-
-or, instead of Course:
-
-EpochPlan=8626866f-9b99-4ea2-aa76-2b191ee11d7f
-EpochPlanGrade=adddcb92-f8ee-43b8-baa5-de7021077e3b
 '''
+#***********************************************************************
+
+def make_schedule(
+    container_id: str,
+    placements: dict[str, dict],
+    schedule_index0 = 100.0,
+    lesson_index0 = 10000.0,
+):
+    date_time = datetime.today().isoformat().rsplit('.', 1)[0]
+    lessons = []
+    lesson_ids = []
+    lesson_index = lesson_index0
+    for aid, p in placements.items():
+        length = int(p["Length"])
+        cx = p["Course_x"]
+        h = p["Period"]
+        i = 1
+        while True:
+            lesson_index += 1.0
+            lid = get_uuid()
+            lesson_ids.append(lid)
+            lessons.extend([
+                "*Lesson",
+                f"ContainerId={container_id}",
+                f'Course={cx}',
+                f'Day={p["Day"]}',
+                f'Hour={h}',
+                f'Fixed={p["Fixed"]}',
+                f"Id={lid}",
+                f"LastChanged={date_time}",     # 2024-03-30T18:59:53
+                f"ListPosition={lesson_index}",
+#TODO
+                #f"LocalRooms={}", # 0b5413dc-1420-478f-b266-212fed8d2564
+                "",
+            ])
+            if i >= length:
+                break
+            i += 1
+            h = str(int(h) + 1)
+    schedule_name = "fet001"
+    schedule = [
+        "*Schedule",
+        f"ContainerId={container_id}",
+        #f"End=",   #01. 03. 2024    # unused?
+        f"Id={get_uuid()}",
+        f"LastChanged={date_time}",     # 2024-03-30T18:59:53
+        f"Lessons={'#'.join(lesson_ids)}",
+        f"ListPosition={schedule_index0 + 1.0}",
+        f"Name={schedule_name}",
+        "NumberOfManualChanges=0",
+        #f"Start=",  #01. 03. 2024  # unused?
+        "YearPercent=1.0",
+        "",
+    ]
+    schedule.extend(lessons)
+    nl = "\n"
+    return f'{nl.join(schedule)}'
+
 
 def read_activities(nodes):
     """Return a mapping,
@@ -236,6 +198,8 @@ def read_starting_times(nodes, activity_map):
             "Fixed": node["Permanently_Locked"]
         }
     return ndata
+
+#***********************************************************************
 '''
 <ConstraintActivityPreferredStartingTime>
     <Weight_Percentage>100</Weight_Percentage>
@@ -246,6 +210,7 @@ def read_starting_times(nodes, activity_map):
     <Active>true</Active>
     <Comments></Comments>
 '''
+#***********************************************************************
 
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
@@ -256,6 +221,7 @@ if __name__ == "__main__":
     from core.base import DATAPATH
     source = DATAPATH("fwsb_data_and_timetable.fet", "w365_data")
     source = DATAPATH("fms_data_and_timetable.fet", "w365_data")
+    source = DATAPATH("fms_xep_data_and_timetable.fet", "w365_data")
     with open(source, "r", encoding = "utf-8") as fh:
         xmlin = fh.read()
     data = xmltodict.parse(xmlin)
@@ -280,6 +246,7 @@ if __name__ == "__main__":
     print("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$")
     out = DATAPATH("fwsb_extend", "w365_data")
     out = DATAPATH("fms_extend", "w365_data")
+    out = DATAPATH("fms_xep_extend", "w365_data")
     with open(out, "w", encoding = "utf-8") as fh:
         fh.write(schedule)
     print("  -->>", out)

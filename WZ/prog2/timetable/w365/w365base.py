@@ -1,9 +1,10 @@
 """
-w365/wz_w365/w365base.py - last updated 2024-04-20
+timetable/w365/w365base.py - last updated 2024-04-21
 
 Basic functions for:
     Reading a Waldorf365 file.
     Saving to a WZ database.
+
 
 =+LICENCE=================================
 Copyright 2024 Michael Towers

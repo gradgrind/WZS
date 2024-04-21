@@ -1,7 +1,8 @@
 """
-w365/wz_w365/activities.py - last updated 2024-04-19
+timetable/w365/activities.py - last updated 2024-04-21
 
 Manage data concerning the "activities" (courses, lessons, etc.).
+
 
 =+LICENCE=================================
 Copyright 2024 Michael Towers
@@ -20,23 +21,13 @@ Copyright 2024 Michael Towers
 =-LICENCE=================================
 """
 
-if __name__ == "__main__":
-    import sys, os
-
-    this = sys.path[0]
-    appdir = os.path.dirname(os.path.dirname(this))
-    sys.path[0] = appdir
-    basedir = os.path.dirname(appdir)
-    from core.base import setup
-    setup(basedir)
-
 #from core.base import Tr
-#T = Tr("w365.wz_w365.activities")
+#T = Tr("timetable.w365.activities")
 
 ### +++++
 
 from core.base import REPORT_ERROR, REPORT_WARNING
-from w365.wz_w365.w365base import (
+from timetable.w365.w365base import (
     _Course,
     _DoubleLessonMode,
     _HoursPerWeek,
@@ -364,33 +355,3 @@ def process_lesson_times(time_list):
 # likely that the divisions in a single subject will all lie within
 # a single division (e.g. 10, 10.A and 10.B: 10.A and 10.B can have a
 # subject on the same day, but other combinations are not allowed).
-
-# --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
-
-# Remove existing database file, add basic data and activities from w365.
-
-if __name__ == "__main__":
-    from core.base import DATAPATH
-    from w365.wz_w365.w365base import W365_DB, read_active_scenario
-    from w365.wz_w365.rooms import read_rooms
-    from w365.wz_w365.subjects import read_subjects
-    from w365.wz_w365.teachers import read_teachers
-    from w365.wz_w365.class_groups import read_groups
-
-    dbpath = DATAPATH("db365.sqlite", "w365_data")
-    w365path = DATAPATH("test.w365", "w365_data")
-    print("DATABASE FILE:", dbpath)
-    print("W365 FILE:", w365path)
-    try:
-        os.remove(dbpath)
-    except FileNotFoundError:
-        pass
-
-    filedata = read_active_scenario(w365path)
-    w365 = W365_DB(dbpath, filedata)
-
-    read_groups(w365)
-    read_subjects(w365)
-    read_teachers(w365)
-    read_rooms(w365)
-    read_activities(w365)

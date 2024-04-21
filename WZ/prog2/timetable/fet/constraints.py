@@ -1,5 +1,5 @@
 """
-w365/fet/constraints.py - last updated 2024-04-20
+w365/fet/constraints.py - last updated 2024-04-21
 
 Add constraints to the fet file.
 
@@ -21,7 +21,7 @@ Copyright 2024 Michael Towers
 =-LICENCE=================================
 """
 
-
+#TODO: These dependencies don't belong here!
 from timetable.w365.w365base import (
     _Absences,
     _Categories,
@@ -32,12 +32,16 @@ from timetable.w365.w365base import (
     _NumberOfAfterNoonDays,
     _ForceFirstHour,
 )
+#TODO: Also the "$$" entries in the data mapping are actually more or less
+# direct from w365.
+
 from timetable.fet.fet_support import (
     SUBJECT_LUNCH_BREAK,
     SUBJECT_FREE_AFTERNOON,
     next_activity_id,
 )
 from timetable.fet.lesson_constraints import lesson_constraints
+#TODO: Should be somewhere else:
 from timetable.w365.class_groups import AG_SEP
 
 #TODO: There could be a clash between the current implementation of
@@ -477,3 +481,118 @@ def get_time_constraints(db, fetout, daylist, periodlist):
 #   <Active>true</Active>
 #   <Comments></Comments>
 #</ConstraintStudentsMaxGapsPerWeek>
+
+
+def get_space_constraints(db, fetout):
+    # Note that <constraint_list> is actually a mapping!
+    not_on_same_day_list = []
+    constraint_list = {
+        "ConstraintBasicCompulsorySpace": {
+            "Weight_Percentage": "100",
+            "Active": "true",
+            "Comments": None,
+        }
+    }
+    fetout["Space_Constraints_List"] = constraint_list
+
+
+    for node in db.tables["COURSES"]:
+        activities = node["$ACTIVITIES"]
+        rlist = node.get("ROOM_WISH") or []
+        ridlist = [key2node[r]["ID"] for r in rlist]
+#TODO: Actually, the rooms for blocks should probably already have
+# been processed ...
+
+
+
+'''
+<ConstraintActivityPreferredRoom>
+    <Weight_Percentage>100</Weight_Percentage>
+    <Activity_Id>596</Activity_Id>
+    <Room>Sp</Room>
+    <Permanently_Locked>true</Permanently_Locked>
+    <Active>true</Active>
+    <Comments></Comments>
+</ConstraintActivityPreferredRoom>
+<ConstraintActivityPreferredRooms>
+    <Weight_Percentage>100</Weight_Percentage>
+    <Activity_Id>212</Activity_Id>
+    <Number_of_Preferred_Rooms>2</Number_of_Preferred_Rooms>
+    <Preferred_Room>EuU</Preferred_Room>
+    <Preferred_Room>EuO</Preferred_Room>
+    <Active>true</Active>
+    <Comments></Comments>
+</ConstraintActivityPreferredRooms>
+# Presumably, PreferredRooms should not permit the inclusion of virtual
+# rooms. Or would it be useful to allow a choice of virtual rooms?
+# fet seems to allow that ...
+
+# A virtual room with choices:
+<Room>
+    <Name>VVX</Name>
+    <Building></Building>
+    <Capacity>30000</Capacity>
+    <Virtual>true</Virtual>
+    <Number_of_Sets_of_Real_Rooms>2</Number_of_Sets_of_Real_Rooms>
+    <Set_of_Real_Rooms>
+        <Number_of_Real_Rooms>1</Number_of_Real_Rooms>
+        <Real_Room>Orch</Real_Room>
+    </Set_of_Real_Rooms>
+    <Set_of_Real_Rooms>
+        <Number_of_Real_Rooms>4</Number_of_Real_Rooms>
+        <Real_Room>01G</Real_Room>
+        <Real_Room>02G</Real_Room>
+        <Real_Room>03G</Real_Room>
+        <Real_Room>04G</Real_Room>
+    </Set_of_Real_Rooms>
+    <Comments></Comments>
+</Room>
+
+# The post-generation fet file seems to double the room constraints
+# with virtual rooms and multiple rooms:
+<ConstraintActivityPreferredRoom>
+    <Weight_Percentage>100</Weight_Percentage>
+    <Activity_Id>457</Activity_Id>
+    <Room>KP12</Room>
+    <Permanently_Locked>true</Permanently_Locked>
+    <Active>true</Active>
+    <Comments></Comments>
+</ConstraintActivityPreferredRoom>
+<ConstraintActivityPreferredRoom>
+    <Weight_Percentage>100</Weight_Percentage>
+    <Activity_Id>1</Activity_Id>
+    <Room>k13</Room>
+    <Permanently_Locked>true</Permanently_Locked>
+    <Active>true</Active>
+    <Comments></Comments>
+</ConstraintActivityPreferredRoom>
+<ConstraintActivityPreferredRooms>
+    <Weight_Percentage>100</Weight_Percentage>
+    <Activity_Id>71</Activity_Id>
+    <Number_of_Preferred_Rooms>2</Number_of_Preferred_Rooms>
+    <Preferred_Room>k5</Preferred_Room>
+    <Preferred_Room>fsMS</Preferred_Room>
+    <Active>true</Active>
+    <Comments></Comments>
+</ConstraintActivityPreferredRooms>
+<ConstraintActivityPreferredRoom>
+    <Weight_Percentage>100</Weight_Percentage>
+    <Activity_Id>71</Activity_Id>
+    <Room>k5</Room>
+    <Permanently_Locked>false</Permanently_Locked>
+    <Active>true</Active>
+    <Comments></Comments>
+</ConstraintActivityPreferredRoom>
+<ConstraintActivityPreferredRoom>
+    <Weight_Percentage>100</Weight_Percentage>
+    <Activity_Id>457</Activity_Id>
+    <Room>KP12</Room>
+    <Number_of_Real_Rooms>3</Number_of_Real_Rooms>
+    <Real_Room>ku</Real_Room>
+    <Real_Room>st</Real_Room>
+    <Real_Room>k12</Real_Room>
+    <Permanently_Locked>false</Permanently_Locked>
+    <Active>true</Active>
+    <Comments></Comments>
+</ConstraintActivityPreferredRoom>
+'''

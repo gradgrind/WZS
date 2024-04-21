@@ -1,5 +1,5 @@
 """
-w365/fet/make_fet_file.py - last updated 2024-04-20
+w365/fet/make_fet_file.py - last updated 2024-04-21
 
 Build a fet-file from supplied timetable data.
 
@@ -264,8 +264,8 @@ def get_activities(data, fetout):
                 gidlist.append(f'{key2node[cx]["ID"]}{AG_SEP}{g}')
             else:
                 gidlist.append(key2node[cx]["ID"])
-        rlist = node.get("ROOM_WISH") or []
-        ridlist = [key2node[r]["ID"] for r in rlist]
+        #rlist = node.get("ROOM_WISH") or []
+        #ridlist = [key2node[r]["ID"] for r in rlist]
         ## Generate the activity or activities
         try:
             durations = node["LESSONS"]
@@ -276,7 +276,7 @@ def get_activities(data, fetout):
             continue
 #TODO
 # How would a "course" with no lessons look? (A bodge to cater for
-# extra workloads/payments)
+# extra workloads/payments/reports)
 
         activity_list = []
         node["$ACTIVITIES"] = activity_list
