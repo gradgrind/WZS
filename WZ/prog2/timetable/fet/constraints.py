@@ -494,14 +494,19 @@ def get_space_constraints(db, fetout):
         }
     }
     fetout["Space_Constraints_List"] = constraint_list
-
-
+    key2node = db.key2node
+#TODO--
+    from core.basic_data import pr_course
     for node in db.tables["COURSES"]:
-        activities = node["$ACTIVITIES"]
-        rlist = node.get("ROOM_WISH") or []
-        ridlist = [key2node[r]["ID"] for r in rlist]
-#TODO: Actually, the rooms for blocks should probably already have
-# been processed ...
+        try:
+            activities = node["$ACTIVITIES"]
+            #print("§course+++:", pr_course(db, node))
+        except KeyError:
+            #print("§course:", pr_course(db, node))
+            continue
+        room_items = node["$ROOM_SET"]
+        if len(room_items) > 1:
+            print("\n§ROOMS", pr_course(db, node), room_items)
 
 
 

@@ -156,7 +156,7 @@ class W365_DB:
     def set_subject_activities(self, subject_activities):
         self.subject_activities = subject_activities
 
-    def set_atomic_groups(self, atomic_groups):
+    def set_full_atomic_groups(self, atomic_groups):
         self.full_atomic_groups = atomic_groups
 
 

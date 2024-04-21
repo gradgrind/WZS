@@ -27,6 +27,7 @@ Copyright 2024 Michael Towers
 ### +++++
 
 from core.base import REPORT_ERROR, REPORT_WARNING
+from core.basic_data import pr_course
 from timetable.w365.w365base import (
     _Course,
     _DoubleLessonMode,
@@ -286,28 +287,6 @@ def read_activities(w365_db):
 # which might be different ... That's difficult to handle anyway.
 # Perhaps it's easier to put no teachers in and block the teachers
 # concerned in "Absences"?
-
-
-def pr_group(k, g):
-    if g:
-        return f"{k}.{g}"
-    return k
-
-
-def pr_course(db, xnode):
-    glist = ",".join(
-        pr_group(db.key2node[k]["ID"], g)
-        for k, g in xnode["GROUPS"]
-    )
-    slist = ",".join(
-        db.key2node[s]["ID"]
-        for s in xnode["SUBJECTS"]
-    )
-    tlist = ",".join(
-        db.key2node[t]["ID"]
-        for t in xnode["TEACHERS"]
-    )
-    return f'{glist}-{slist}-{tlist}'
 
 
 def process_lesson_times(time_list):

@@ -41,10 +41,18 @@ if __name__ == "__main__":
 ### +++++
 
 from lib import xmltodict
+from core.base import REPORT_ERROR, REPORT_WARNING
+from core.basic_data import pr_course
 
+#TODO: Move this somewhere else
 from timetable.w365.class_groups import AG_SEP
+
 from timetable.fet.fet_support import next_activity_id
-from timetable.fet.constraints import get_time_constraints, EXTRA_SUBJECTS
+from timetable.fet.constraints import (
+    get_time_constraints,
+    get_space_constraints,
+    EXTRA_SUBJECTS
+)
 
 #TODO: This is not fet-specific, all timetable processors would need at
 # least some of it. Factor it out.
@@ -252,39 +260,93 @@ def get_rooms(data, fetout):
 def get_activities(data, fetout):
     fetlist = []
     next_activity_id(reset = True)
-    subject_activities = SubjectGroupActivities(data.full_atomic_groups)
+    full_atomic_groups = data.full_atomic_groups
+    subject_activities = SubjectGroupActivities(full_atomic_groups)
     key2node = data.key2node
     for node in data.tables["COURSES"]:
-        sbj = key2node[node["SUBJECT"]]["ID"]
-        tlist = node.get("TEACHERS") or []
-        tidlist = [key2node[t]["ID"] for t in tlist]
-        gidlist = []
-        for cx, g in node["GROUPS"]:
-            if g:
-                gidlist.append(f'{key2node[cx]["ID"]}{AG_SEP}{g}')
-            else:
-                gidlist.append(key2node[cx]["ID"])
-        #rlist = node.get("ROOM_WISH") or []
-        #ridlist = [key2node[r]["ID"] for r in rlist]
-        ## Generate the activity or activities
         try:
             durations = node["LESSONS"]
             total_duration = sum(durations)
             # sum also works with an empty list (-> 0)
+#? Can this fail?
+            assert total_duration
         except KeyError:
-#?
+            # Courses without lessons are not directly relevant here
             continue
+        sbj = key2node[node["SUBJECT"]]["ID"]
+        tlist = node.get("TEACHERS") or []
+        tidset = {key2node[t]["ID"] for t in tlist}
+        gidlist = []
+        gset = set()
+        for cx, g in node["GROUPS"]:
+            if g:
+                cg = f'{key2node[cx]["ID"]}{AG_SEP}{g}'
+            else:
+                cg = key2node[cx]["ID"]
+            cgs = full_atomic_groups[cg]
+            if cgs & gset:
 #TODO
-# How would a "course" with no lessons look? (A bodge to cater for
-# extra workloads/payments/reports)
+                REPORT_ERROR(f"Gruppen nicht unabhängig: {pr_course(data, node)}")
+                break
+            gidlist.append(cg)
+            gset.update(cgs)
 
+        # Rooms are handled differently, because of choices. Each
+        # distinct list of rooms is counted as an additional room
+        # requirement.
+        rlist = node.get("ROOM_WISH")
+        ridset = {tuple(key2node[r]["ID"] for r in rlist)} if rlist else set()
+
+        try:
+            block_members = node["$MEMBERS"]
+        except KeyError:
+            pass
+        else:
+            newtids = set()
+            for mnode in block_members:
+#?
+                if mnode["$$EXTRA"].get("NotColliding") == "true":
+                    continue
+
+                newtids.update(mnode["TEACHERS"])
+                for cx, g in mnode["GROUPS"]:
+                    if g:
+                        cg = f'{key2node[cx]["ID"]}{AG_SEP}{g}'
+                    else:
+                        cg = key2node[cx]["ID"]
+                    cgs = full_atomic_groups[cg]
+                    if not (cgs <= gset):
+                        REPORT_ERROR(f"Gruppe nicht in Block-Kurs: {pr_course(data, mnode)}")
+                        continue
+                rr = mnode["ROOM_WISH"]
+                if rr:
+                    ridset.add(tuple(key2node[r]["ID"] for r in rr))
+
+            # Check there are no "unused" teachers in the block course
+            ntset = {key2node[t]["ID"] for t in newtids}
+            dtid = tidset - ntset
+            if dtid:
+                #print("§§§§§", tidset, ntset)
+                tt = ", ".join(sorted(dtid))
+                REPORT_WARNING(
+                    f"Block-Kurs mit überflüssigen Lehrkräften ({tt}):"
+                    f"{pr_course(data, node)}"
+                )
+                #print(" ++++", node)
+            # Teachers from sub-courses can be added to the block course
+            # (so that actually no teachers need to be supplied in the
+            # block course):
+            tidset.update(ntset)
+        node["$ROOM_SET"] = ridset
+
+        ## Generate the activity or activities
         activity_list = []
         node["$ACTIVITIES"] = activity_list
         id0 = str(next_activity_id())
         aid_list = [id0]
         activity = {
             "Id": id0,
-            "Teacher": tidlist,
+            "Teacher": sorted(tidset),
             "Subject": sbj,
             "Students": gidlist,
             "Active": "true",
@@ -368,20 +430,11 @@ def build_fet_file(data):
 
 #TODO?
     # A mapping class-group -> full atomic groups is needed for constraints
-    data.set_atomic_groups(get_full_atomic_groups(data))
+    data.set_full_atomic_groups(get_full_atomic_groups(data))
 
     get_activities(data, fetout)
     get_time_constraints(data, fetout, days, periods)
-
-#TODO: ### Space constraints
-    scmap = {
-        "ConstraintBasicCompulsorySpace": {
-            "Weight_Percentage": "100",
-            "Active": "true",
-            "Comments": None,
-        }
-    }
-    fetout["Space_Constraints_List"] = scmap
+    get_space_constraints(data, fetout)
 
     return xmltodict.unparse(fetbase, pretty=True, indent="  ")
 

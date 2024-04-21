@@ -1,5 +1,5 @@
 """
-timetable/w365/class_groups.py - last updated 2024-04-20
+timetable/w365/class_groups.py - last updated 2024-04-21
 
 Manage class and group data.
 
@@ -157,9 +157,9 @@ def make_class_groups(divs):
     for n, d in divs:
 
 #TODO-- (just testing)
-        if "BG" in d:
-            d.append("G=A+BG")
-            d.append("B=BG+R")
+#        if "BG" in d:
+#            d.append("G=A+BG")
+#            d.append("B=BG+R")
 
         gs = []
         xg = {}

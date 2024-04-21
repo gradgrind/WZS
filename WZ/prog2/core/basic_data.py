@@ -1,5 +1,5 @@
 """
-core/basic_data.py - last updated 2024-02-26
+core/basic_data.py - last updated 2024-04-21
 
 Configuration and other basic data dependent on the database.
 
@@ -564,6 +564,25 @@ def print_fix(
 
 def fix_is_zero(value: float) -> bool:
     abs(value) < DB().CONFIG.DECIMAL_ZERO
+
+
+def pr_group(k, g):
+    if g:
+        return f"{k}.{g}"
+    return k
+
+
+def pr_course(db, xnode):
+    glist = ",".join(
+        pr_group(db.key2node[k]["ID"], g)
+        for k, g in xnode["GROUPS"]
+    )
+    sbj = db.key2node[xnode["SUBJECT"]]["ID"] or "{}"
+    tlist = ",".join(
+        db.key2node[t]["ID"]
+        for t in xnode["TEACHERS"]
+    )
+    return f'{glist}-{sbj}-{tlist or "{}"}'
 
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
