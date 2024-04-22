@@ -1,5 +1,5 @@
 """
-w365/fet/constraints.py - last updated 2024-04-21
+w365/fet/constraints.py - last updated 2024-04-22
 
 Add constraints to the fet file.
 
@@ -495,8 +495,10 @@ def get_space_constraints(db, fetout):
     }
     fetout["Space_Constraints_List"] = constraint_list
     key2node = db.key2node
+    vrnum = 0    # index for additional virtual rooms
 #TODO--
     from core.basic_data import pr_course
+
     for node in db.tables["COURSES"]:
         try:
             activities = node["$ACTIVITIES"]
@@ -505,8 +507,85 @@ def get_space_constraints(db, fetout):
             #print("§course:", pr_course(db, node))
             continue
         room_items = node["$ROOM_SET"]
+        #if len(room_items) > 1:
+        #    print("\n§ROOMS", pr_course(db, node), room_items)
+
+
+#TODO: Move this below the new virtuals bit and add a constraint for
+# every activity.
+
+        _id = "201"
+        _r = "Sp"
+        if len(room_items) == 1:    # AND only one room ...
+            # ... though it can be a virtual room
+            # ConstraintActivityPreferredRoom
+            a = {
+                "Weight_Percentage": "100",
+                "Activity_Id": _id,
+                "Room": _r,
+                "Permanently_Locked": "true",
+                "Active": "true",
+                "Comments": None,
+            }
+
+            # If there is a choice:
+            # ConstraintActivityPreferredRooms
+#TODO Shall I allow virtual rooms in here? It would need testing ...
+            a = {
+                "Weight_Percentage": "100",
+                "Activity_Id": _id,
+                "Number_of_Preferred_Rooms": "2",
+                "Preferred_Room": "EuU",
+                "Preferred_Room": "EuO",
+                "Active": "true",
+                "Comments": None,
+            }
         if len(room_items) > 1:
-            print("\n§ROOMS", pr_course(db, node), room_items)
+            # Make a new virtual room and add it as a single room
+            rsets = []
+            for itemr in sorted(room_items):
+                n = 0
+                ridlist = []
+                for r in itemr:
+                    if r in db.virtual_rooms:
+                        REPORT_ERROR(
+                            f"Kurs {pr_course(db, node)}: Eine Raumgruppe"
+                            f" ({r}) darf für einen Kurs mit mehreren"
+                            " Räumen nicht eingesetzt werden."
+                        )
+                    else:
+                        ridlist.append(r)
+                        n += 1
+                if n == 0:
+                    continue
+                rsets.append({
+                    "Number_of_Real_Rooms": str(n),
+                    "Real_Room": ridlist,
+                })
+            if len(rsets) > 1:
+# This would need to be added to the rooms list, but possibly not
+# remembered in any other way. The data for later extraction will be the
+# "Real_Room" entries.
+                vrnum += 1
+                vr = f"_VR_{vrnum:03}"
+                fetout["Rooms_List"]["Room"].append({
+                    "Name": vr,
+                    "Building": None,
+                    "Capacity": "30000",
+                    "Virtual": "true",
+                    "Number_of_Sets_of_Real_Rooms": str(len(rsets)),
+                    "Set_of_Real_Rooms": rsets,
+                    "Comments": None,
+                })
+
+#TODO: Add constraint with single (virtual) room
+
+            elif rsets:
+                pass
+#TODO: reduced now to one set, do as such
+
+            else:
+                pass
 
 
 

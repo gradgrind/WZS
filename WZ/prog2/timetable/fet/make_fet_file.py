@@ -237,13 +237,16 @@ def get_rooms(data, fetout):
                 "Comments": rname,
             })
     # Make virtual rooms with one-room elements for the room-groups
-    for rid, rname, rglist in roomgroups:
+    data.virtual_rooms = {}
+    for vrid, rname, rglist in roomgroups:
+        ridlist = [data.key2node[roomkey]["ID"] for roomkey in rglist]
+        data.virtual_rooms[vrid] = ridlist
         roomlist = [
             {
                 "Number_of_Real_Rooms": "1",
-                "Real_Room": data.key2node[roomkey]["ID"],
+                "Real_Room": rid,
             }
-            for roomkey in rglist
+            for rid in ridlist
         ]
         fetlist.append({
             "Name": rid,
