@@ -1,5 +1,5 @@
 """
-w365/fet/make_fet_file.py - last updated 2024-04-21
+w365/fet/make_fet_file.py - last updated 2024-04-22
 
 Build a fet-file from supplied timetable data.
 
@@ -249,7 +249,7 @@ def get_rooms(data, fetout):
             for rid in ridlist
         ]
         fetlist.append({
-            "Name": rid,
+            "Name": vrid,
             "Building": "",
             "Capacity": "30000",
             "Virtual": "true",

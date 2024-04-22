@@ -44,6 +44,8 @@ from timetable.fet.lesson_constraints import lesson_constraints
 #TODO: Should be somewhere else:
 from timetable.w365.class_groups import AG_SEP
 
+from core.basic_data import pr_course
+
 #TODO: There could be a clash between the current implementation of
 # lunch breaks and the max-gaps settings.
 
@@ -496,9 +498,8 @@ def get_space_constraints(db, fetout):
     fetout["Space_Constraints_List"] = constraint_list
     key2node = db.key2node
     vrnum = 0    # index for additional virtual rooms
-#TODO--
-    from core.basic_data import pr_course
-
+    c_room = []
+    c_rooms = []
     for node in db.tables["COURSES"]:
         try:
             activities = node["$ACTIVITIES"]
@@ -507,39 +508,6 @@ def get_space_constraints(db, fetout):
             #print("§course:", pr_course(db, node))
             continue
         room_items = node["$ROOM_SET"]
-        #if len(room_items) > 1:
-        #    print("\n§ROOMS", pr_course(db, node), room_items)
-
-
-#TODO: Move this below the new virtuals bit and add a constraint for
-# every activity.
-
-        _id = "201"
-        _r = "Sp"
-        if len(room_items) == 1:    # AND only one room ...
-            # ... though it can be a virtual room
-            # ConstraintActivityPreferredRoom
-            a = {
-                "Weight_Percentage": "100",
-                "Activity_Id": _id,
-                "Room": _r,
-                "Permanently_Locked": "true",
-                "Active": "true",
-                "Comments": None,
-            }
-
-            # If there is a choice:
-            # ConstraintActivityPreferredRooms
-#TODO Shall I allow virtual rooms in here? It would need testing ...
-            a = {
-                "Weight_Percentage": "100",
-                "Activity_Id": _id,
-                "Number_of_Preferred_Rooms": "2",
-                "Preferred_Room": "EuU",
-                "Preferred_Room": "EuO",
-                "Active": "true",
-                "Comments": None,
-            }
         if len(room_items) > 1:
             # Make a new virtual room and add it as a single room
             rsets = []
@@ -563,9 +531,9 @@ def get_space_constraints(db, fetout):
                     "Real_Room": ridlist,
                 })
             if len(rsets) > 1:
-# This would need to be added to the rooms list, but possibly not
-# remembered in any other way. The data for later extraction will be the
-# "Real_Room" entries.
+                # This needs to be added to the rooms list, but not
+                # remembered in any other way. The data for later
+                # extraction will be the "Real_Room" entries.
                 vrnum += 1
                 vr = f"_VR_{vrnum:03}"
                 fetout["Rooms_List"]["Room"].append({
@@ -577,16 +545,41 @@ def get_space_constraints(db, fetout):
                     "Set_of_Real_Rooms": rsets,
                     "Comments": None,
                 })
-
-#TODO: Add constraint with single (virtual) room
-
+                rl = [vr]
             elif rsets:
-                pass
-#TODO: reduced now to one set, do as such
-
+                rl = rsets[0]["Real_Room"]
             else:
-                pass
-
+                continue
+        else:
+            try:
+                rl = sorted(room_items.pop())
+            except KeyError:
+                continue
+        n = len(rl)
+        if n > 1:
+#TODO Shall I allow virtual rooms in here? It would need testing ...
+            # ConstraintActivityPreferredRooms
+            for a in activities:
+                c_rooms.append({
+                    "Weight_Percentage": "100",
+                    "Activity_Id": a["Id"],
+                    "Number_of_Preferred_Rooms": str(n),
+                    "Preferred_Room": rl,
+                    "Active": "true",
+                    "Comments": None,
+                })
+        else:
+            for a in activities:
+                c_room.append({
+                    "Weight_Percentage": "100",
+                    "Activity_Id": a["Id"],
+                    "Room": rl[0],
+                    "Permanently_Locked": "true",
+                    "Active": "true",
+                    "Comments": None,
+                })
+    constraint_list["ConstraintActivityPreferredRoom"] = c_room
+    constraint_list["ConstraintActivityPreferredRooms"] = c_rooms
 
 
 '''
