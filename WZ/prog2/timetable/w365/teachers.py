@@ -1,5 +1,5 @@
 """
-timetable/w365/teachers.py - last updated 2024-04-21
+timetable/w365/teachers.py - last updated 2024-04-24
 
 Manage teachers data.
 
@@ -69,13 +69,13 @@ def read_teachers(w365_db):
                 _NumberOfAfterNoonDays,
             )
         }
-        xnode["$$CONSTRAINTS"] = constraints
+        xnode["CONSTRAINTS"] = constraints
         a = absences(w365_db.idmap, node)
         if a:
             xnode["NOT_AVAILABLE"] = a
         c = categories(w365_db.idmap, node)
         if c:
-            xnode["$$EXTRA"] = c
+            xnode["EXTRA"] = c
     w365id_nodes = []
     i = 0
     for _, _id, xnode in sorted(_nodes):

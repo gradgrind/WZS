@@ -1,5 +1,5 @@
 """
-timetable/w365/class_groups.py - last updated 2024-04-21
+timetable/w365/class_groups.py - last updated 2024-04-24
 
 Manage class and group data.
 
@@ -117,13 +117,13 @@ def read_groups(w365_db):
                 _NumberOfAfterNoonDays,
             )
         }
-        xnode["$$CONSTRAINTS"] = constraints
+        xnode["CONSTRAINTS"] = constraints
         a = absences(w365_db.idmap, node)
         if a:
             xnode["NOT_AVAILABLE"] = a
         c = categories(w365_db.idmap, node)
         if c:
-            xnode["$$EXTRA"] = c
+            xnode["EXTRA"] = c
     # Add classes to database
     w365id_nodes.sort(key = lambda x: x[1]["SORTING"])
     w365_db.add_nodes(table, w365id_nodes)

@@ -1,5 +1,5 @@
 """
-timetable/w365/subjects.py - last updated 2024-04-21
+timetable/w365/subjects.py - last updated 2024-04-24
 
 Manage subjects data.
 
@@ -47,7 +47,7 @@ def read_subjects(w365_db):
         xnode = {"ID": id, "NAME": name}
         c = categories(w365_db.idmap, node)
         if c:
-            xnode["$$EXTRA"] = c
+            xnode["EXTRA"] = c
         _nodes.append((float(node[_ListPosition]), node[_Id], xnode))
     w365id_nodes = []
     i = 0

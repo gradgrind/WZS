@@ -1,5 +1,5 @@
 """
-timetable/w365/rooms.py - last updated 2024-04-21
+timetable/w365/rooms.py - last updated 2024-04-24
 
 Manage rooms data.
 
@@ -67,7 +67,7 @@ def read_rooms(w365_db):
             xnode["NOT_AVAILABLE"] = a
         c = categories(w365_db.idmap, node)
         if c:
-            xnode["$$EXTRA"] = c
+            xnode["EXTRA"] = c
     w365id_nodes = []
     i = 0
     for _, _id, xnode in sorted(_nodes):

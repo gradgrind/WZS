@@ -308,7 +308,7 @@ def get_activities(data, fetout):
             newtids = set()
             for mnode in block_members:
 #?
-                if mnode["$$EXTRA"].get("NotColliding") == "true":
+                if mnode["EXTRA"].get("NotColliding") == "true":
                     continue
 
                 newtids.update(mnode["TEACHERS"])
@@ -458,6 +458,8 @@ if __name__ == "__main__":
 
     from timetable.w365.read_w365 import read_w365
     w365db = read_w365(w365path)
+
+    #w365db.save(dbpath)
 
     fetxml = build_fet_file(w365db)
 

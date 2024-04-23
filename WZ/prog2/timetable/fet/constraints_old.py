@@ -1,5 +1,5 @@
 """
-w365/fet/constraints.py - last updated 2024-04-23
+w365/fet/constraints.py - last updated 2024-04-22
 
 Add constraints to the fet file.
 
@@ -21,8 +21,7 @@ Copyright 2024 Michael Towers
 =-LICENCE=================================
 """
 
-#TODO: These dependencies don't belong here! However, if I use their
-# strings for potential other inputs, it might be okay?
+#TODO: These dependencies don't belong here!
 from timetable.w365.w365base import (
     _Absences,
     _Categories,
@@ -33,6 +32,8 @@ from timetable.w365.w365base import (
     _NumberOfAfterNoonDays,
     _ForceFirstHour,
 )
+#TODO: Also the "$$" entries in the data mapping are actually more or less
+# direct from w365.
 
 from timetable.fet.fet_support import (
     SUBJECT_LUNCH_BREAK,
@@ -40,7 +41,7 @@ from timetable.fet.fet_support import (
     next_activity_id,
 )
 from timetable.fet.lesson_constraints import lesson_constraints
-#TODO: Should be got from somewhere else:
+#TODO: Should be somewhere else:
 from timetable.w365.class_groups import AG_SEP
 
 from core.basic_data import pr_course
@@ -132,18 +133,23 @@ def get_time_constraints(db, fetout, daylist, periodlist):
 #    return
 #?
     for node in db.tables["TEACHERS"]:
-        x = node.get("EXTRA")
-        if x:
-            print("§EXTRA:", x)
 #        if tid not in used:
 #            continue
 # ...
         tid = node["ID"]
-        cdata = node["CONSTRAINTS"]
+        cdata = node["$$CONSTRAINTS"]
         afternoons = cdata[_NumberOfAfterNoonDays]
         n_afternoons = int(afternoons)
-        cdata_absences = node.get("NOT_AVAILABLE")
+        # If "0" afternoons is set this should be set as absence, not as
+        # an additional constraint here.
+        absences = {}
 
+#TODO: This could lead to some tricky constraint interactions!
+# If there are fixed absences, the constraints could depend on exactly
+# which days are chosen – which, could be a big problem ...
+# Perhaps I should choose the days with the most free slots?
+# Actually, teachers can (mostly) be a bit more flexible than classes, so
+# perhaps the initial approach could work for them.
         maxdays = cdata[_MaxDays]
         n_maxdays = int(maxdays)
         if n_maxdays < n_days:
@@ -156,18 +162,6 @@ def get_time_constraints(db, fetout, daylist, periodlist):
             })
         else:
             n_maxdays = n_days
-
-
-        # If "0" afternoons is set this should be set as absence, not as
-        # an additional constraint here.
-        absences = {}
-
-#TODO: This could lead to some tricky constraint interactions!
-# If there are fixed absences, the constraints could depend on exactly
-# which days are chosen – which could be a big problem ...
-# Perhaps I should choose the days with the most free slots?
-# Actually, teachers can (mostly) be a bit more flexible than classes, so
-# perhaps the initial approach could work for them.
         if n_afternoons < n_maxdays:
             assert afternoon_start >= 0
             if n_afternoons == 0:
@@ -183,6 +177,7 @@ def get_time_constraints(db, fetout, daylist, periodlist):
                     "Active": "true",
                     "Comments": "",
                 })
+        cdata_absences = node.get("NOT_AVAILABLE")
         if cdata_absences:
             for d, plist in cdata_absences.items():
                 try:
@@ -266,7 +261,7 @@ def get_time_constraints(db, fetout, daylist, periodlist):
     atomic_groups = db.full_atomic_groups
     for node in db.tables["CLASSES"]:
         clid = node["ID"]
-        cdata = node["CONSTRAINTS"]
+        cdata = node["$$CONSTRAINTS"]
 #TODO!!!!! Could there be a filter for classes with too few subjects?
         week_gaps_list.append({
             "Weight_Percentage": "100",
@@ -428,9 +423,9 @@ def get_time_constraints(db, fetout, daylist, periodlist):
             })
 
 #TODO
-        categories = node.get("EXTRA")
+        categories = node.get("$$EXTRA")
         if categories:
-            print("EXTRA:", categories)
+            print("$$EXTRA:", categories)
 
     lesson_constraints(db, fetout, daylist, periodlist)
     constraint_list["ConstraintStudentsSetIntervalMaxDaysPerWeek"] = cl_afternoon_list

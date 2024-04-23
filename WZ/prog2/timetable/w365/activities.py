@@ -1,5 +1,5 @@
 """
-timetable/w365/activities.py - last updated 2024-04-21
+timetable/w365/activities.py - last updated 2024-04-24
 
 Manage data concerning the "activities" (courses, lessons, etc.).
 
@@ -124,7 +124,7 @@ def read_activities(w365_db):
             "$W365ID": course_id,
         }
         cat = categories(w365_db.idmap, node)
-        xnode["$$EXTRA"] = cat
+        xnode["EXTRA"] = cat
         #print("\n???", cat)
 
 # I suppose it is possible that constituent courses come before the

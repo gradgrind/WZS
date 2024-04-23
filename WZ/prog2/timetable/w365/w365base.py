@@ -1,5 +1,5 @@
 """
-timetable/w365/w365base.py - last updated 2024-04-21
+timetable/w365/w365base.py - last updated 2024-04-24
 
 Basic functions for:
     Reading a Waldorf365 file.
@@ -245,9 +245,7 @@ def absences(idmap, node):
 
 def categories(idmap, node):
     c = node.get(_Categories)
-    cat = {
-        "WorkloadFactor": 1.0,
-    }
+    cat = {}
     if c:
         wf = False
         role = 0
@@ -266,12 +264,21 @@ def categories(idmap, node):
             r = cnode["Role"]
             role |= int(r)
 
-
-            if "_" in cnode["Shortcut"]:
+            sc = cnode["Shortcut"]
+            if "_" in sc:    # only relevant for courses
 #TODO
                 assert not ctag
                 ctag = True
                 cat["Block"] = w365id
+            try:    # only relevant for teachers
+                _, n = sc.split("*")
+            except ValueError:
+                pass
+            else:
+#TODO
+                assert not ctag
+                ctag = True
+                cat["MaxLunchDays"] = int(n)
 
         if role & 1:
             cat["CanSubstitute"] = "true"   # to mark a special subject as
