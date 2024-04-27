@@ -271,7 +271,8 @@ if __name__ == "__main__":
         for rec in classes.records
         if rec.id > 0
     }
-    fpath = DATAPATH("test_students_data.ods", "working_data")
+#    fpath = DATAPATH("test_students_data.ods", "working_data")
+    fpath = DATAPATH("student_table_2024.ods", "working_data")
     records = read_raw_students_data(fpath, classmap)
     for d in compare_update(records):
         print("  ::", d)

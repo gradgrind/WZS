@@ -21,29 +21,21 @@ Copyright 2024 Michael Towers
 =-LICENCE=================================
 """
 
+#TODO: Should be got from somewhere else:
+from timetable.w365.class_groups import AG_SEP
 #TODO: These dependencies don't belong here! However, if I use their
 # strings for potential other inputs, it might be okay?
-from timetable.w365.w365base import (
-    _Absences,
-    _Categories,
-    _MaxDays,
-    _MaxGapsPerDay,    # gaps
-    _MaxLessonsPerDay,
-    _MinLessonsPerDay,
-    _NumberOfAfterNoonDays,
-    _ForceFirstHour,
-)
+#from timetable.w365.w365base import (
+#    _Categories,
+#)
 
+from core.basic_data import pr_course
 from timetable.fet.fet_support import (
     SUBJECT_LUNCH_BREAK,
     SUBJECT_FREE_AFTERNOON,
     next_activity_id,
 )
 from timetable.fet.lesson_constraints import lesson_constraints
-#TODO: Should be got from somewhere else:
-from timetable.w365.class_groups import AG_SEP
-
-from core.basic_data import pr_course
 
 #TODO: There could be a clash between the current implementation of
 # lunch breaks and the max-gaps settings.
@@ -102,6 +94,7 @@ def get_time_constraints(db, fetout, daylist, periodlist):
             assert p1 == p + 1, "Lunch slots must be contiguous"
             p = p1
 
+#TODO-- not approppriate in every case
         # Lunch breaks for all teachers
         constraint_list["ConstraintTeachersMaxHoursDailyInInterval"] = {
             "Weight_Percentage": "100",
@@ -134,17 +127,30 @@ def get_time_constraints(db, fetout, daylist, periodlist):
     for node in db.tables["TEACHERS"]:
         x = node.get("EXTRA")
         if x:
-            print("§EXTRA:", x)
+            print("EXTRA:", x)
 #        if tid not in used:
 #            continue
 # ...
         tid = node["ID"]
         cdata = node["CONSTRAINTS"]
-        afternoons = cdata[_NumberOfAfterNoonDays]
+        afternoons = cdata["NumberOfAfterNoonDays"]
         n_afternoons = int(afternoons)
-        cdata_absences = node.get("NOT_AVAILABLE")
+        nt_days = n_days
+        try:
+            cdata_absences = node["NOT_AVAILABLE"]
+        except KeyError:
+            pass
+        else:
+            for d, hl in cdata_absences.items():
+                if len(hl) >= n_hours:
+#TODO
+                    assert len(hl) == n_hours
+                    nt_days -= 1
+#TODO count blocked afternoons
 
-        maxdays = cdata[_MaxDays]
+
+
+        maxdays = cdata["MaxDays"]
         n_maxdays = int(maxdays)
         if n_maxdays < n_days:
             t_max_days_list.append({
@@ -183,6 +189,8 @@ def get_time_constraints(db, fetout, daylist, periodlist):
                     "Active": "true",
                     "Comments": "",
                 })
+
+# cdata_absences is possibly undefined (see above)
         if cdata_absences:
             for d, plist in cdata_absences.items():
                 try:
@@ -212,7 +220,7 @@ def get_time_constraints(db, fetout, daylist, periodlist):
                 "Comments": "",
             })
 
-        maxlessonsperday = cdata[_MaxLessonsPerDay]
+        maxlessonsperday = cdata["MaxLessonsPerDay"]
         if int(maxlessonsperday) < n_hours:
             t_maxlessonsperday_list.append({
                 # Can be < 100, but not really recommended:
@@ -223,7 +231,7 @@ def get_time_constraints(db, fetout, daylist, periodlist):
                 "Comments": "",
             })
 
-        maxgapsperday = cdata[_MaxGapsPerDay]
+        maxgapsperday = cdata["MaxGapsPerDay"]
         if int(maxgapsperday) < n_hours:
             t_maxgapsperday_list.append({
                 "Weight_Percentage": "100",
@@ -233,7 +241,7 @@ def get_time_constraints(db, fetout, daylist, periodlist):
                 "Comments": "",
             })
 
-        minlessonsperday = cdata[_MinLessonsPerDay]
+        minlessonsperday = cdata["MinLessonsPerDay"]
         if int(minlessonsperday) > 1:
             t_minlessonsperday_list.append({
                 "Weight_Percentage": "100",
@@ -275,7 +283,7 @@ def get_time_constraints(db, fetout, daylist, periodlist):
             "Active": "true",
             "Comments": "",
         })
-        afternoons = cdata[_NumberOfAfterNoonDays]
+        afternoons = cdata["NumberOfAfterNoonDays"]
         n_afternoons = int(afternoons)
         # If "0" afternoons is set this should be set as absence, not as
         # an additional constraint here.
@@ -396,7 +404,7 @@ def get_time_constraints(db, fetout, daylist, periodlist):
                         "MinDays": "1",
                     })
 
-        if cdata[_ForceFirstHour] == "false":
+        if cdata["ForceFirstHour"] == "false":
             cl_hour0_list.append({
                 "Weight_Percentage": "100",
                 "Max_Beginnings_At_Second_Hour": str(len(daylist)),
@@ -405,7 +413,7 @@ def get_time_constraints(db, fetout, daylist, periodlist):
                 "Comments": "",
             })
 
-        maxlessonsperday = cdata[_MaxLessonsPerDay]
+        maxlessonsperday = cdata["MaxLessonsPerDay"]
         if int(maxlessonsperday) < n_hours:
             cl_maxlessonsperday_list.append({
                 # Can be < 100, but not really recommended:
@@ -416,7 +424,7 @@ def get_time_constraints(db, fetout, daylist, periodlist):
                 "Comments": "",
             })
 
-        minlessonsperday = cdata[_MinLessonsPerDay]
+        minlessonsperday = cdata["MinLessonsPerDay"]
         if int(minlessonsperday) > 1:
             cl_minlessonsperday_list.append({
                 "Weight_Percentage": "100",
