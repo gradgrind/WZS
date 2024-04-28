@@ -1,5 +1,5 @@
 """
-timetable/w365/read_w365.py - last updated 2024-04-20
+timetable/w365/read_w365.py - last updated 2024-04-28
 
 Read timetable-relevant data from Waldorf365 dump file.
 
@@ -54,6 +54,7 @@ def read_w365(filepath):
     print("\nTODO: UserConstraints:")
     for i in filedata["$$SCENARIO"]["UserConstraint"]:
         print(" ---", i)
+    print("\n  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n")
     #quit(2)
 
     read_days(w365)
@@ -77,7 +78,10 @@ if __name__ == "__main__":
     #w365path = DATAPATH("test.w365", "w365_data")
     #w365path = DATAPATH("fwsb.w365", "w365_data")
     #w365path = DATAPATH("fms.w365", "w365_data")
-    w365path = DATAPATH("fms_xep.w365", "w365_data")
+    w365path = DATAPATH("fwsb2.w365", "w365_data")
+
+    #w365path = DATAPATH("fms_xep.w365", "w365_data")
+
     print("DATABASE FILE:", dbpath)
     print("W365 FILE:", w365path)
 

@@ -1,5 +1,5 @@
 """
-timetable/w365/w365base.py - last updated 2024-04-24
+timetable/w365/w365base.py - last updated 2024-04-28
 
 Basic functions for:
     Reading a Waldorf365 file.
@@ -31,6 +31,11 @@ from core.db_access import Database, to_json
 
 LIST_SEP = "#"  # use "," for xml input
 
+def convert_date(date):
+    #return date     # the dates are correct in the xml file
+    d, m, y = (x.strip() for x in date.split("."))
+    return f"{y}-{m}-{d}"
+
 # Item types
 _Course = "Course"
 _Day = "Day"
@@ -39,6 +44,7 @@ _Lesson = "Lesson"
 _Period = "TimedObject"     # lesson slot
 _Room = "Room"
 _Schedule = "Schedule"
+_Student = "Student"
 _Subject = "Subject"
 _Teacher = "Teacher"
 _Year = "Grade"
@@ -50,9 +56,11 @@ _capacity = "capacity"
 _Categories = "Categories"
 _ContainerId = "ContainerId"
 _CountryCode = "CountryCode"
+_DateOfBirth = "DateOfBirth"
 _day = "day"
 _DoubleLessonMode = "DoubleLessonMode"
 _EditedScenario = "EditedScenario"
+_Email = "Email"
 _End = "End"
 _EpochFactor = "EpochFactor"
 _EpochPlan = "EpochPlan"
@@ -60,11 +68,16 @@ _EpochPlanYear = "EpochPlanGrade"
 _EpochWeeks = "EpochWeeks"
 _FirstAfternoonHour = "FirstAfternoonHour"
 _Firstname = "Firstname"
+#TODO: Needs mods to Waldorf 365 to support both forms
+_Firstnames = "Firstname"
+_First_Name = "Firstname"
+
 _Fixed = "Fixed"
 _ForceFirstHour = "ForceFirstHour"
 _Gender = "Gender"
 _Groups = "Groups"
 _HandWorkload = "HandWorkload"
+_Home = "City"
 _Hour = "Hour"
 _hour = "hour"
 _HoursPerWeek = "HoursPerWeek"
@@ -81,6 +94,9 @@ _MiddayBreak = "MiddayBreak"
 _MinLessonsPerDay = "MinLessonsPerDay"
 _Name = "Name"
 _NumberOfAfterNoonDays = "NumberOfAfterNoonDays"
+_PhoneNumber = "PhoneNumber"
+_PlaceOfBirth = "CityOfBirth"
+_Postcode = "PLZ"
 _PreferredRooms = "PreferredRooms"
 _RoomGroup = "RoomGroup"
 _Rooms = "Rooms"
@@ -88,6 +104,9 @@ _SchoolName = "SchoolName"
 _Shortcut = "Shortcut"
 _Start = "Start"
 _StateCode = "StateCode"
+_Street = "Street"
+_StudentId = "ExtraId"
+_Students = "Students"
 _Subjects = "Subjects"
 _Teachers = "Teachers"
 _YearDivs = "GradePartitions"
