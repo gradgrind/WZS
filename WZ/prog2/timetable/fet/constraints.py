@@ -1,5 +1,5 @@
 """
-w365/fet/constraints.py - last updated 2024-04-23
+w365/fet/constraints.py - last updated 2024-05-01
 
 Add constraints to the fet file.
 
@@ -136,11 +136,8 @@ def get_time_constraints(db, fetout, daylist, periodlist):
         afternoons = cdata["NumberOfAfterNoonDays"]
         n_afternoons = int(afternoons)
         nt_days = n_days
-        try:
-            cdata_absences = node["NOT_AVAILABLE"]
-        except KeyError:
-            pass
-        else:
+        cdata_absences = node.get("NOT_AVAILABLE")
+        if cdata_absences:
             for d, hl in cdata_absences.items():
                 if len(hl) >= n_hours:
 #TODO
@@ -219,6 +216,8 @@ def get_time_constraints(db, fetout, daylist, periodlist):
                 "Active": "true",
                 "Comments": "",
             })
+
+        print("§cdata:", tid, cdata)
 
         maxlessonsperday = cdata["MaxLessonsPerDay"]
         if int(maxlessonsperday) < n_hours:

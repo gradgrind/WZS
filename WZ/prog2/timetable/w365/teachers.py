@@ -1,5 +1,5 @@
 """
-timetable/w365/teachers.py - last updated 2024-04-24
+timetable/w365/teachers.py - last updated 2024-05-01
 
 Manage teachers data.
 
@@ -60,13 +60,13 @@ def read_teachers(w365_db):
         }
         _nodes.append((float(node[_ListPosition]), node[_Id], xnode))
         constraints = {
-            f: node[f]
-            for f in (
-                _MaxDays,
-                _MaxLessonsPerDay,
-                _MaxGapsPerDay,    # gaps
-                _MinLessonsPerDay,
-                _NumberOfAfterNoonDays,
+            _f: node[f]
+            for f, _f in (
+                (_MaxDays, "MaxDays"),
+                (_MaxLessonsPerDay, "MaxLessonsPerDay"),
+                (_MaxGapsPerDay, "MaxGapsPerDay"),
+                (_MinLessonsPerDay, "MinLessonsPerDay"),
+                ( _NumberOfAfterNoonDays, "NumberOfAfterNoonDays"),
             )
         }
         xnode["CONSTRAINTS"] = constraints

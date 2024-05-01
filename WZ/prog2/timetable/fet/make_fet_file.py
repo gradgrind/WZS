@@ -1,5 +1,5 @@
 """
-w365/fet/make_fet_file.py - last updated 2024-04-22
+w365/fet/make_fet_file.py - last updated 2024-05-01
 
 Build a fet-file from supplied timetable data.
 
@@ -63,7 +63,7 @@ from timetable.fet.lesson_constraints import SubjectGroupActivities
 
 def class_groups(node):
     classtag = node["ID"]
-    divs = node["DIVISIONS"]
+    divs = node["PARTITIONS"]
     if not divs:
         return {
             "Name": classtag,
@@ -87,7 +87,7 @@ def class_groups(node):
     }
     # Add "categories" (atomic groups – not to be confused with the
     # "Categories" in Waldorf365 data)
-    g2ag = node["$GROUP_ATOMS"]
+    g2ag = node["$GROUP_ATOM_MAP"]
     aglist = [str(ag) for ag in g2ag[""]]
     aglist.sort()
     cgmap["Category"] = {
@@ -281,9 +281,9 @@ def get_activities(data, fetout):
         tidset = {key2node[t]["ID"] for t in tlist}
         gidlist = []
         gset = set()
-        for cx, g in node["GROUPS"]:
-            if g:
-                cg = f'{key2node[cx]["ID"]}{AG_SEP}{g}'
+        for cx, gk in node["GROUPS"]:
+            if gk:
+                cg = f'{key2node[cx]["ID"]}{AG_SEP}{key2node[gk]["ID"]}'
             else:
                 cg = key2node[cx]["ID"]
             cgs = full_atomic_groups[cg]
@@ -392,16 +392,18 @@ def get_full_atomic_groups(data):
     """
     atomic_groups = {}
     for node in data.tables["CLASSES"]:
-        #print(" ***", node)
+        #print("\n ***", node)
         clid = node["ID"]
-        group_atoms = node["$GROUP_ATOMS"]
+        group_atoms = node["$GROUP_ATOM_MAP"]
         ag_kag = {
             ag: f"{clid}{AG_SEP}{ag}"
             for ag in group_atoms[""]
         }
         for g, ags in group_atoms.items():
             kg = f"{clid}{AG_SEP}{g}" if g else clid
-            atomic_groups[kg] = {ag_kag[ag] for ag in ags} or {clid}
+            kgset = {ag_kag[ag] for ag in ags} or {clid}
+            atomic_groups[kg] = kgset
+            #print("  --", kg, kgset)
     return atomic_groups
 
 
@@ -452,6 +454,8 @@ if __name__ == "__main__":
     #w365path = DATAPATH("test.w365", "w365_data")
     #w365path = DATAPATH("fwsb.w365", "w365_data")
     #w365path = DATAPATH("fms.w365", "w365_data")
+    #w365path = DATAPATH("fwsb2.w365", "w365_data")
+
     w365path = DATAPATH("fms_xep.w365", "w365_data")
     print("DATABASE FILE:", dbpath)
     print("W365 FILE:", w365path)
