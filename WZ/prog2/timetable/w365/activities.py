@@ -1,5 +1,5 @@
 """
-timetable/w365/activities.py - last updated 2024-04-28
+timetable/w365/activities.py - last updated 2024-05-04
 
 Manage data concerning the "activities" (courses, lessons, etc.).
 
@@ -27,7 +27,7 @@ Copyright 2024 Michael Towers
 ### +++++
 
 from core.base import REPORT_ERROR, REPORT_WARNING
-from core.basic_data import pr_course
+from core.wzbase import pr_course
 from timetable.w365.w365base import (
     _Course,
     _DoubleLessonMode,
@@ -84,7 +84,7 @@ def read_activities(w365_db):
         slist = node[_Subjects].split(LIST_SEP)
         sklist = [w365_db.id2key[s] for s in slist]
         if len(sklist) != 1:
-            stlist = ",".join(w365_db.key2node[s]["ID"] for s in sklist)
+            stlist = ",".join(w365_db.nodes[s]["ID"] for s in sklist)
 #TODO
             REPORT_ERROR(f'Ungültiges Fach: „{stlist}“')
             continue

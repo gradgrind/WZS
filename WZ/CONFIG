@@ -1,0 +1,4 @@
+; Name der Datenbankdatei
+DATABASE = wznodes.sqlite
+; Befehl zur Ausführung von LibreOffice
+LIBREOFFICE = libreoffice

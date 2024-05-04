@@ -1,5 +1,5 @@
 """
-timetable/w365/class_groups.py - last updated 2024-05-03
+timetable/w365/class_groups.py - last updated 2024-05-01
 
 Manage class, group and student data.
 
@@ -96,14 +96,10 @@ AG_SEP = "."
 #   DATE_EXIT: the day the student left the establishment
 
 def _read_students(w365_db):
-    try:
-        student_list = w365_db.scenario[_Student]
-    except KeyError:
-        return
     table = "STUDENTS"
     w365id_nodes = []
     for node in sorted(
-        student_list,
+        w365_db.scenario[_Student],
 #        key = lambda x: float(x[_ListPosition])
         key = lambda x: (x[_Name], x[_First_Name])
     ):
@@ -179,17 +175,54 @@ def read_groups(w365_db):
     _read_students(w365_db)
     # Then the groups (not yet associated with classes)
     _read_subgroups(w365_db)
+
+    ## When a group is referenced in Waldorf365 the id can be of a group
+    ## or a class. Build a mapping w365id -> (class-key, group-str) for
+    ## the classes and groups.
+
     table = "CLASSES"
     w365id_nodes = []
     id2key = w365_db.id2key
+
+
+#TODO: Move to indexing for groups ... what effect will that have on
+# modules that use this?
+
     id2kdiv = {}
     for node in w365_db.scenario[_YearDiv]: # Waldorf365: "GradePartiton" (sic)
         name = node.get(_Name) or ""
         gklist = [id2key[n] for n in node[_Groups].split(LIST_SEP)]
 # Is float(node[_ListPosition]) needed for sorting?
         id2kdiv[node[_Id]] = (name, gklist)
-        #print(f" -- {name} = {gklist}")
-    group_list = []     # collect group keys for each year
+        print(f" -- {name} = {gklist}")
+#?
+        #id_div.append((float(node[_ListPosition]), node[_Id], name, gklist))
+    #print("\n&&&1:", id_div)
+    #id_div.sort()
+    #print("&&&2:", id_div)
+
+
+#old:
+    id2gtag = {
+        node[_Id]: (float(node[_ListPosition]), node[_Shortcut])
+        for node in w365_db.scenario[_Group]
+    }
+    id2div = {}
+    for node in w365_db.scenario[_YearDiv]: # Waldorf365: "GradePartiton" (sic)
+        name = node.get(_Name) or ""
+        gidlist = node[_Groups].split(LIST_SEP)
+        iglist = [(*id2gtag[w365id], w365id) for w365id in gidlist]
+        iglist = [(g, g365) for lp, g, g365 in sorted(iglist)]
+        id2div[node[_Id]] = (float(node[_ListPosition]), name, iglist)
+        #print(f" -- {name} = {iglist}")
+
+
+#old:
+    g365_info = {}  # collect group references for each class
+#new:
+    k365_info = {}  # collect group key references for each class
+
+
     for node in w365_db.scenario[_Year]:    # Waldorf365: "Grade"
         clevel = node[_Level]
         cletter = node.get(_Letter) or ""
@@ -209,26 +242,51 @@ def read_groups(w365_db):
         # Collect the necessary info in <g365_info> and <w365id_nodes>.
         yid365 = node[_Id]
         w365id_nodes.append((yid365, xnode))
+#old:
+        divlist = []
+        y2glist = []
+        g365_info[yid365] = y2glist     # collect group references
+#new:
         divklist = []
-        yklist = []
+        y2klist = []
+        k365_info[yid365] = y2klist     # collect group key references
+
         divs = node.get(_YearDivs)
         if divs:
             for divid in divs.split(LIST_SEP):
+#old:
+                divlp, divname, iglist = id2div[divid]
+                glist = []
+                for gx in iglist:
+                    glist.append(gx[0])
+                    y2glist.append(gx)
+                divlist.append((divlp, divname, glist))
+#new:
                 divname, gklist = id2kdiv[divid]
                 divklist.append([divname, gklist, []])
-                yklist.append(gklist)
-        group_list.append((yid365, yklist))
-        #print(f'*** {cltag}: {divklist}')
+                y2klist.append(gklist)
+#old:
+            divlist.sort()
+            divlist = [[n, gl] for lp, n, gl in divlist]
+#new:
+        print(f'*** {cltag}: {divklist}')
         xnode["PARTITIONS"] = divklist
-        gen_class_groups(w365_db.nodes, xnode)
-        #print("  *** $GROUP_ATOM_MAP:", xnode["$GROUP_ATOM_MAP"])
+        xnode["$GROUP_ATOM_MAP"] = gen_class_groups(w365_db.key2node, divklist)
+        print("  *** $GROUP_ATOM_MAP:", xnode["$GROUP_ATOM_MAP"])
+
+#TODO
+
+        print(f'+++ {cltag}: {divlist}')
+        xnode["DIVISIONS"] = divlist
+        xnode["$GROUP_ATOMS"] = make_class_groups(divlist)
+        #print("  *** $GROUP_ATOMS:", xnode["$GROUP_ATOMS"])
         constraints = {
-            _f: node[f]
-            for f, _f in (
-                (_ForceFirstHour, "ForceFirstHour"),
-                (_MaxLessonsPerDay, "MaxLessonsPerDay"),
-                (_MinLessonsPerDay, "MinLessonsPerDay"),
-                (_NumberOfAfterNoonDays, "NumberOfAfterNoonDays"),
+            f: node[f]
+            for f in (
+                _ForceFirstHour,
+                _MaxLessonsPerDay,
+                _MinLessonsPerDay,
+                _NumberOfAfterNoonDays,
             )
         }
         xnode["CONSTRAINTS"] = constraints
@@ -241,23 +299,21 @@ def read_groups(w365_db):
     # Add classes to database
     w365id_nodes.sort(key = lambda x: x[1]["SORTING"])
     w365_db.add_nodes(table, w365id_nodes)
-    ## When a group is referenced in Waldorf365 the id can be of a group
-    ## or a class. Build a mapping w365id -> (class-key, group-key) for
-    ## the classes and groups. The group-key is 0 for the whole class.
+    # Construct a look-up mapping for class/group (w365id) -> wz-form
     group_map = {}
+    for y365, gxlist in g365_info.items():
+        yid = w365_db.id2key[y365]
+        group_map[y365] = (yid, "")     # "whole class" group
+        for g, g365 in gxlist:
+            group_map[g365] = (yid, g)
+#?
     w365_db.group_map = group_map
-    gk2id365 = w365_db.groupkey_w365id
-    for yid365, yklist in group_list:
-        yk = id2key[yid365]
-        group_map[yid365] = (yk, 0)     # "whole class" group
-        for gkl in yklist:
-            for gk in gkl:
-                gid = gk2id365[gk]
-                group_map[gid] = (yk, gk)
+    #print("§group_map:", group_map)
+    print("\n§g365_info:", g365_info)
+    print("\n§k365_info:", k365_info)
+    quit(1)
 
 
-#TODO: The following classes would also be relevant for other data
-# sources. Perhaps they should be moved to a different folder?
 class AG(frozenset):
     def __repr__(self):
         return f"{{*{','.join(sorted(self))}*}}"
@@ -266,7 +322,7 @@ class AG(frozenset):
         return AG_SEP.join(sorted(self))
 
 
-def gen_class_groups(key2node, node):
+def gen_class_groups(key2node, parts):
     """Produce "atomic" groups for the given class partitions.
     This should be rerun whenever any change is made to the partitions –
     including just name changes because the group names are used here.
@@ -276,10 +332,8 @@ def gen_class_groups(key2node, node):
         - list of "compound" groups:
             [compound group key, basic group key, basic group key, ...]
     """
-    parts = node["PARTITIONS"]
     if not parts:
-        node["$GROUP_ATOM_MAP"] = {"": set()}
-        return
+        return {"": set()}
     # Check the input
     gset = set()
     divs1 = []
@@ -336,4 +390,74 @@ def gen_class_groups(key2node, node):
             g2ag[g] = ags
     # Add the atomic groups for the whole class
     g2ag[""] = set(aglist)
-    node["$GROUP_ATOM_MAP"] = g2ag
+    return g2ag
+
+
+def make_class_groups(divs):
+#TODO: Using integers (table keys) as groups no longer makes the support
+# for "compound" groups possible. It is not relevant for Waldorf 365,
+# but maybe some thought needs to go into how to manage this with other
+# sources.
+    if not divs:
+        return {"": set()}
+    # Check the input
+    gset = set()
+    divs1 = []
+    divs1x = []
+    for n, d in divs:
+
+#TODO-- (just testing)
+#        if "BG" in d:
+#            d.append("G=A+BG")
+#            d.append("B=BG+R")
+
+        gs = []
+        xg = {}
+        divs1.append(gs)
+        divs1x.append(xg)
+        for g in d:
+            assert g not in gset
+            gset.add(g)
+            # "Compound" groups are combinations of "normal" groups,
+            # as a convenience for input and display of multiple groups
+            # within a division (not supported in Waldorf365).
+            # Consider a division ["A", "BG", "R"]. There could be
+            # courses, say, for combination "A" + "BG". The "compound"
+            # group might then be "G", defined as "G=A+BG". Obviously
+            # the symbols "=" and "+" should not be used in group names.
+            try:
+                g, subs = g.split("=", 1)
+            except (ValueError, AttributeError):
+                gs.append(g)   # A "normal" group
+            else:
+                # A "compound" group
+                xl = []
+                xg[g] = xl
+                for s in subs.split("+"):
+                    assert s not in xl
+                    xl.append(s)
+        for g, sl in xg.items():
+            assert len(sl) > 1
+            for s in sl:
+                assert s in gs
+        assert len(gs) > 1
+    # Generate "atomic" groups
+    g2ag = {}
+    aglist = []
+    for p in product(*divs1):
+        ag = AG(p)
+        aglist.append(ag)
+        for g in p:
+            try:
+                g2ag[g].add(ag)
+            except KeyError:
+                g2ag[g] = {ag}
+    for xg in divs1x:
+        for g, gl in xg.items():
+            ags = set()
+            for gg in gl:
+                ags.update(g2ag[gg])
+            g2ag[g] = ags
+    # Add the atomic groups for the whole class
+    g2ag[""] = set(aglist)
+    return g2ag

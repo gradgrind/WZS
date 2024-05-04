@@ -1,5 +1,5 @@
 """
-text_report/covers.py - last updated 2024-04-27
+text_report/covers.py - last updated 2024-05-01
 
 Use odt-documents (ODF / LibreOffice) as templates for report covers.
 
@@ -31,8 +31,8 @@ if __name__ == "__main__":
     from core.base import setup
     setup(basedir)
 
-from core.base import Tr
-T = Tr("grades.odt_grade_reports")
+#from core.base import Tr
+#T = Tr("text_report/covers")
 
 ### +++++
 

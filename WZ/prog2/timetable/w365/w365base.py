@@ -1,5 +1,5 @@
 """
-timetable/w365/w365base.py - last updated 2024-04-28
+timetable/w365/w365base.py - last updated 2024-05-04
 
 Basic functions for:
     Reading a Waldorf365 file.
@@ -27,7 +27,7 @@ Copyright 2024 Michael Towers
 
 import os
 
-from core.db_access import Database, to_json
+from core.wzbase import WZDatabase
 
 LIST_SEP = "#"  # use "," for xml input
 
@@ -117,40 +117,45 @@ _YearDivs = "GradePartitions"
 # Dates: In the Waldorf365 data dumps, "DateOfBirth" fields are not
 # ISO dates, but like "22. 01. 2015" (how reliable is this?).
 
-# I may want to reimplement the "Database" class for the way the
-# database is used in this module.
-
-class W365_DB:
+class W365_DB(WZDatabase):
     """Apart from collecting the data from a Waldorf365 dump file, an
     in-memory database is created, containing the basic information in
     a Waldorf365-independent form. If desired this can be saved to an
     sqlite database file (see method "save").
     """
+    __slots__ = (
+        "_scenarios",
+        "scenario",
+        "idmap",
+        "tables",
+        "id2key",
+        "groupkey_w365id",  # see module "class_groups"
+        "group_map",        # see module "class_groups"
+    )
+
     def __init__(self, filedata):
-        self.db = Database(":memory:")
+        super().__init__(memory = True)
         schoolstate = filedata["$$SCHOOLSTATE"]
-        self.config = {
+        # The configuration data from the data source will be added to
+        # that read by the <Database> initialization, possibly
+        # overwriting entries.
+        self.config1.data.update({
             "SCHOOL": schoolstate[_SchoolName],
             "STATE": schoolstate[_StateCode],
             "COUNTRY": schoolstate[_CountryCode],
-        }
+        })
+        # Values may be added to this when reading the various input
+        # tables. When complete it needs to be saved as the wz-table
+        # "__CONFIG__", so the final result should be built later.
         self._scenarios = filedata["$$SCENARIOS"]
         self.scenario = filedata["$$SCENARIO"]
         self.idmap = filedata["$$IDMAP"]
         self.tables = {}
         self.id2key = {}
-        self.key2node = {}
-
-    def save(self, dbpath):
-        try:
-            os.remove(dbpath)
-        except FileNotFoundError:
-            pass
-        self.db.query(f"vacuum main into '{dbpath}'")
 
     def add_nodes(self, table, w365id_nodes):
-        values = [(table, to_json(n)) for _, n in w365id_nodes]
-        keys = self.db.insertnodes(values)
+        values = [n for _, n in w365id_nodes]
+        keys = self.insert(table, values)
         assert len(keys) == len(w365id_nodes)
         try:
             tlist = self.tables[table]
@@ -161,20 +166,25 @@ class W365_DB:
             _id, n = w365id_nodes[i]
             if _id:
                 self.id2key[_id] = k
-            self.key2node[k] = n
-            n["$KEY"] = k
             tlist.append(n)
 
     def config2db(self):
-        self.db.insert(
-            "NODES",
-            ["DB_TABLE", "DATA"],
-            ["__CONFIG__", to_json(self.config)]
-        )
+        """Call this when all the data has been read in. Save the
+        source's configuration items in the database's (not yet
+        existent) "__CONFIG__" wz-table. Then combine with the base
+        configuration values, preferring the new ones if there is a
+        key clash.
+        <self.config> is left as a reference to the full mapping.
+        """
+        if self.config1.data:
+            self.update(self.config1.nid, self.config1.data)
+            self.config.update(self.config1.data)
 
+#TODO: Is this being used? fet ...
     def set_subject_activities(self, subject_activities):
         self.subject_activities = subject_activities
 
+#TODO: Is this being used? fet ...
     def set_full_atomic_groups(self, atomic_groups):
         self.full_atomic_groups = atomic_groups
 

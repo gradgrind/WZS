@@ -1,5 +1,5 @@
 """
-timetable/w365/read_w365.py - last updated 2024-04-28
+timetable/w365/read_w365.py - last updated 2024-05-04
 
 Read timetable-relevant data from Waldorf365 dump file.
 
@@ -28,7 +28,7 @@ if __name__ == "__main__":
     appdir = os.path.dirname(os.path.dirname(this))
     sys.path[0] = appdir
     basedir = os.path.dirname(appdir)
-    from core.base import setup
+    from core.wzbase import setup
     setup(basedir)
 
 #from core.base import Tr
@@ -72,9 +72,8 @@ def read_w365(filepath):
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
 
 if __name__ == "__main__":
-    from core.base import DATAPATH
+    from core.wzbase import DATAPATH
 
-    dbpath = DATAPATH("db365.sqlite", "w365_data")
     #w365path = DATAPATH("test.w365", "w365_data")
     #w365path = DATAPATH("fwsb.w365", "w365_data")
     #w365path = DATAPATH("fms.w365", "w365_data")
@@ -82,9 +81,8 @@ if __name__ == "__main__":
 
     #w365path = DATAPATH("fms_xep.w365", "w365_data")
 
-    print("DATABASE FILE:", dbpath)
     print("W365 FILE:", w365path)
 
     w365db = read_w365(w365path)
 
-    w365db.save(dbpath)
+    w365db.save()
