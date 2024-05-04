@@ -1,5 +1,5 @@
 """
-timetable/w365/w365base.py - last updated 2024-05-04
+w365/w365base.py - last updated 2024-05-04
 
 Basic functions for:
     Reading a Waldorf365 file.
@@ -129,12 +129,12 @@ class W365_DB(WZDatabase):
         "idmap",
         "tables",
         "id2key",
-        "groupkey_w365id",  # see module "class_groups"
-        "group_map",        # see module "class_groups"
+        "extra",    # map for entries which are added outside this module
     )
 
     def __init__(self, filedata):
         super().__init__(memory = True)
+        self.extra = {}
         schoolstate = filedata["$$SCHOOLSTATE"]
         # The configuration data from the data source will be added to
         # that read by the <Database> initialization, possibly
@@ -179,14 +179,6 @@ class W365_DB(WZDatabase):
         if self.config1.data:
             self.update(self.config1.nid, self.config1.data)
             self.config.update(self.config1.data)
-
-#TODO: Is this being used? fet ...
-    def set_subject_activities(self, subject_activities):
-        self.subject_activities = subject_activities
-
-#TODO: Is this being used? fet ...
-    def set_full_atomic_groups(self, atomic_groups):
-        self.full_atomic_groups = atomic_groups
 
 
 def read_active_scenario(w365path):

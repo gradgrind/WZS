@@ -1,5 +1,5 @@
 """
-timetable/w365/activities.py - last updated 2024-05-04
+w365/activities.py - last updated 2024-05-04
 
 Manage data concerning the "activities" (courses, lessons, etc.).
 
@@ -22,17 +22,15 @@ Copyright 2024 Michael Towers
 """
 
 #from core.base import Tr
-#T = Tr("timetable.w365.activities")
+#T = Tr("w365.activities")
 
 ### +++++
 
-from core.base import REPORT_ERROR, REPORT_WARNING
-from core.wzbase import pr_course
-from timetable.w365.w365base import (
+from core.wzbase import REPORT_ERROR, REPORT_WARNING, pr_course
+from w365.w365base import (
     _Course,
     _DoubleLessonMode,
     _HoursPerWeek,
-
 #    _Teacher,
     _Shortcut,
     _Name,
@@ -71,7 +69,7 @@ def read_activities(w365_db):
     w365id_nodes = []
     course_lessons = {}
     block_entries = {}
-    group_map = w365_db.group_map
+    group_map = w365_db.extra["group_map"]
     for node in w365_db.scenario[_Course]:
         course_id = node[_Id]
         tlist0 = node.get(_Teachers)

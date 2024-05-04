@@ -1,5 +1,5 @@
 """
-timetable/w365/teachers.py - last updated 2024-05-01
+w365/teachers.py - last updated 2024-05-04
 
 Manage teachers data.
 
@@ -22,11 +22,11 @@ Copyright 2024 Michael Towers
 """
 
 #from core.base import Tr
-#T = Tr("timetable.w365.teachers")
+#T = Tr("w365.teachers")
 
 ### +++++
 
-from timetable.w365.w365base import (
+from w365.w365base import (
     _Teacher,
     _Shortcut,
     _Name,

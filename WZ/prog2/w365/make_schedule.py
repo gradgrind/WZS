@@ -1,5 +1,5 @@
 """
-timetable/w365/make_schedule.py - last updated 2024-04-21
+w365/make_schedule.py - last updated 2024-04-05
 
 Given lesson times and room data, generate Schedule and Lesson entries
 for Waldorf365.
@@ -22,25 +22,35 @@ Copyright 2024 Michael Towers
 =-LICENCE=================================
 """
 
+#TODO: This produces data for Waldorf365, so it makes sense to put it in
+# the "w365" folder. However, it takes data specifically from a "fet"
+# run, which should be handled elsewhere.
+# The output is not a general solution to importing a timetable into
+# Waldorf 365 as it has to be spliced into a Waldorf365 dump file.
+# Maybe the bit dealing with converting the times/rooms into Waldorf365
+# form should remain here, but the bit dealing with "fet" output moved
+# somewhere more appropriate. A suitable interface would then be needed,
+# which could manage other input and output forms ...
+
 if __name__ == "__main__":
     import sys, os
 
     this = sys.path[0]
-    appdir = os.path.dirname(os.path.dirname(this))
+    appdir = os.path.dirname(this)
     sys.path[0] = appdir
     basedir = os.path.dirname(appdir)
-    from core.base import setup
+    from core.wzbase import setup
     setup(basedir)
 
 #from core.base import Tr
-#T = Tr("timetable.w365.make_schedule)
+#T = Tr("w365.make_schedule)
 
 ### +++++
 
 import uuid
 from datetime import datetime
 
-from w365.wz_w365.w365base import (
+from w365.w365base import (
     W365_DB,
     _Room,
     _Shortcut,
@@ -218,7 +228,7 @@ def read_starting_times(nodes, activity_map):
 
 if __name__ == "__main__":
     import xmltodict
-    from core.base import DATAPATH
+    from core.wzbase import DATAPATH
     source = DATAPATH("fwsb_data_and_timetable.fet", "w365_data")
     source = DATAPATH("fms_data_and_timetable.fet", "w365_data")
     source = DATAPATH("fms_xep_data_and_timetable.fet", "w365_data")

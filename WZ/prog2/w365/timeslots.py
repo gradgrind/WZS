@@ -1,5 +1,5 @@
 """
-timetable/w365/timeslots.py - last updated 2024-05_03
+w365/timeslots.py - last updated 2024-05_04
 
 Manage time slots (for timetable).
 
@@ -22,11 +22,11 @@ Copyright 2024 Michael Towers
 """
 
 #from core.base import Tr
-#T = Tr("timetable.w365.timeslots")
+#T = Tr("w365.timeslots")
 
 ### +++++
 
-from timetable.w365.w365base import (
+from w365.w365base import (
     _Day,
     _Period,
     _Shortcut,

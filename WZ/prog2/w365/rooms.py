@@ -1,5 +1,5 @@
 """
-timetable/w365/rooms.py - last updated 2024-04-24
+w365/rooms.py - last updated 2024-05-04
 
 Manage rooms data.
 
@@ -22,11 +22,11 @@ Copyright 2024 Michael Towers
 """
 
 #from core.base import Tr
-#T = Tr("timetable.w365.rooms")
+#T = Tr("w365.rooms")
 
 ### +++++
 
-from timetable.w365.w365base import (
+from w365.w365base import (
     W365_DB,
     _Room,
     _Shortcut,

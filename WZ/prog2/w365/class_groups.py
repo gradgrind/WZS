@@ -1,5 +1,5 @@
 """
-timetable/w365/class_groups.py - last updated 2024-05-03
+w365/class_groups.py - last updated 2024-05-04
 
 Manage class, group and student data.
 
@@ -22,13 +22,13 @@ Copyright 2024 Michael Towers
 """
 
 #from core.base import Tr
-#T = Tr("timetable.w365.class_groups")
+#T = Tr("w365.class_groups")
 
 ### +++++
 
 from itertools import product
 
-from timetable.w365.w365base import (
+from w365.w365base import (
     _Shortcut,
     _Name,
     _Id,
@@ -162,12 +162,12 @@ def _read_subgroups(w365_db):
     # Add groups to database
     w365_db.add_nodes(table, w365id_nodes)
     # Build a mapping from key to w365id
-    w365_db.groupkey_w365id = {
+    w365_db.extra["groupkey_w365id"] = {
         id2key[id365]: id365
         for id365, _ in w365id_nodes
     }
     #print("\n????????????????????????????????")
-    #for k, v in w365_db.groupkey_w365id.items():
+    #for k, v in w365_db.extra["groupkey_w365id"].items():
     #    print("  --", k, v)
 
 
@@ -245,8 +245,8 @@ def read_groups(w365_db):
     ## or a class. Build a mapping w365id -> (class-key, group-key) for
     ## the classes and groups. The group-key is 0 for the whole class.
     group_map = {}
-    w365_db.group_map = group_map
-    gk2id365 = w365_db.groupkey_w365id
+    w365_db.extra["group_map"] = group_map
+    gk2id365 = w365_db.extra["groupkey_w365id"]
     for yid365, yklist in group_list:
         yk = id2key[yid365]
         group_map[yid365] = (yk, 0)     # "whole class" group
