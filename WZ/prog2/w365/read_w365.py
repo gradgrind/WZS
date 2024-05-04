@@ -31,7 +31,7 @@ if __name__ == "__main__":
     from core.wzbase import setup
     setup(basedir)
 
-#from core.base import Tr
+#from core.wzbase import Tr
 #T = Tr("w365.read_w365")
 
 ### +++++

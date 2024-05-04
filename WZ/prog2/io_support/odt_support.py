@@ -1,5 +1,5 @@
 """
-text/odt_support.py - last updated 2024-04-27
+text/odt_support.py - last updated 2024-05-04
 
 Support simple editing of odt-files (for LibreOffice) as templates.
 
@@ -31,14 +31,14 @@ if __name__ == "__main__":
     from core.base import setup
     setup(basedir)
 
-#from core.base import Tr
+#from core.wzbase import Tr
 #T = Tr("io_support.odt_support")
 
 ### +++++
 
 import re
 
-from core.base import REPORT_DEBUG, REPORT_ERROR
+from core.wzbase import REPORT_DEBUG, REPORT_ERROR
 from io_support.odf_support import (
     substitute_zip_content,
     XML_Reader,

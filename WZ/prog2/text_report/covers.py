@@ -1,5 +1,5 @@
 """
-text_report/covers.py - last updated 2024-05-01
+text_report/covers.py - last updated 2024-05-04
 
 Use odt-documents (ODF / LibreOffice) as templates for report covers.
 
@@ -28,78 +28,35 @@ if __name__ == "__main__":
     appdir = os.path.dirname(this)
     sys.path[0] = appdir
     basedir = os.path.dirname(appdir)
-    from core.base import setup
+    from core.wzbase import setup
     setup(basedir)
 
-#from core.base import Tr
-#T = Tr("text_report/covers")
+#from core.wzbase import Tr
+#T = Tr("text_report.covers")
 
 ### +++++
 
-from core.base import DATAPATH, REPORT_ERROR
-#from core.basic_data import get_database, CONFIG, CALENDAR
+#from core.wzbase import DATAPATH, REPORT_ERROR
+from core.wzbase import WZDatabase
 from core.dates import print_date
-from core.subjects import Subjects
 from io_support.odt_support import write_ODT_template
 from io_support.odf_pdf_merge import libre_office, merge_pdf
 
 ### -----
 
 
-def make_grade_reports(
-    occasion: str,
-    class_group: str,
+#TODO:
+def make_covers(
+    db: WZDatabase,
+    class_id: int,
 ):
-    def special(key):
-        """Enter the subjects and grades in the template.
-        """
-#TODO: Handle subject keys ... (where subjects are fixed in the template
-# so that the grade slots need specially coded keys).
-        nonlocal g_pending
-        #print("§SPECIAL:", key)
-        if key.startswith("$"):
-            if key == "$":
-                gplain = True
-            elif key == "$$":
-                gplain = False
-            else:
-                return None
-            if g_pending is None:
-                g = "!!!"
-            elif g_pending == CONFIG.NO_GRADE_DOC:
-                g = g_pending
-            else:
-                try:
-                    gx = grade_map[g_pending]
-                    if gplain:
-                        if gx[1] < 0:
-                            g = gx[0]
-                        else:
-                            g = g_pending
-                    else:
-                        g = gx[0]
-                except KeyError:
-                    g = "???"
-            g_pending = None
-            return g
-        if key.startswith("."):
-            for k in key[1:].split("."):
-                try:
-                    s, g_pending = subject_map[k].pop()
-                    return s
-                except KeyError:
-                    continue
-                except IndexError:
-                    del subject_map[k]
-            # No subjects left, add a null entry
-            g_pending = CONFIG.NO_GRADE_DOC
-            return CONFIG.NO_GRADE_DOC
-        return None
+    ## Get class data:
+    class_data = db.nodes[class_id]
+    print("\n§class_data:", class_data)
 
-    db = get_database()
-    ## Get grades
-    grade_table = GradeTable(occasion, class_group)
-    grade_map = grade_table.grade_map
+
+    return
+
     ## For students' data:
     students = db.table("STUDENTS")
     ## Report templates:
@@ -195,8 +152,23 @@ def make_grade_reports(
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
 
 if __name__ == "__main__":
+    from core.wzbase import DATAPATH
+    from w365.read_w365 import read_w365
 
-    cl = "10"
+    #w365path = DATAPATH("test.w365", "w365_data")
+    #w365path = DATAPATH("fwsb.w365", "w365_data")
+    #w365path = DATAPATH("fms.w365", "w365_data")
+    w365path = DATAPATH("fwsb2.w365", "w365_data")
+
+    #w365path = DATAPATH("fms_xep.w365", "w365_data")
+
+    print("W365 FILE:", w365path)
+
+    w365db = read_w365(w365path)
+
+    #print("§CLASSES:", w365db.tables["CLASSES"])
+    cdata = w365db.tables["CLASSES"][0]
+    make_covers(w365db, cdata.nid)
     quit(2)
 
     _o = "1. Halbjahr"

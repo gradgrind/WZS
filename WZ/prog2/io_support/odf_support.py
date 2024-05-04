@@ -1,5 +1,5 @@
 """
-io/odf_support.py - last updated 2024-04-27
+io/odf_support.py - last updated 2024-05-04
 
 Support reading and simple editing of odf-files (for LibreOffice).
 
@@ -21,7 +21,7 @@ Copyright 2024 Michael Towers
 =-LICENCE========================================
 """
 
-# from core.base import Tr
+# from core.wzbase import Tr
 # T = Tr("io_support.odf_support")
 
 ### +++++
@@ -34,7 +34,7 @@ import io
 from xml.sax import parse, parseString
 from xml.sax.handler import ContentHandler
 
-from core.base import REPORT_WARNING, REPORT_ERROR, REPORT_DEBUG
+from core.wzbase import REPORT_WARNING, REPORT_ERROR, REPORT_DEBUG
 
 trtable = str.maketrans(
     {

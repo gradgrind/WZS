@@ -21,7 +21,7 @@ Copyright 2024 Michael Towers
 =-LICENCE=================================
 """
 
-#from core.base import Tr
+#from core.wzbase import Tr
 #T = Tr("w365.activities")
 
 ### +++++
