@@ -1,5 +1,5 @@
 """
-w365/read_w365.py - last updated 2024-05-04
+w365/read_w365.py - last updated 2024-05-05
 
 Read timetable-relevant data from Waldorf365 dump file.
 
@@ -64,8 +64,7 @@ def read_w365(filepath):
     read_teachers(w365)
     read_rooms(w365)
     read_activities(w365)
-    # Add config items to database
-    w365.config2db()
+    w365.save_config()
     return w365
 
 

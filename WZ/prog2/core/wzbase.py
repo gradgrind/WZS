@@ -1,7 +1,7 @@
 """
 core/wzbase.py
 
-Last updated:  2024-05-04
+Last updated:  2024-05-05
 
 Basic configuration and structural stuff.
 
@@ -51,7 +51,6 @@ from typing import NamedTuple
 __REPORT = None
 __DATA: str = None              # Base folder for school data
 SYSTEM: dict[str, str] = None   # System configuration information
-CONFIG_TABLE = "__CONFIG__"
 
 
 class DB_Error(Exception):
@@ -139,7 +138,7 @@ def setup(basedir, year = None, debug = False):
     else:
         __DATA = os.path.join(basedir, "TESTDATA")
     # Get the system configuration information
-    SYSTEM = read_config_file(os.path.join(basedir, "CONFIG"))
+    SYSTEM = read_config_file(os.path.join(basedir, "SYSTEM"))
 
 
 def read_config_file(cpath: str) -> dict[str, str]:
@@ -184,18 +183,23 @@ class WZDatabase:
         "nodes",
         "node_tables",
         "config",
-        "config1"
+        "config_dir",
     )
 
     def __init__(self, year = None, memory = False):
         """If no year is given, the path will be the default accessible
         via <DATAPATH>.
         """
+        self.config = read_config_file(os.path.join(basedir, "CONFIG0"))
+        #print("§CONFIG0:", self.config)
         if year:
             data = year_data_path(year, basedir = basedir)
         else:
             data = DATAPATH("")
-        self.config = read_config_file(os.path.join(data, "CONFIG"))
+        self.config_dir = os.path.join(data, "CONFIG")
+        for cfile in sorted(os.listdir(self.config_dir)):
+            conf = read_config_file(os.path.join(self.config_dir, cfile))
+            self.config.update(conf)
         self.path = os.path.join(data, SYSTEM["DATABASE"])
         if memory:
             dbexists = False
@@ -211,17 +215,6 @@ class WZDatabase:
         if dbexists:
             for _id, table, data in self.select("* from NODES"):
                 self.new_node(table, _id, json.loads(data))
-            try:
-                c = self.node_tables[CONFIG_TABLE]
-            except KeyError:
-                # As the entry is created with a new database, this
-                # should never happen ...
-                _id = self.insert(CONFIG_TABLE, [{}])[0]
-                self.new_node(CONFIG_TABLE, _id, {})
-            else:
-                if len(c) > 1:
-                    REPORT_ERROR(T("MULTIPLE_CONFIGS", path = self.path))
-                _id = self.nodes[c[0]]
         else:
             if not memory:
                 REPORT_WARNING(T("NEW_DATABASE", path = self.path))
@@ -233,9 +226,6 @@ class WZDatabase:
                 )
                 STRICT;
             """)
-            _id = self.insert(CONFIG_TABLE, [{}])[0]
-            self.new_node(CONFIG_TABLE, _id, {})
-        self.config1 = self.nodes[_id]
 
     def query(self, sql: str, data: tuple | list = None) -> sqlite3.Cursor:
         #print("§query:", sql, "\n  --", data)
@@ -326,6 +316,11 @@ class WZDatabase:
         dmap = self.nodes[rowid].data
         dmap.clear()
         dmap.update(data)
+
+    def new_config(self, cfile, conf):
+        cpath = os.path.join(self.config_dir, cfile)
+        with open(cpath, "w", encoding = "utf-8") as fh:
+            fh.write("\n".join(f"{k} = {v}" for k, v in conf))
 
     def save(self):
         try:

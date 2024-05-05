@@ -1,5 +1,5 @@
 """
-w365/w365base.py - last updated 2024-05-04
+w365/w365base.py - last updated 2024-05-05
 
 Basic functions for:
     Reading a Waldorf365 file.
@@ -127,58 +127,51 @@ class W365_DB(WZDatabase):
         "_scenarios",
         "scenario",
         "idmap",
-        "tables",
         "id2key",
         "extra",    # map for entries which are added outside this module
     )
 
     def __init__(self, filedata):
         super().__init__(memory = True)
-        self.extra = {}
         schoolstate = filedata["$$SCHOOLSTATE"]
         # The configuration data from the data source will be added to
         # that read by the <Database> initialization, possibly
         # overwriting entries.
-        self.config1.data.update({
-            "SCHOOL": schoolstate[_SchoolName],
-            "STATE": schoolstate[_StateCode],
-            "COUNTRY": schoolstate[_CountryCode],
-        })
-        # Values may be added to this when reading the various input
-        # tables. When complete it needs to be saved as the wz-table
-        # "__CONFIG__", so the final result should be built later.
+        self.extra = {
+            "CONFIG": [
+                ("SCHOOL", schoolstate[_SchoolName]),
+                ("STATE", schoolstate[_StateCode]),
+                ("COUNTRY", schoolstate[_CountryCode]),
+                # Values may be added to this when reading the various
+                # input tables. When complete it needs to be saved as a
+                # config file.
+            ]
+        }
         self._scenarios = filedata["$$SCENARIOS"]
         self.scenario = filedata["$$SCENARIO"]
         self.idmap = filedata["$$IDMAP"]
-        self.tables = {}
         self.id2key = {}
 
     def add_nodes(self, table, w365id_nodes):
         values = [n for _, n in w365id_nodes]
         keys = self.insert(table, values)
         assert len(keys) == len(w365id_nodes)
-        try:
-            tlist = self.tables[table]
-        except KeyError:
-            tlist = []
-            self.tables[table]= tlist
         for i, k in enumerate(keys):
             _id, n = w365id_nodes[i]
             if _id:
                 self.id2key[_id] = k
-            tlist.append(n)
 
-    def config2db(self):
+    def add_config(self, key: str, value: str):
+        self.extra["CONFIG"].append((key, value))
+
+    def save_config(self):
         """Call this when all the data has been read in. Save the
-        source's configuration items in the database's (not yet
-        existent) "__CONFIG__" wz-table. Then combine with the base
-        configuration values, preferring the new ones if there is a
-        key clash.
-        <self.config> is left as a reference to the full mapping.
+        source's configuration items in the configuration folder and
+        include it in the configuration mapping.
         """
-        if self.config1.data:
-            self.update(self.config1.nid, self.config1.data)
-            self.config.update(self.config1.data)
+        conf = self.extra.pop("CONFIG")
+        self.new_config("W365", conf)
+        self.config.update(conf)
 
 
 def read_active_scenario(w365path):

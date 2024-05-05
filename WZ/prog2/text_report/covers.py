@@ -53,11 +53,12 @@ def make_covers(
     ## Get class data:
     class_data = db.nodes[class_id]
     print("\n§class_data:", class_data)
-
+    ## Get students' data:
+    for sid in class_data["STUDENTS"]:
+        print("  ++", db.nodes[sid])
 
     return
 
-    ## For students' data:
     students = db.table("STUDENTS")
     ## Report templates:
     _tinfo = db.table("GRADE_REPORT_CONFIG")._template_info
@@ -166,9 +167,10 @@ if __name__ == "__main__":
 
     w365db = read_w365(w365path)
 
-    #print("§CLASSES:", w365db.tables["CLASSES"])
-    cdata = w365db.tables["CLASSES"][0]
-    make_covers(w365db, cdata.nid)
+    print("§CLASSES:", w365db.node_tables["CLASSES"])
+    cid = w365db.node_tables["CLASSES"][0]
+    make_covers(w365db, cid)
+
     quit(2)
 
     _o = "1. Halbjahr"
