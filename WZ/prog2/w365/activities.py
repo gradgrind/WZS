@@ -1,5 +1,5 @@
 """
-w365/activities.py - last updated 2024-05-04
+w365/activities.py - last updated 2024-05-05
 
 Manage data concerning the "activities" (courses, lessons, etc.).
 
@@ -21,8 +21,8 @@ Copyright 2024 Michael Towers
 =-LICENCE=================================
 """
 
-#from core.wzbase import Tr
-#T = Tr("w365.activities")
+from core.wzbase import Tr
+T = Tr("w365.activities")
 
 ### +++++
 
@@ -83,15 +83,19 @@ def read_activities(w365_db):
         sklist = [w365_db.id2key[s] for s in slist]
         if len(sklist) != 1:
             stlist = ",".join(w365_db.nodes[s]["ID"] for s in sklist)
-#TODO
-            REPORT_ERROR(f'Ungültiges Fach: „{stlist}“')
+            REPORT_ERROR(T("INVALID_SUBJECT", sbj = stlist, course = course_id))
             continue
         subject = sklist[0]
         glist = node[_Groups].split(LIST_SEP)
         _pr = node.get(_PreferredRooms)
         rlist = _pr.split(LIST_SEP) if _pr else []
         tklist = [w365_db.id2key[t] for t in tlist]
-        gidlist = [group_map[g] for g in glist]
+        gidlist = []
+        for g in glist:
+            try:
+                gidlist.append(group_map[g])
+            except KeyError:
+                pass
         rklist = [w365_db.id2key[r] for r in rlist]
         workload = node[_HandWorkload]
         if workload == "555.555":   # (automatic!)

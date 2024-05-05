@@ -51,9 +51,10 @@ def sort_name(fields: dict[str, str]) -> str:
     return f"{ln}_{fn}"
 
 
-def make_covers(
+def make_covers_odt(
     db: WZDatabase,
     class_id: int,
+    extra: dict[str, str],
 ):
     ## Get class data:
     class_data = db.nodes[class_id]
@@ -75,7 +76,7 @@ def make_covers(
         fields = {
             "SCHOOL": db.config["SCHOOL"],
             "SYEAR": db.config["SCHOOL_YEAR"],
-            "DATE_ISSUE": db.config["DATE_LAST_DAY"],
+            "DATE_ISSUE": extra["DATE_ISSUE"],
             "CL": class_data["ID"],
             "A": "",
             "L": "",
@@ -100,6 +101,8 @@ def make_covers(
         #print("\n§USED:", u)
 
     return results
+
+
 
 
 def save_reports(folder: str, klass, reports: list):
@@ -133,34 +136,38 @@ def save_reports(folder: str, klass, reports: list):
     REPORT_INFO(f" PDF:-> {pdf_path}")
 
 
+def make_all_covers(w365db, class_ids, issue):
+    for cid in class_ids:
+        reports = make_covers_odt(w365db, cid, {"DATE_ISSUE": issue})
+        clnode = w365db.nodes[cid]
+        print(f'\nREPORT COVERS for class {clnode["ID"]}:')
+        cl, cx = clnode["SORTING"]
+        save_reports(
+            w365db.data_path(
+                "working_data",
+                "REPORT_COVERS",
+            ),
+            f"{cl:02}{cx}",
+            reports
+        )
+
+
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
 
 if __name__ == "__main__":
     from core.wzbase import DATAPATH
     from w365.read_w365 import read_w365
 
-    #w365path = DATAPATH("test.w365", "w365_data")
-    #w365path = DATAPATH("fwsb.w365", "w365_data")
-    #w365path = DATAPATH("fms.w365", "w365_data")
     w365path = DATAPATH("fwsb2.w365", "w365_data")
-
-    #w365path = DATAPATH("fms_xep.w365", "w365_data")
+    w365path = DATAPATH("Current.w365", "w365_data")
 
     print("W365 FILE:", w365path)
 
     w365db = read_w365(w365path)
 
     #print("§CLASSES:", w365db.node_tables["CLASSES"])
-    cid = w365db.node_tables["CLASSES"][0]
-    reports = make_covers(w365db, cid)
-    clnode = w365db.nodes[cid]
-    print(f'\nREPORT COVERS for class {clnode["ID"]}:')
-    cl, cx = clnode["SORTING"]
-    save_reports(
-        w365db.data_path(
-            "working_data",
-            "REPORT_COVERS",
-        ),
-        f"{cl:02}{cx}",
-        reports
+    make_all_covers(
+        w365db,
+        w365db.node_tables["CLASSES"],
+        issue= "2024-06-21"
     )

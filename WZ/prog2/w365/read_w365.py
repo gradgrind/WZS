@@ -49,7 +49,9 @@ from w365.timeslots import read_days, read_periods
 
 def read_w365(filepath):
     filedata = read_active_scenario(filepath)
-    print("\n$$SCENARIO:", filedata['$$SCENARIO'].keys())
+    scenario = filedata["$$SCENARIO"]
+    print("\n$$SCENARIO:", scenario.keys())
+    print("\n  :::", scenario["$$SCENARIO"])
     w365 = W365_DB(filedata)
 
     print("\nTODO: UserConstraints:")
@@ -78,6 +80,7 @@ if __name__ == "__main__":
     #w365path = DATAPATH("fwsb.w365", "w365_data")
     #w365path = DATAPATH("fms.w365", "w365_data")
     w365path = DATAPATH("fwsb2.w365", "w365_data")
+    w365path = DATAPATH("Current.w365", "w365_data")
 
     #w365path = DATAPATH("fms_xep.w365", "w365_data")
 
