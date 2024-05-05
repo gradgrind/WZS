@@ -183,7 +183,7 @@ class WZDatabase:
         "nodes",
         "node_tables",
         "config",
-        "config_dir",
+        "__data_dir",
     )
 
     def __init__(self, year = None, memory = False):
@@ -196,9 +196,10 @@ class WZDatabase:
             data = year_data_path(year, basedir = basedir)
         else:
             data = DATAPATH("")
-        self.config_dir = os.path.join(data, "CONFIG")
-        for cfile in sorted(os.listdir(self.config_dir)):
-            conf = read_config_file(os.path.join(self.config_dir, cfile))
+        self.__data_dir = data
+        config_dir = os.path.join(data, "CONFIG")
+        for cfile in sorted(os.listdir(config_dir)):
+            conf = read_config_file(os.path.join(config_dir, cfile))
             self.config.update(conf)
         self.path = os.path.join(data, SYSTEM["DATABASE"])
         if memory:
@@ -226,6 +227,14 @@ class WZDatabase:
                 )
                 STRICT;
             """)
+
+    def data_path(self, *items):
+        ll = []
+        for item in items:
+            for i in item.split("/"):
+                if i:
+                    ll.append(i)
+        return os.path.join(self.__data_dir, *ll)
 
     def query(self, sql: str, data: tuple | list = None) -> sqlite3.Cursor:
         #print("§query:", sql, "\n  --", data)
@@ -318,7 +327,7 @@ class WZDatabase:
         dmap.update(data)
 
     def new_config(self, cfile, conf):
-        cpath = os.path.join(self.config_dir, cfile)
+        cpath = self.data_path("CONFIG", cfile)
         with open(cpath, "w", encoding = "utf-8") as fh:
             fh.write("\n".join(f"{k} = {v}" for k, v in conf))
 

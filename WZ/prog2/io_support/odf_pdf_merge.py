@@ -1,5 +1,5 @@
 """
-io_support/odf_pdf_merge.py - last updated 2024-05-04
+io_support/odf_pdf_merge.py - last updated 2024-05-05
 
 Automate conversion of odf-documents (LibreOffice) to pdf and the
 merging of pdf files.
@@ -27,11 +27,11 @@ Copyright 2024 Michael Towers
 
 ### +++++
 
-import platform, subprocess     #, tempfile
+import os, platform, subprocess
 
 from pypdf import PdfWriter
 
-from core.wzbase import REPORT_OUT, REPORT_ERROR
+from core.wzbase import SYSTEM, REPORT_OUT, REPORT_ERROR
 
 ### -----
 
@@ -146,17 +146,8 @@ def libre_office(odf_list, pdf_dir, show_output = False):
     def extern_out(line):
         if show_output:
             REPORT_OUT(line)
-#TODO: Need to pass command in (or supply it in some other way ...)
-    try:
-        lo = CONFIG.LIBREOFFICE
-    except KeyError:
-#TODO
-        REPORT_ERROR(
-            "No LIBREOFFICE configuration (execution command) in CONFIG"
-        )
-        return
     rc, msg = run_extern(
-        lo,
+        SYSTEM["LIBREOFFICE"],
         "--headless",
         "--convert-to",
         "pdf",

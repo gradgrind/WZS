@@ -31,13 +31,12 @@ if __name__ == "__main__":
     from core.wzbase import setup
     setup(basedir)
 
-#from core.wzbase import Tr
-#T = Tr("text_report.covers")
+from core.wzbase import Tr
+T = Tr("text_report.covers")
 
 ### +++++
 
-#from core.wzbase import DATAPATH, REPORT_ERROR
-from core.wzbase import WZDatabase
+from core.wzbase import WZDatabase, REPORT_ERROR, REPORT_INFO
 from core.dates import print_date
 from io_support.odt_support import write_ODT_template
 from io_support.odf_pdf_merge import libre_office, merge_pdf
@@ -45,109 +44,93 @@ from io_support.odf_pdf_merge import libre_office, merge_pdf
 ### -----
 
 
-#TODO:
+#TODO: ASCII-only result? Handle tussenvoegsel? Put it in its own module.
+def sort_name(fields: dict[str, str]) -> str:
+    ln = "_".join(fields["LASTNAME"].split())
+    fn = "_".join(fields["FIRSTNAME"].split())
+    return f"{ln}_{fn}"
+
+
 def make_covers(
     db: WZDatabase,
     class_id: int,
 ):
     ## Get class data:
     class_data = db.nodes[class_id]
-    print("\n§class_data:", class_data)
-    ## Get students' data:
-    for sid in class_data["STUDENTS"]:
-        print("  ++", db.nodes[sid])
+    #print("\n§class_data:", class_data)
 
-    return
+    ## Report template:
+    k0, k1 = class_data["SORTING"]
+    try:
+        t = db.config[f"REPORT_COVER_{k0}_{k1}"]
+    except KeyError:
+        t = db.config[f"REPORT_COVER_*_{k1}"]
+    template_file = db.data_path("TEMPLATES", "REPORTS", t)
+    #print("§template:", template_file)
 
-    students = db.table("STUDENTS")
-    ## Report templates:
-    _tinfo = db.table("GRADE_REPORT_CONFIG")._template_info
-    template_info = {
-        ti[0]: ti[1]
-        for ti in _tinfo[occasion][class_group]
-    }
-    #print("\n§template_info:", template_info)
     ## Process each student
     results = []
-    for line in grade_table.lines:
-        st_id = line.student_id
+    for sid in class_data["STUDENTS"]:
+        sdata = db.nodes[sid]
         fields = {
-            "SCHOOL": CONFIG.SCHOOL,
-            "OCCASION": occasion,
+            "SCHOOL": db.config["SCHOOL"],
+            "SYEAR": db.config["SCHOOL_YEAR"],
+            "DATE_ISSUE": db.config["DATE_LAST_DAY"],
+            "CL": class_data["ID"],
+            "A": "",
+            "L": "",
         }
-        fields.update(students.all_string_fields(st_id))
-        cl_data = students[st_id].Class
-        fields["CLASS"] = cl_data.CLASS
-        fields["CLASS_YEAR"] = cl_data.YEAR
-        fields["CLASS_NAME"] = cl_data.NAME
-        values = line.values
-        subject_map = {}
-        for i, dci in enumerate(grade_table.column_info):
-            if dci.TYPE == "GRADE":
-                #print("???", dci)
-                s = dci.DATA["SORTING"]
-                v = values[i]
-                if v == NO_GRADE:
-                    continue
-                val = (Subjects.clip_name(dci.LOCAL), v) #???
-                try:
-                    subject_map[s].append(val)
-                except KeyError:
-                    subject_map[s] = [val]
-            else:
-                fields[dci.NAME] = values[i]
-        # Get template file
-        try:
-            ttype = fields["REPORT_TYPE"]
-            tfile = template_info[ttype]
-            if not tfile:
-                continue
-        except KeyError:
-            continue
-        template_file = DATAPATH(
-            tfile,
-            f"TEMPLATES/{CONFIG.GRADE_REPORT_TEMPLATES}"
-        )
-        if not template_file.endswith(".odt"):
-            template_file = f"{template_file}.odt"
-        #print("\n§template:", template_file)
-        #print("§SUBJECT_MAP:", subject_map)
-        for k, v in subject_map.items():
-            v.reverse()
-        #print("§SUBJECT_MAP_REVERSED:", subject_map)
-        fields.update(CALENDAR.all_string_fields())
-        #print("\n§FIELDS:", fields)
-        # Make adjustments for specialities of the region or school-type
-        local.reports.local_fields(fields)
-        # Convert dates
+        fields.update(sdata.data)
+        #print("  ++", fields)
+
+        ## Convert dates
         for f, val in fields.items():
             if f.startswith("DATE_"):
                 if val:
-                    try:
-                        dateformat = CONFIG.GRADE_DATE_FORMAT
-                    except KeyError:
-                        dateformat = None
+                    dateformat = db.config["FORMAT_DATE"]
                     #print("§dateformat:", dateformat, val)
                     val = print_date(val, dateformat)
                 fields[f] = val
         #print("\n$$$", fields)
 
-        g_pending = None
-        odt, m, u = write_ODT_template(template_file, fields, special)
-        # If there are still entries in <subject_map> at the end of
-        # the processing, these are unplaced values – report them.
-        xs_subjects = []
-        for sg in subject_map.values():
-            xs_subjects += [ f"  -- {s}: {g}" for s, g in sg ]
-        if xs_subjects:
-            REPORT_ERROR(T("EXCESS_SUBJECTS", slist = "\n".join(xs_subjects)))
-
-        results.append((odt, fields["SORTNAME"], ttype))
+        odt, m, u = write_ODT_template(template_file, fields)
+        results.append((sort_name(fields), odt))
 
         #print("\n§MISSING:", m)
         #print("\n§USED:", u)
 
     return results
+
+
+def save_reports(folder: str, klass, reports: list):
+    odt_dir = os.path.join(folder, klass)
+    pdf_dir = os.path.join(odt_dir, "pdf")
+    #print("§pdf_dir:", pdf_dir)
+    os.makedirs(pdf_dir, exist_ok = True)
+    odt_list = []
+    pdf_list0 = []
+    for sname, odt in sorted(reports):
+        outpath = os.path.join(odt_dir, sname) + ".odt"
+        with open(outpath, 'bw') as fh:
+            fh.write(odt)
+        #print(" -->", outpath)
+        odt_list.append(outpath)
+        pdf_list0.append(os.path.join(pdf_dir, f"{sname}.pdf"))
+    # Clear pdf folder
+    for f in os.listdir(pdf_dir):
+        os.remove(os.path.join(pdf_dir, f))
+    # Generate pdf files
+    libre_office(odt_list, pdf_dir, show_output = True)
+    # Merge pdf files
+    pdf_list = []
+    for f in pdf_list0:
+        if os.path.exists(f):
+            pdf_list.append(f)
+        else:
+            REPORT_ERROR(T("MISSING_PDF", path = f))
+    pdf_path = os.path.join(folder, f"{klass}.pdf")
+    merge_pdf(pdf_list, pdf_path)
+    REPORT_INFO(f" PDF:-> {pdf_path}")
 
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
@@ -167,36 +150,17 @@ if __name__ == "__main__":
 
     w365db = read_w365(w365path)
 
-    print("§CLASSES:", w365db.node_tables["CLASSES"])
+    #print("§CLASSES:", w365db.node_tables["CLASSES"])
     cid = w365db.node_tables["CLASSES"][0]
-    make_covers(w365db, cid)
-
-    quit(2)
-
-    _o = "1. Halbjahr"
-    _cg = "12G.R"
-    #_cg = "12G.G"
-    #_cg = "13"
-    #_cg = "11G"
-    outdir = DATAPATH(f"{_o}/{_cg}".replace(" ", "_"), "working_data")
-    print("§outdir", outdir)
-    pdf_dir = os.path.join(outdir, "pdf")
-    os.makedirs(pdf_dir, exist_ok = True)
-    odt_list = []
-    for odt, sname, ttype in make_grade_reports(_o, _cg):
-        outpath = os.path.join(outdir, sname) + ".odt"
-        with open(outpath, 'bw') as fh:
-            fh.write(odt)
-        print(" -->", outpath)
-        odt_list.append(outpath)
-#TODO: clear pdf folder?
-    libre_office(odt_list, pdf_dir, show_output = True)
-
-    pdf_list = [
-        os.path.join(pdf_dir, f)
-        for f in sorted(os.listdir(pdf_dir))
-        if f.endswith(".pdf")
-    ]
-    pdf_path = os.path.join(outdir, f"{_o}-{_cg}.pdf".replace(" ", "_"))
-    merge_pdf(pdf_list, pdf_path)
-    print(" PDF:->", pdf_path)
+    reports = make_covers(w365db, cid)
+    clnode = w365db.nodes[cid]
+    print(f'\nREPORT COVERS for class {clnode["ID"]}:')
+    cl, cx = clnode["SORTING"]
+    save_reports(
+        w365db.data_path(
+            "working_data",
+            "REPORT_COVERS",
+        ),
+        f"{cl:02}{cx}",
+        reports
+    )

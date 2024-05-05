@@ -1,5 +1,5 @@
 """
-text/odt_support.py - last updated 2024-05-04
+text/odt_support.py - last updated 2024-05-05
 
 Support simple editing of odt-files (for LibreOffice) as templates.
 
@@ -28,7 +28,7 @@ if __name__ == "__main__":
     appdir = os.path.dirname(this)
     sys.path[0] = appdir
     basedir = os.path.dirname(appdir)
-    from core.base import setup
+    from core.wzbase import setup
     setup(basedir)
 
 #from core.wzbase import Tr
@@ -111,6 +111,8 @@ def read_ODT_template(filepath: str) -> dict[str, int]:
 
     regex = re.compile(r"\[\[(.*?)\]\]")
     keys = {}
+    if not filepath.endswith(".odt"):
+        filepath += ".odt"
     substitute_zip_content(
         filepath,
         process = read_xml
@@ -204,6 +206,8 @@ def write_ODT_template(
     regex = re.compile(r"\[\[(.*?)\]\]")
     missing = {}
     used = {}
+    if not filepath.endswith(".odt"):
+        filepath += ".odt"
     odt = substitute_zip_content(
         filepath,
         process = replace_xml
@@ -214,9 +218,9 @@ def write_ODT_template(
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
 
 if __name__ == "__main__":
-    from core.base import DATAPATH
+    from core.wzbase import DATAPATH
 
-    filepath = DATAPATH("Mantel.odt", "TEMPLATES/TEXT_REPORTS")
+    filepath = DATAPATH("MantelK", "TEMPLATES/REPORTS")
     print("§KEYS in", filepath)
     keys = read_ODT_template(filepath)
     print("\n  ================================")
@@ -228,7 +232,6 @@ if __name__ == "__main__":
         "LASTNAME": "Steinkopf",
         "DATE_BIRTH": "01.04.2008",
         "CL": "10",
-        "KK": "Kleinklassenzweig",
         "SYEAR": "2024 – 2025",
         "A": "",
         "L": "",

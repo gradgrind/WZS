@@ -134,6 +134,9 @@ class W365_DB(WZDatabase):
     def __init__(self, filedata):
         super().__init__(memory = True)
         schoolstate = filedata["$$SCHOOLSTATE"]
+        self._scenarios = filedata["$$SCENARIOS"]
+        self.scenario = filedata["$$SCENARIO"]
+        year_info = self.scenario["$$SCENARIO"]
         # The configuration data from the data source will be added to
         # that read by the <Database> initialization, possibly
         # overwriting entries.
@@ -142,13 +145,16 @@ class W365_DB(WZDatabase):
                 ("SCHOOL", schoolstate[_SchoolName]),
                 ("STATE", schoolstate[_StateCode]),
                 ("COUNTRY", schoolstate[_CountryCode]),
+                ("SCHOOL_YEAR", year_info['Decription']),   # sic!
+                ("YEAR", year_info['Name']),
+# I am not sure I am using the start and end dates correctly ...
+                ("DATE_FIRST_DAY", convert_date(year_info['Start'])),
+                ("DATE_LAST_DAY", convert_date(year_info['End'])),
                 # Values may be added to this when reading the various
                 # input tables. When complete it needs to be saved as a
                 # config file.
             ]
         }
-        self._scenarios = filedata["$$SCENARIOS"]
-        self.scenario = filedata["$$SCENARIO"]
         self.idmap = filedata["$$IDMAP"]
         self.id2key = {}
 
