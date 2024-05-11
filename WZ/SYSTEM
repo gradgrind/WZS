@@ -2,3 +2,4 @@
 DATABASE = wznodes.sqlite
 ; Befehl zur Ausführung von LibreOffice
 LIBREOFFICE = libreoffice
+TEX = xelatex

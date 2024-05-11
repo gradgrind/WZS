@@ -1,5 +1,5 @@
 """
-text_report/covers2a.py - last updated 2024-05-10
+text_report/covers2a.py - last updated 2024-05-11
 
 Use xetex templates for report covers - using one file per class.
 
@@ -39,9 +39,15 @@ T = Tr("text_report.covers")
 import re
 import shutil
 
-from core.wzbase import WZDatabase, REPORT_ERROR, REPORT_INFO, REPORT_OUT
+from core.wzbase import (
+    WZDatabase,
+    SYSTEM,
+    REPORT_ERROR,
+    REPORT_INFO,
+    REPORT_OUT,
+)
 from core.dates import print_date
-from io_support.odf_pdf_merge import run_extern, merge_pdf
+from io_support.odf_pdf_merge import run_extern
 
 REGEX = re.compile(r"\[\[(.*?)\]\]")
 
@@ -66,9 +72,7 @@ def run_tex(tex_file, pdf_dir, show_output = False):
             REPORT_OUT(line)
 
     rc, msg = run_extern(
-#TODO
-#            SYSTEM["TEX"],
-        "xelatex",
+        SYSTEM["TEX"],
         "-interaction=nonstopmode",
         f"-output-directory={pdf_dir}",
         tex_file,
@@ -83,10 +87,11 @@ def run_tex(tex_file, pdf_dir, show_output = False):
 
 
 #TODO: Handle newline in field values
-#TODO: Other text manipulations, say conditionals, loops, ...
+#TODO: Other text manipulations, say conditionals, loops, ... ?
 def write_template(
     template: str,
     units: list[dict[str, str]],
+    template_base: str,
     special = None
 ) -> tuple[str, dict[str, int], dict[str, str]]:
     """Read the contents of the document seeking special text fields.
@@ -141,11 +146,21 @@ def write_template(
     block = []
     block_link = []
     lines1 = []
+    info = {}
     iterlines = iter(template.splitlines())
     try:
         while True:
             line = next(iterlines)
-            if line.lstrip().startswith("%%++"):
+            if line.startswith("%%:"):
+                # A path in the TEMPLATES folder
+                try:
+                    _, k, v = line.split(":", 2)
+                except ValueError:
+#TODO
+                    REPORT_ERROR(f"BAD_PATH_DEF: {line}")
+                else:
+                    info[k] = os.path.join(template_base, *v.split("/"))
+            if line.startswith("%%++"):
                 break
             lines0.append(line)
     except StopIteration:
@@ -162,7 +177,7 @@ def write_template(
     try:
         while True:
             line = next(iterlines)
-            if line.lstrip().startswith("%%--"):
+            if line.startswith("%%--"):
                 break
             block.append(line)
     except StopIteration:
@@ -176,7 +191,7 @@ def write_template(
     try:
         while True:
             line = next(iterlines)
-            if line.lstrip().startswith("%%.."):
+            if line.startswith("%%.."):
                 break
             block_link.append(line)
     except StopIteration:
@@ -198,7 +213,10 @@ def write_template(
     post = "\n".join(lines1)
 
     blist = []
-    for fields in units:
+    for ufields in units:
+        fields = {}
+        fields.update(info)
+        fields.update(ufields)
         if blist:
             blist.append(linkage)
         blist.append(REGEX.sub(fsub, body))
@@ -217,16 +235,15 @@ def make_covers(
 
     ## Report template:
     k0, k1 = class_data["SORTING"]
-    try:
-        t = db.config[f"REPORT_COVER_{k0}_{k1}"]
-    except KeyError:
-        t = db.config[f"REPORT_COVER_*_{k1}"]
+#    try:
+#        t = db.config[f"REPORT_COVER_{k0}_{k1}"]
+#    except KeyError:
+#        t = db.config[f"REPORT_COVER_*_{k1}"]
+    t = db.config[f"REPORT_COVER"]
     template_file = db.data_path("TEMPLATES", "REPORTS", t)
 #TODO: Set up template loading properly
 #TODO: Handle the various types of template / result
-#TODO: Maybe the logo should be at a relative path?
-    logo = db.data_path("TEST_COVER", "fwsb-logo.pdf")
-    template_file = db.data_path("TEST_COVER", "COVER",)
+#    template_file = db.data_path("TEST_COVER", "COVER",)
     if not template_file.endswith(".tex"):
         template_file += ".tex"
     #print("§template:", template_file)
@@ -234,20 +251,20 @@ def make_covers(
         template = fh.read()
 
     ## Collect data for each student
+    # Sort the list
+    stlist = [db.nodes[sid] for sid in class_data["STUDENTS"]]
+    stlist.sort(key = lambda x: (x["LASTNAME"], x["FIRSTNAME"]))
     units = []
-#TODO: The students need sorting!
-    for sid in class_data["STUDENTS"]:
-        sdata = db.nodes[sid]
+    for sdata in stlist:
         fields = {
-            "LOGO": logo,
             "SCHOOL": db.config["SCHOOL"],
             "SYEAR": db.config["SCHOOL_YEAR"],
             "DATE_ISSUE": extra["DATE_ISSUE"],
             "CL": class_data["ID"],
-            # These need some "text" or else the boxes collapse.
-            # The text can, however, be invisible.
-#TODO: These fields are available in case they should be automated at
-# some point ...
+            # These fields need some "text" or else the boxes might
+            # collapse. The text can, however, be invisible.
+            # They are made available in case they should be automated
+            # at some point ...
             "A": r"\phantom{1}",
             "L": r"\phantom{1}",
             "B": r"\phantom{1}",
@@ -265,7 +282,7 @@ def make_covers(
                 fields[f] = val
         #print("\n$$$", fields)
         units.append(fields)
-    text, m, u = write_template(template, units)
+    text, m, u = write_template(template, units, db.data_path("TEMPLATES"))
 
     #print("\n§MISSING:", m)
     #print("\n§USED:", u)
@@ -273,10 +290,10 @@ def make_covers(
     return text
 
 
-def make_all_covers(w365db, class_ids, issue):
+def make_all_covers(w365db, class_ids, issue, class_filter = None):
     save_path = w365db.data_path(
         "working_data",
-        "_REPORT_COVERS",
+        "REPORT_COVERS",
     )
     # Clear / create result folder
     try:
@@ -286,9 +303,11 @@ def make_all_covers(w365db, class_ids, issue):
     for cid in class_ids:
         cin = make_covers(w365db, cid, {"DATE_ISSUE": issue})
         clnode = w365db.nodes[cid]
-        print(f'\nREPORT COVERS for class {clnode["ID"]}:')
         cl, cx = clnode["SORTING"]
         klass = f"{cl:02}{cx}"
+        if class_filter and not class_filter(klass):
+            continue
+        #print(f'\nREPORT COVERS for class {clnode["ID"]}:')
         tex_dir = os.path.join(save_path, klass)
         tex_file = os.path.join(tex_dir, f"{klass}.tex")
         os.makedirs(tex_dir)
@@ -311,9 +330,14 @@ if __name__ == "__main__":
 
     w365db = read_w365(w365path)
 
+    def cfilter(klass):
+        cy = int(klass.rstrip("K"))
+        return cy >= 1 and cy <= 12
+
     #print("§CLASSES:", w365db.node_tables["CLASSES"])
     make_all_covers(
         w365db,
         w365db.node_tables["CLASSES"],
-        issue = "2024-06-21"
+        issue = "2024-06-21",
+        class_filter = cfilter
     )
