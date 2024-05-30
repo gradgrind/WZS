@@ -1,5 +1,5 @@
 """
-w365/fet/make_fet_file.py - last updated 2024-05-01
+timetable/fet/make_fet_file.py - last updated 2024-05-15
 
 Build a fet-file from supplied timetable data.
 
@@ -32,7 +32,7 @@ if __name__ == "__main__":
     appdir = os.path.dirname(os.path.dirname(this))
     sys.path[0] = appdir
     basedir = os.path.dirname(appdir)
-    from core.base import setup
+    from core.wzbase import setup
     setup(basedir)
 
 #from core.base import Tr
@@ -41,11 +41,10 @@ if __name__ == "__main__":
 ### +++++
 
 from lib import xmltodict
-from core.base import REPORT_ERROR, REPORT_WARNING
-from core.basic_data import pr_course
+from core.wzbase import REPORT_ERROR, REPORT_WARNING, pr_course
 
 #TODO: Move this somewhere else
-from timetable.w365.class_groups import AG_SEP
+from w365.class_groups import AG_SEP
 
 from timetable.fet.fet_support import next_activity_id
 from timetable.fet.constraints import (
@@ -165,8 +164,8 @@ def class_groups(node):
 def get_days(data, fetout):
     days = []
     fetlist = []
-    for node in data.tables["DAYS"]:
-        d = node["ID"]
+    for nid in data.node_tables["DAYS"]:
+        d = data.nodes[nid]["ID"]
         days.append(d)
         fetlist.append({"Name": d})
     fetout["Days_List"] = {
@@ -179,8 +178,8 @@ def get_days(data, fetout):
 def get_periods(data, fetout):
     periods = []
     fetlist = []
-    for node in data.tables["PERIODS"]:
-        p = node["ID"]
+    for nid in data.node_tables["PERIODS"]:
+        p = data.nodes[nid]["ID"]
         periods.append(p)
         fetlist.append({"Name": p})
     fetout["Hours_List"] = {
@@ -191,19 +190,23 @@ def get_periods(data, fetout):
 
 
 def get_teachers(data, fetout):
-    fetlist = [{
-        "Name": node["ID"],
-        "Target_Number_of_Hours": "0",
-        "Qualified_Subjects": None,
-        "Comments": f'{node["FIRSTNAMES"]} {node["LASTNAME"]}'
-    } for node in data.tables["TEACHERS"]]
+    fetlist = []
+    for nid in data.node_tables["TEACHERS"]:
+        node = data.nodes[nid]
+        fetlist.append({
+            "Name": node["ID"],
+            "Target_Number_of_Hours": "0",
+            "Qualified_Subjects": None,
+            "Comments": f'{node["FIRSTNAMES"]} {node["LASTNAME"]}'
+        })
     fetout["Teachers_List"] = {"Teacher": fetlist}
 
 
 def get_subjects(data, fetout):
     fetlist = EXTRA_SUBJECTS()
 #    sids = set()
-    for node in data.tables["SUBJECTS"]:
+    for nid in data.node_tables["SUBJECTS"]:
+        node = data.nodes[nid]
         sid = node["ID"]
         fetlist.append({"Name": sid, "Comments": node["NAME"]})
 #        sids.add(sid)
@@ -213,7 +216,7 @@ def get_subjects(data, fetout):
 
 def get_groups(data, fetout):
     fetout["Students_List"] = {"Year": [
-        class_groups(node) for node in data.tables["CLASSES"]
+        class_groups(data.nodes[nid]) for nid in data.node_tables["CLASSES"]
     ]}
 
 
@@ -221,14 +224,14 @@ def get_rooms(data, fetout):
     fetlist = []
     rconstraints = {}
     roomgroups = []
-    for node in data.tables["ROOMS"]:
+    for nid in data.node_tables["ROOMS"]:
+        node = data.nodes[nid]
         #print("ROOM:", node)
         rid = node["ID"]
         rname = node["NAME"]
-        rglist = node.get("ROOM_GROUP")
-        if rglist:
-            roomgroups.append((rid, rname, rglist))
-        else:
+        try:
+            rglist = node["ROOM_GROUP"]
+        except KeyError:
             fetlist.append({
                 "Name": rid,
                 "Building": "",
@@ -236,11 +239,14 @@ def get_rooms(data, fetout):
                 "Virtual": "false",
                 "Comments": rname,
             })
+        else:
+            roomgroups.append((rid, rname, rglist))
     # Make virtual rooms with one-room elements for the room-groups
-    data.virtual_rooms = {}
+    virtual_rooms = {}
+    data.extra["virtual_rooms"] = virtual_rooms
     for vrid, rname, rglist in roomgroups:
-        ridlist = [data.key2node[roomkey]["ID"] for roomkey in rglist]
-        data.virtual_rooms[vrid] = ridlist
+        ridlist = [data.nodes[roomkey]["ID"] for roomkey in rglist]
+        virtual_rooms[vrid] = ridlist
         roomlist = [
             {
                 "Number_of_Real_Rooms": "1",
@@ -263,10 +269,11 @@ def get_rooms(data, fetout):
 def get_activities(data, fetout):
     fetlist = []
     next_activity_id(reset = True)
-    full_atomic_groups = data.full_atomic_groups
+    full_atomic_groups = data.extra["full_atomic_groups"]
     subject_activities = SubjectGroupActivities(full_atomic_groups)
-    key2node = data.key2node
-    for node in data.tables["COURSES"]:
+    key2node = data.nodes
+    for nid in data.node_tables["COURSES"]:
+        node = data.nodes[nid]
         try:
             durations = node["LESSONS"]
             total_duration = sum(durations)
@@ -277,7 +284,10 @@ def get_activities(data, fetout):
             # Courses without lessons are not directly relevant here
             continue
         sbj = key2node[node["SUBJECT"]]["ID"]
-        tlist = node.get("TEACHERS") or []
+        try:
+            tlist = node["TEACHERS"]
+        except KeyError:
+            tlist = []
         tidset = {key2node[t]["ID"] for t in tlist}
         gidlist = []
         gset = set()
@@ -297,9 +307,11 @@ def get_activities(data, fetout):
         # Rooms are handled differently, because of choices. Each
         # distinct list of rooms is counted as an additional room
         # requirement.
-        rlist = node.get("ROOM_WISH")
-        ridset = {tuple(key2node[r]["ID"] for r in rlist)} if rlist else set()
-
+        try:
+            rlist = node["ROOM_WISH"]
+        except KeyError:
+            rlist = []
+        ridset = {tuple(key2node[r]["ID"] for r in rlist)}
         try:
             block_members = node["$MEMBERS"]
         except KeyError:
@@ -367,7 +379,7 @@ def get_activities(data, fetout):
             fetlist.append(activity)
             activity_list.append(activity)
         subject_activities.add_activities(sbj, gidlist, aid_list)
-    data.set_subject_activities(subject_activities)
+    data.extra["subject_activities"] = subject_activities
 
 # Defining a set of lessons as an "Activity_Group" / subactivities
 # is a way of grouping activities which are split into a number
@@ -391,7 +403,8 @@ def get_full_atomic_groups(data):
     their "atomic" groups (also with class prefix).
     """
     atomic_groups = {}
-    for node in data.tables["CLASSES"]:
+    for nid in data.node_tables["CLASSES"]:
+        node = data.nodes[nid]
         #print("\n ***", node)
         clid = node["ID"]
         group_atoms = node["$GROUP_ATOM_MAP"]
@@ -432,11 +445,8 @@ def build_fet_file(data):
     get_groups(data, fetout)
     fetout["Buildings_List"] = ""
     get_rooms(data, fetout)
-
-#TODO?
     # A mapping class-group -> full atomic groups is needed for constraints
-    data.set_full_atomic_groups(get_full_atomic_groups(data))
-
+    data.extra["full_atomic_groups"] = get_full_atomic_groups(data)
     get_activities(data, fetout)
     get_time_constraints(data, fetout, days, periods)
     get_space_constraints(data, fetout)
@@ -448,7 +458,7 @@ def build_fet_file(data):
 
 
 if __name__ == "__main__":
-    from core.base import DATAPATH
+    from core.wzbase import DATAPATH
 
     dbpath = DATAPATH("db365.sqlite", "w365_data")
     #w365path = DATAPATH("test.w365", "w365_data")
@@ -460,7 +470,7 @@ if __name__ == "__main__":
     print("DATABASE FILE:", dbpath)
     print("W365 FILE:", w365path)
 
-    from timetable.w365.read_w365 import read_w365
+    from w365.read_w365 import read_w365
     w365db = read_w365(w365path)
 
     #w365db.save(dbpath)

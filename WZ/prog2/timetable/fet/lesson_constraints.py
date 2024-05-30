@@ -1,5 +1,5 @@
 """
-w365/fet/lesson_constraints.py - last updated 2024-03-24
+w365/fet/lesson_constraints.py - last updated 2024-05-15
 
 Set fixed lesson times.
 Handle prevention of multiple lessons in one subject on any day.
@@ -26,7 +26,7 @@ Copyright 2024 Michael Towers
 #TODO: Constraint generation, tidying
 
 
-from w365.wz_w365.class_groups import AG_SEP
+from w365.class_groups import AG_SEP
 
 
 class SubjectGroupActivities:
@@ -78,11 +78,12 @@ def lesson_constraints(db, fetout, daylist, periodlist):
     fet_fixed = []
     constraint_list = fetout["Time_Constraints_List"]
     constraint_list["ConstraintActivityPreferredStartingTime"] = fet_fixed
-    for node in db.tables["LESSONS"]:
+    for nid in db.node_tables["LESSONS"]:
+        node = db.nodes[nid]
         assert node["FIXED"] == "true"
         #print("  --", node)
         course_key = node["_Course"]
-        course = db.key2node[course_key]
+        course = db.nodes[course_key]
         activities = course["$ACTIVITIES"]
         #print("    ++", activities)
 
@@ -113,7 +114,7 @@ def lesson_constraints(db, fetout, daylist, periodlist):
     #    print(node)
 
     # Collect the activity-id sets according to their length
-    activity_groups = db.subject_activities.get_activity_groups()
+    activity_groups = db.extra["subject_activities"].get_activity_groups()
     #print("\n  ==>>", activity_groups)
 
     ### Eliminate subsets

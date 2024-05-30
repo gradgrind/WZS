@@ -242,6 +242,12 @@ def read_w365(filepath: str):
             if sect[0] == "$":
                 continue
             itemlist.sort(key = lambda x: x[_ListPosition])
+
+    for sk, si in scenarios.items():
+        print("\n********", sk, si.keys())
+        print("  ++", si["$$SCENARIO"])
+        print("  --", si["Teacher"])
+
     return w365
 
 

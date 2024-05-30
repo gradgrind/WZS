@@ -1,5 +1,5 @@
 """
-w365/fet/constraints.py - last updated 2024-05-01
+w365/fet/constraints.py - last updated 2024-05-15
 
 Add constraints to the fet file.
 
@@ -22,14 +22,14 @@ Copyright 2024 Michael Towers
 """
 
 #TODO: Should be got from somewhere else:
-from timetable.w365.class_groups import AG_SEP
+from w365.class_groups import AG_SEP
 #TODO: These dependencies don't belong here! However, if I use their
 # strings for potential other inputs, it might be okay?
-#from timetable.w365.w365base import (
+#from w365.w365base import (
 #    _Categories,
 #)
 
-from core.basic_data import pr_course
+from core.wzbase import pr_course
 from timetable.fet.fet_support import (
     SUBJECT_LUNCH_BREAK,
     SUBJECT_FREE_AFTERNOON,
@@ -64,12 +64,14 @@ def get_time_constraints(db, fetout, daylist, periodlist):
         "ConstraintMinDaysBetweenActivities": not_on_same_day_list,
     }
     fetout["Time_Constraints_List"] = constraint_list
-    afternoon_start = db.config["AFTERNOON_START_PERIOD"]
+    afternoon_start = int(db.config["AFTERNOON_START_PERIOD"])
     if afternoon_start >= 0:
         afternoon_hours = set(periodlist[afternoon_start:])
     else:
         afternoon_hours = set()
-    lunchbreak = db.config["LUNCHBREAK"] # list of period indexes (ints, not tags)
+    # List of period indexes as str (not tags):
+    _lb = db.config["LUNCHBREAK"]
+    lunchbreak = [int(h) for h in _lb.split(',')] if _lb else []
     lunchbreak_hours = {periodlist[h] for h in lunchbreak}
     #print("§lb", lunchbreak_hours)
     #print("§pm", afternoon_hours)
@@ -124,10 +126,17 @@ def get_time_constraints(db, fetout, daylist, periodlist):
 
 #    return
 #?
-    for node in db.tables["TEACHERS"]:
-        x = node.get("EXTRA")
-        if x:
-            print("EXTRA:", x)
+    for nid in db.node_tables["TEACHERS"]:
+        node = db.nodes[nid]
+#?
+        try:
+            categories = node["EXTRA"]
+        except KeyError:
+            pass
+        else:
+#        if categories:
+            print("EXTRA:", repr(categories))
+
 #        if tid not in used:
 #            continue
 # ...
@@ -136,16 +145,18 @@ def get_time_constraints(db, fetout, daylist, periodlist):
         afternoons = cdata["NumberOfAfterNoonDays"]
         n_afternoons = int(afternoons)
         nt_days = n_days
-        cdata_absences = node.get("NOT_AVAILABLE")
-        if cdata_absences:
-            for d, hl in cdata_absences.items():
-                if len(hl) >= n_hours:
+        try:
+            cdata_absences = node["NOT_AVAILABLE"]
+        except KeyError:
+            cdata_absences = None
+        else:
+            if cdata_absences:
+                for d, hl in cdata_absences.items():
+                    if len(hl) >= n_hours:
 #TODO
-                    assert len(hl) == n_hours
-                    nt_days -= 1
+                        assert len(hl) == n_hours
+                        nt_days -= 1
 #TODO count blocked afternoons
-
-
 
         maxdays = cdata["MaxDays"]
         n_maxdays = int(maxdays)
@@ -159,7 +170,6 @@ def get_time_constraints(db, fetout, daylist, periodlist):
             })
         else:
             n_maxdays = n_days
-
 
         # If "0" afternoons is set this should be set as absence, not as
         # an additional constraint here.
@@ -187,7 +197,6 @@ def get_time_constraints(db, fetout, daylist, periodlist):
                     "Comments": "",
                 })
 
-# cdata_absences is possibly undefined (see above)
         if cdata_absences:
             for d, plist in cdata_absences.items():
                 try:
@@ -270,8 +279,9 @@ def get_time_constraints(db, fetout, daylist, periodlist):
     cl_minlessonsperday_list = []  # classes, min lesson periods per day
     week_gaps_list = []
 
-    atomic_groups = db.full_atomic_groups
-    for node in db.tables["CLASSES"]:
+    atomic_groups = db.extra["full_atomic_groups"]
+    for nid in db.node_tables["CLASSES"]:
+        node = db.nodes[nid]
         clid = node["ID"]
         cdata = node["CONSTRAINTS"]
 #TODO!!!!! Could there be a filter for classes with too few subjects?
@@ -304,7 +314,10 @@ def get_time_constraints(db, fetout, daylist, periodlist):
 #                    "Comments": "",
 #                })
 
-        cdata_absences = node.get("NOT_AVAILABLE")
+        try:
+            cdata_absences = node["NOT_AVAILABLE"]
+        except:
+            cdata_absences = None
         if cdata_absences:
             for d, plist in cdata_absences.items():
                 try:
@@ -435,8 +448,12 @@ def get_time_constraints(db, fetout, daylist, periodlist):
             })
 
 #TODO
-        categories = node.get("EXTRA")
-        if categories:
+        try:
+            categories = node["EXTRA"]
+        except KeyError:
+            pass
+        else:
+#        if categories:
             print("EXTRA:", categories)
 
     lesson_constraints(db, fetout, daylist, periodlist)
@@ -508,11 +525,12 @@ def get_space_constraints(db, fetout):
         }
     }
     fetout["Space_Constraints_List"] = constraint_list
-    key2node = db.key2node
+    key2node = db.nodes
     vrnum = 0    # index for additional virtual rooms
     c_room = []
     c_rooms = []
-    for node in db.tables["COURSES"]:
+    for nid in db.node_tables["COURSES"]:
+        node = db.nodes[nid]
         try:
             activities = node["$ACTIVITIES"]
             #print("§course+++:", pr_course(db, node))
@@ -527,7 +545,7 @@ def get_space_constraints(db, fetout):
                 n = 0
                 ridlist = []
                 for r in itemr:
-                    if r in db.virtual_rooms:
+                    if r in db.extra["virtual_rooms"]:
                         REPORT_ERROR(
                             f"Kurs {pr_course(db, node)}: Eine Raumgruppe"
                             f" ({r}) darf für einen Kurs mit mehreren"
@@ -580,7 +598,7 @@ def get_space_constraints(db, fetout):
                     "Active": "true",
                     "Comments": None,
                 })
-        else:
+        elif n == 1:
             for a in activities:
                 c_room.append({
                     "Weight_Percentage": "100",
