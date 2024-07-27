@@ -25,7 +25,7 @@ Copyright 2024 Michael Towers
 """
 
 
-from PySide6.QtWidgets import (     # noqa: F401
+from PySide6.QtWidgets import (
     QGraphicsRectItem,
     QGraphicsLineItem,
     QGraphicsSimpleTextItem,
@@ -99,15 +99,19 @@ class GridView(CanvasRescaling):
         _scene = view.scene()
         # Determine the vertical grid cells using the period times and days
         hlines = []
+        ptimes = []
         x0 = 0
-        for tag, t0, t1 in period_times:
-            h0, m0 = (int(t) for t in t0.split(":"))
-            h1, m1 = (int(t) for t in t1.split(":"))
-            mm0 = h0 * 60 + m0
-            mm1 = h1 * 60 + m1
+        for tag, pt in period_times.items(): # the dict is ordered
+            t0 = pt["start"]
+            t0h, t0m = t0.split(":", 1)
+            t1 = pt["end"]
+            t1h, t1m = t1.split(":", 1)
+            mm0 = int(t0h) * 60 + int(t0m)
+            mm1 = int(t1h) * 60 + int(t1m)
             if not x0:
                 x0 = mm0
             hlines.append((float(mm0 - x0), float(mm1 - x0)))
+            ptimes.append((tag, f"{t0} – {t1}"))
         #print("???", hlines)
 
         self.ylines = hlines
@@ -178,8 +182,8 @@ class GridView(CanvasRescaling):
             text_item.setPos(xpos, ypos)
 
         tfont = StyleCache.getFont(size = 7)
-        for i, pt in enumerate(period_times):
-            tag, t0, t1 = pt
+        for i, pt in enumerate(ptimes):
+            tag, times = pt
             y0, y1 = hlines[i]
             # First the period tag
             text_item = QGraphicsSimpleTextItem(tag)
@@ -192,7 +196,7 @@ class GridView(CanvasRescaling):
             ypos = (y1 + y0 - text_height) / 2
             text_item.setPos(xpos, ypos)
             # Now the times
-            text_item = QGraphicsSimpleTextItem(f"{t0} – {t1}")
+            text_item = QGraphicsSimpleTextItem(times)
             text_item.setFont(tfont)
             _scene.addItem(text_item)
             text_rect = text_item.boundingRect()
@@ -227,18 +231,25 @@ if __name__ == '__main__':
     from ui_base import init_app, run
     init_app()
 
-    PERIOD_TIMES = [
-        ("A", "08:10", "09:00"),
-        ("B", "09:05", "09:50"),
-        ("1", "10:10", "10:55"),
-        ("2", "11:00", "11:45"),
-        ("3", "12:00", "12:45"),
-        ("4", "12:50", "13:35"),
-        ("5", "13:45", "14:30"),
-        ("6", "14:30", "15:15"),
-        ("7", "15:15", "16:00"),
-    ]
-    DAYS = ["Mo", "Di", "Mi", "Do", "Fr"]
+    PERIOD_TIMES = { # ordered dict
+        "A": {"index": 0, "start": "08:10", "end": "09:00"},
+        "B": {"index": 1, "start": "09:05", "end": "09:50"},
+        "1": {"index": 2, "start": "10:10", "end": "10:55"},
+        "2": {"index": 3, "start": "11:00", "end": "11:45"},
+        "3": {"index": 4, "start": "12:00", "end": "12:45"},
+        "4": {"index": 5, "start": "12:50", "end": "13:35"},
+        "5": {"index": 6, "start": "13:45", "end": "14:30"},
+        "6": {"index": 7, "start": "14:30", "end": "15:15"},
+        "7": {"index": 8, "start": "15:15", "end": "16:00"},
+
+    }
+    DAYS = { # ordered dict
+        "Mo": 0,
+        "Di": 1,
+        "Mi": 2,
+        "Do": 3,
+        "Fr": 4,
+    }
 
     grid = GridView(QGraphicsView(), PERIOD_TIMES, DAYS)
     _scene = grid.view.scene()

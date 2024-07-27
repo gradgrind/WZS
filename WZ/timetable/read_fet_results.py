@@ -30,7 +30,7 @@ GROUP_SEP = ","
 DIV_SEP = "|"
 CLASS_GROUP_SEP = "."
 
-#from datetime import datetime
+import lib.xmltodict as xmltodict
 
 ### -----
 
@@ -45,13 +45,16 @@ class FetData:
             d["Name"]: i
             for i, d in enumerate(data["Days_List"]["Day"])
         }
-        print("\n§DAYS:", self.days)
 
-        self.hours = {
-            h["Name"]: i
-            for i, h in enumerate(data["Hours_List"]["Hour"])
-        }
-        print("\n§HOURS:", self.hours)
+        self.hours = {}
+        for i, h in enumerate(data["Hours_List"]["Hour"]):
+            ln, st_end = h["Long_Name"].split("@", 1)
+            st, end = st_end.split("-", 1)
+            self.hours[h["Name"]] = {
+                "index": i,
+                "start": st,
+                "end": end,
+            }
 
         self.classes = {}
         for node in data["Students_List"]["Year"]:
@@ -61,7 +64,6 @@ class FetData:
                 for div in dg.split(DIV_SEP):
                     glists.append(div.split(GROUP_SEP))
             self.classes[node["Name"]] = glists
-        print("\n§CLASSES:", self.classes)
 
         self.rooms = {}
         for node in data["Rooms_List"]["Room"]:
@@ -73,16 +75,30 @@ class FetData:
                 "LongName": node["Long_Name"] or "",
                 "RoomGroups": rr,
             }
-        print("\n§ROOMS:", self.rooms)
 
         self.activities = {}
         for node in data["Activities_List"]["Activity"]:
+            #TODO: Is it possible that there is no "Teacher" field?
+            t = node["Teacher"]
+            if t:
+                if not isinstance(t, list):
+                    t = [t]
+            else:
+                t = []
+            #TODO: Is it possible that there is no "Students" field?
+            s = node["Students"]
+            if s:
+                if not isinstance(s, list):
+                    s = [s]
+            else:
+                #TODO: Is this possible?
+                s = []
             a = {
-                'Teachers': node['Teacher'],
-                'Subject': node['Subject'],
-                'Students': node['Students'],
-                'Duration': int(node['Duration']),
-                'Active': node['Active'],
+                "Teachers": t,
+                "Subject": node["Subject"],
+                "Students": s,
+                "Duration": int(node["Duration"]),
+                "Active": node["Active"],
             }
             self.activities[int(node['Id'])] = a
 
@@ -90,7 +106,7 @@ class FetData:
             ["ConstraintActivityPreferredStartingTime"]:
                 a = self.activities[int(node["Activity_Id"])]
                 a["Day"] = self.days[node["Preferred_Day"]]
-                a["Hour"] = self.hours[node["Preferred_Hour"]]
+                a["Hour"] = self.hours[node["Preferred_Hour"]]["index"]
                 a["Fixed"] = node["Permanently_Locked"] == "true"
 
         for node in data["Space_Constraints_List"]\
@@ -99,16 +115,19 @@ class FetData:
                 a = self.activities[ai]
                 a["Room"] = node["Room"]
                 a["Real_Rooms"] = node.get("Real_Room") or []
-                print(f"\n§ACTIVITY {ai:04d}: {a}")
 
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
 
 
 if __name__ == "__main__":
-    import lib.xmltodict as xmltodict
 #TODO: How to get the data???
     source = "test_data_and_timetable.fet"
     source = "test_data_1.fet"
     fet_data = FetData(source)
-#    activities = read_activities(data)
+    print("\n§DAYS:", fet_data.days)
+    print("\n§HOURS:", fet_data.hours)
+    print("\n§CLASSES:", fet_data.classes)
+    print("\n§ROOMS:", fet_data.rooms)
+    for ai, a in fet_data.activities.items():
+        print(f"\n§ACTIVITY {ai:04d}: {a}")
