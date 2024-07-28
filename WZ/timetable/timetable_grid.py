@@ -210,19 +210,18 @@ class GridView(CanvasRescaling):
     def place_tile(self, tile: Tile, day: int, period: int):
         x0, x1 = self.xlines[day]
         w = x1 - x0
-        y0, y1 = self.ylines[day]
+        y0, y1 = self.ylines[period]
         if tile.duration > 1:
-            y1 = self.ylines[day + tile.duration - 1][1]
+            y1 = self.ylines[period + tile.duration - 1][1]
         h = y1 - y0
 
         offset = w * tile.div0 / tile.divs
         extent = w * tile.ndivs / tile.divs
-        tile.place(
-            x0 + offset + _GRIDLINEWIDTH,
-            y0 + _GRIDLINEWIDTH,
-            extent - _GRIDLINEWIDTH * 2,
-            h - _GRIDLINEWIDTH * 2
-        )
+        tx = x0 + offset + _GRIDLINEWIDTH
+        ty = y0 + _GRIDLINEWIDTH
+        tw = extent - _GRIDLINEWIDTH * 2
+        th = h - _GRIDLINEWIDTH * 2
+        tile.place(tx, ty, tw, th)
 
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
