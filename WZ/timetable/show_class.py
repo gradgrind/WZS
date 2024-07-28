@@ -1,7 +1,7 @@
 """
 ui/modules/show_class.py
 
-Last updated:  2024-07-27
+Last updated:  2024-07-28
 
 Populate a timetable grid with the lessons of a class.
 
@@ -119,6 +119,7 @@ class ClassView:
 
 
 def show_class(data, grid, klass):
+    header.setText(f"Klasse {klass}")
     activities = data.class_activities[klass]
     for ai in activities:
         a = data.data.activities[ai]
@@ -154,17 +155,19 @@ if __name__ == '__main__':
     from PySide6.QtWidgets import (
         QGraphicsRectItem,
         QGraphicsView,
+        QGraphicsSimpleTextItem,
     )
+    from PySide6.QtCore import QRectF
 
     from timetable_grid import GridView, Tile
-    from canvas import StyleCache
+    from canvas import StyleCache, A4
     from read_fet_results import FetData
     from ui_base import init_app, run
     init_app()
 
 #TODO: How to get the data???
     source = "test_data_and_timetable.fet"
-    source = "test_data_1.fet"
+    #source = "test_data_1.fet"
     fet_data = FetData(source)
     #print("\n§DAYS:", fet_data.days)
     #print("\n§HOURS:", fet_data.hours)
@@ -180,20 +183,39 @@ if __name__ == '__main__':
     for ai, a in clview.data.activities.items():
         print(f"\n§ACTIVITY {ai:04d}: {a}\n")
 
-
-
-    #quit(1)
-
     grid = GridView(QGraphicsView(), fet_data.hours, fet_data.days)
     _scene = grid.view.scene()
     scene_rect = _scene.sceneRect()
-    frame = QGraphicsRectItem(scene_rect.adjusted(-5.0, -5.0, 5.0, 5.0))
-    frame.setPen(StyleCache.getPen(0))
-    _scene.addItem(frame)
-#    A4rect = QRectF(0.0, 0.0, A4[0], A4[1])
-#    _scene.addItem(QGraphicsRectItem(A4rect))
-#    scene = grid.scene
 
+    #frame = QGraphicsRectItem(scene_rect.adjusted(-5.0, -5.0, 5.0, 5.0))
+    #frame.setPen(StyleCache.getPen(0))
+    #_scene.addItem(frame)
+
+    #A4rect = QGraphicsRectItem(QRectF(0.0, 0.0, *A4))
+    #A4rect.setPen(StyleCache.getPen(width = 3, colour = "FF0000"))
+    #_scene.addItem(A4rect)
+
+
+    HEADER_MARGIN = 50 # ???
+    w0, h0 = A4
+    w = scene_rect.width()
+    h = scene_rect.height()
+    print("§ SCENE DIMS:", w, w0, h, h0)
+    dw = (w0 - w) / 2
+    dh = (h0 - h - HEADER_MARGIN) / 2
+    assert dw > 0 and dh > 0
+    y0 = scene_rect.top() - HEADER_MARGIN
+    x0 = scene_rect.left()
+
+    header_font = StyleCache.getFont(size = 14, bold = True)
+    header = QGraphicsSimpleTextItem()
+    header.setFont(header_font)
+    header.setPos(x0 + 30, y0 + HEADER_MARGIN/2 - 7)
+    _scene.addItem(header)
+
+    A4rect = QGraphicsRectItem(QRectF(x0 - dw, y0 - dh, *A4))
+    A4rect.setPen(StyleCache.getPen(width = 3, colour = "FF0000"))
+    _scene.addItem(A4rect)
 
     screen = qApp.primaryScreen()
     screensize = screen.availableSize()

@@ -1,7 +1,7 @@
 """
 canvas.py
 
-Last updated:  2024-07-25
+Last updated:  2024-07-28
 
 Provide some basic canvas support using the QGraphics framework.
 
@@ -233,6 +233,10 @@ class CanvasScene:
     def add_item(self, item, tag):
         self.items[tag] = item
         self._scene.addItem(item._item)
+
+    def remove_item(self, tag):
+        item = self.items.pop(tag)
+        self._scene.removeItem(item._item)
 
     def make_context_menu(self):
         self.context_menu = QMenu()
