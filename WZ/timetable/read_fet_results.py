@@ -1,8 +1,5 @@
-
-
-
 """
-read_fet_results.py - last updated 2024-07-26
+read_fet_results.py - last updated 2024-07-28
 
 Read the data from the result of a successful fet run.
 
@@ -75,6 +72,11 @@ class FetData:
                 "LongName": node["Long_Name"] or "",
                 "RoomGroups": rr,
             }
+
+        self.teachers = {
+            node["Name"]: node["Long_Name"] or node["Comments"]
+            for node in data["Teachers_List"]["Teacher"]
+        }
 
         self.activities = {}
         for node in data["Activities_List"]["Activity"]:

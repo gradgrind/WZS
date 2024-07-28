@@ -1,5 +1,5 @@
 """
-ui/modules/show_class.py
+show_class.py
 
 Last updated:  2024-07-28
 
@@ -27,6 +27,7 @@ Copyright 2024 Michael Towers
 ### +++++
 
 from read_fet_results import CLASS_GROUP_SEP
+from timetable_grid import Tile
 
 
 
@@ -119,15 +120,14 @@ class ClassView:
 
 
 def show_class(data, grid, klass):
-    header.setText(f"Klasse {klass}")
     activities = data.class_activities[klass]
     for ai in activities:
         a = data.data.activities[ai]
         for o, l, t, gl in a["Tiles"][klass]:
             rrooms = a["Real_Rooms"]
             if rrooms:
-                if len(rrooms) > 4:
-                    room = ",".join(rrooms[:3]) + " ..."
+                if len(rrooms) > 6:
+                    room = ",".join(rrooms[:5]) + " ..."
                 else:
                     room = ",".join(rrooms)
             else:
@@ -159,7 +159,7 @@ if __name__ == '__main__':
     )
     from PySide6.QtCore import QRectF
 
-    from timetable_grid import GridView, Tile
+    from timetable_grid import GridView
     from canvas import StyleCache, A4
     from read_fet_results import FetData
     from ui_base import init_app, run
@@ -226,6 +226,8 @@ if __name__ == '__main__':
     )
     grid.view.show()
 
-    show_class(clview, grid, "12")
+    cl = "12"
+    show_class(clview, grid, cl)
+    header.setText(f"Klasse {cl}")
 
     run()

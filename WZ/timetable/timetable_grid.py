@@ -1,5 +1,5 @@
 """
-ui/timetable_grid.py
+timetable_grid.py
 
 Last updated:  2024-07-25
 

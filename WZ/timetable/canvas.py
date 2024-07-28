@@ -238,6 +238,11 @@ class CanvasScene:
         item = self.items.pop(tag)
         self._scene.removeItem(item._item)
 
+    def clear_items(self):
+        tags = list(self.items)
+        for t in tags:
+            self.remove_item(t)
+
     def make_context_menu(self):
         self.context_menu = QMenu()
         Action = self.context_menu.addAction("I am context Action 1")
