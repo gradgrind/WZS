@@ -1,7 +1,7 @@
 """
 timetable_viewer.py
 
-Last updated:  2024-07-28
+Last updated:  2024-07-29
 
 Gui to show the timetable of a class, a teacher or a room.
 
@@ -35,14 +35,15 @@ from PySide6.QtWidgets import (
     QListWidget,
     QGraphicsView,
 )
-from show_class import ClassView, show_class
+from view_part_info import ViewPartInfo
+from show_class import show_class
 
 ### -----
 
 
 class TimetableViewer(QWidget):
     def __init__(self, data, parent = None):
-        self.data = ClassView(data)
+        self.data = ViewPartInfo(data)
         super().__init__(parent)
 
         hbox = QHBoxLayout(self)

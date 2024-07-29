@@ -1,7 +1,7 @@
 """
 show_class.py
 
-Last updated:  2024-07-28
+Last updated:  2024-07-29
 
 Populate a timetable grid with the lessons of a class.
 
@@ -26,104 +26,16 @@ Copyright 2024 Michael Towers
 
 ### +++++
 
-from read_fet_results import CLASS_GROUP_SEP
 from timetable_grid import Tile
 
-
-
-def tile_divisions(div_groups: list[list[str]]):
-    # Gather division components
-    g2d = {
-        g: (d, i)
-        for d, glist in enumerate(div_groups)
-        for i, g in enumerate(glist)
-    }
-    return g2d
-
-
-def cg2c_g(students: str) -> tuple[str, str]:
-    """Split a class[.group] into (class, group or "").
-    """
-    try:
-        c, g = students.split(CLASS_GROUP_SEP, 1)
-        return (c, g)
-    except ValueError:
-        return (students, "")
-
-
-class ClassView:
-    def __init__(self, data):
-        self.data = data
-        self.class_divs = self.divide_classes()
-        self.activity_tiles()
-
-    def divide_classes(self):
-        cl_divs = {}
-        for cl, dg in self.data.classes.items():
-            td = tile_divisions(dg)
-            cl_divs[cl] = td
-        return cl_divs
-
-    def class_tiles(self, students: list
-    ) -> dict[str, tuple[int, list[tuple[int, str]]]]:
-        cl_tiles = {}
-        for s in students:
-            cl, g = cg2c_g(s)
-            if g:
-                d, i = self.class_divs[cl][g]
-                try:
-                    divdata = cl_tiles[cl]
-                except KeyError:
-                    cl_tiles[cl] = (d, [(i, g)])
-                else:
-                    assert divdata[0] == d and i not in divdata[1]
-                    divdata[1].append((i, g))
-            else:
-                assert cl not in cl_tiles
-                cl_tiles[cl] = (-1, [(0, "")])
-        return cl_tiles
-
-    def activity_tiles(self):
-        self.class_activities = {}  # class -> activities
-        for ai, a in self.data.activities.items():
-            smap = self.class_tiles(a["Students"])
-            atiles = {}
-            for c, dgs in smap.items():
-                try:
-                    self.class_activities[c].append(ai)
-                except KeyError:
-                    self.class_activities[c] = [ai]
-                div, groups = dgs
-                if div < 0:
-                    # offset, number of groups, total number of groups, group
-                    atiles[c] = [(0, 1, 1, [])]
-                    continue
-                total = len(self.data.classes[c][div])
-                parts = []
-                p0 = 0
-                l = 0
-                gl = []
-                for p, g in sorted(groups):
-                    if p == (p0 + l):
-                        l += 1
-                        gl.append(g)
-                    else:
-                        if l != 0:
-                            parts.append((p0, l, total, gl))
-                        p0 = p
-                        l = 1
-                        gl = [g]
-                if l != 0:
-                    parts.append((p0, l, total, gl))
-                atiles[c] = parts
-            a["Tiles"] = atiles
+### -----
 
 
 def show_class(data, grid, klass):
     activities = data.class_activities[klass]
     for ai in activities:
         a = data.data.activities[ai]
-        for o, l, t, gl in a["Tiles"][klass]:
+        for o, l, t, gl in a["Class_Tiles"][klass]:
             rrooms = a["Real_Rooms"]
             if rrooms:
                 if len(rrooms) > 6:
@@ -162,6 +74,7 @@ if __name__ == '__main__':
     from timetable_grid import GridView
     from canvas import StyleCache, A4
     from read_fet_results import FetData
+    from view_part_info import ViewPartInfo
     from ui_base import init_app, run
     init_app()
 
@@ -176,7 +89,7 @@ if __name__ == '__main__':
     #for ai, a in fet_data.activities.items():
     #    print(f"\n§ACTIVITY {ai:04d}: {a}")
 
-    clview = ClassView(fet_data)
+    clview = ViewPartInfo(fet_data)
     for cl, td in clview.class_divs.items():
         print("$ ++", cl, td)
 
