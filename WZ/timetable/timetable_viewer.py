@@ -37,6 +37,8 @@ from PySide6.QtWidgets import (
 )
 from view_part_info import ViewPartInfo
 from show_class import show_class
+from show_room import show_room
+from show_teacher import show_teacher
 
 ### -----
 
@@ -60,19 +62,16 @@ class TimetableViewer(QWidget):
         choose_class.toggled.connect(self.show_classes)
         choose_teacher = QRadioButton("Lehrer")
         bbox.addWidget(choose_teacher)
+        choose_teacher.toggled.connect(self.show_teachers)
         choose_room = QRadioButton("Raum")
         bbox.addWidget(choose_room)
+        choose_room.toggled.connect(self.show_rooms)
         self.choice = QListWidget()
         self.choice.setFixedWidth(200)
         self.choice.currentItemChanged.connect(self.select_item)
         vbox.addWidget(self.choice)
 
         self.showing = -1 # 0: classes, 1: teachers, 2: rooms
-
-        print(self.data.data.classes)
-        print()
-        print(self.data.data.teachers)
-
 
         self.grid = GridView(gview, data.hours, data.days)
         _scene = self.grid.view.scene()
@@ -89,7 +88,7 @@ class TimetableViewer(QWidget):
         x0 = scene_rect.left()
 
         header_font = StyleCache.getFont(size = 14, bold = True)
-        self.header = QGraphicsSimpleTextItem("???")
+        self.header = QGraphicsSimpleTextItem()
         self.header.setFont(header_font)
         self.header.setPos(x0 + 30, y0 + HEADER_MARGIN/2 - 7)
         _scene.addItem(self.header)
@@ -101,12 +100,39 @@ class TimetableViewer(QWidget):
     def show_classes(self, on):
         if not on:
             return
-        print("§Show Classes")
         self.choice.clear()
+        self.header.setText("–––")
         self.choice.addItems(list(self.data.data.classes))
         self.showing = 0
 
+    def show_teachers(self, on):
+        if not on:
+            return
+        self.choice.clear()
+        self.header.setText("–––")
+        tlist = [
+            t for t in self.data.data.teachers
+            if t in self.data.teacher_activities
+        ]
+        self.choice.addItems(tlist)
+        self.showing = 1
+
+    def show_rooms(self, on):
+        if not on:
+            return
+        self.choice.clear()
+        self.header.setText("–––")
+        rlist = [
+            r for r in self.data.data.rooms
+            if r in self.data.room_activities
+        ]
+        self.choice.addItems(rlist)
+        self.showing = 2
+
     def select_item(self, lwitem):
+        if not lwitem:
+            self.grid.scene.clear_items()
+            return
         if self.showing == 0:
             self.select_class(lwitem)
         elif self.showing == 1:
@@ -119,6 +145,23 @@ class TimetableViewer(QWidget):
         c = lwitem.text()
         show_class(self.data, self.grid, c)
         self.header.setText(f"Klasse {c}")
+
+    def select_teacher(self, lwitem):
+        self.grid.scene.clear_items()
+        t = lwitem.text()
+        show_teacher(self.data, self.grid, t)
+        self.header.setText(f"{self.data.data.teachers[t]} ({t})")
+
+    def select_room(self, lwitem):
+        self.grid.scene.clear_items()
+        r = lwitem.text()
+        show_room(self.data, self.grid, r)
+        ln = self.data.data.rooms[r]["LongName"]
+        if ln:
+            htext = f"Raum {r} ({ln})"
+        else:
+            htext = f"Raum {r}"
+        self.header.setText(htext)
 
 
 # --#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#--#
