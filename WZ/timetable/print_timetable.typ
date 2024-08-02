@@ -11,6 +11,9 @@
 #let PLAIN_SIZE = 12pt
 #let SMALL_SIZE = 10pt
 
+#let FRAME_COLOUR = "#707070"
+#let BREAK_COLOUR = "#e0e0e0"
+
 #let TITLE_HEIGHT = 20mm
 #let PLAN_AREA_HEIGHT = (PAGE_HEIGHT - PAGE_BORDER.top
     - PAGE_BORDER.bottom - TITLE_HEIGHT)
@@ -225,10 +228,10 @@
     columns: tcolumns,
     rows: trows,
     gutter: 0pt,
-    stroke: rgb("#ff7001"),
+    stroke: rgb(FRAME_COLOUR),
     inset: 0pt,
     fill: (_, y) =>
-        if y != 0 and ptime.at(y - 1) == "" { luma(220) },
+        if y != 0 and ptime.at(y - 1) == "" { rgb(BREAK_COLOUR) },
 //  align: center + horizon,
     ..ch
 )

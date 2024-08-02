@@ -34,7 +34,7 @@ from view_part_info import ViewPartInfo
 ### -----
 
 
-def prepare_classes(data):
+def prepare_classes(data, show_fixed = False):
     class_data = {}
     for klass in data.data.classes:
         activities = data.class_activities[klass]
@@ -60,14 +60,14 @@ def prepare_classes(data):
                     "day": a["Day"],
                     "hour": a["Hour"],
                     "duration": a["Duration"],
-                    "fraction": t,
+                    "fraction": l,
                     "offset": o,
-                    "total": l,
+                    "total": t,
                     "centre":  a["Subject"],
                     "tl": teacher,
                     "tr": ",".join(gl),
-                    "bl": room,
-                    "br": "!" if a["Fixed"] else ""
+                    "br": room,
+                    "bl": "!" if show_fixed and a["Fixed"] else ""
                 })
     return class_data
 
@@ -98,7 +98,7 @@ if __name__ == '__main__':
         "Pages": class_list,
     }
     for k, kitems in prepare_classes(clview).items():
-        class_list.append([k, kitems])
+        class_list.append([f"Klasse {k}", kitems])
     ofile = source.rsplit(".", 1)[0] + ".json"
     with open(ofile, "w", encoding = "utf-8") as fh:
         json.dump(jsondata, fh)
