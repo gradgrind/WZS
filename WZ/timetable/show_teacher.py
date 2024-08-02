@@ -1,7 +1,7 @@
 """
 show_class.py
 
-Last updated:  2024-07-29
+Last updated:  2024-08-01
 
 Populate a timetable grid with the lessons of a teacher.
 
@@ -35,14 +35,14 @@ def show_teacher(data, grid, teacher):
     activities = data.teacher_activities[teacher]
     for ai in activities:
         a = data.data.activities[ai]
-        rrooms = a["Real_Rooms"]
+        rrooms = a.get("Real_Rooms")
         if rrooms:
             if len(rrooms) > 6:
                 room = ",".join(rrooms[:5]) + " ..."
             else:
                 room = ",".join(rrooms)
         else:
-            room = a["Room"]
+            room = a.get("Room") or ""
         tile = Tile(
             canvas = grid,
             tag = f"{teacher}:{ai}",  # tile tag (id)

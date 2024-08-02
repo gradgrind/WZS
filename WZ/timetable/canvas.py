@@ -486,20 +486,25 @@ class Chip:
         text_item.setPos(xshift, yshift)
 
     def _set_top_text(self, xl, xr):
-        w0 = self.width - CHIP_MARGIN*2 - CHIP_SPACER
         if xl:
             xlrect = xl.boundingRect()
+        elif not xr:
+            return
         else:
             xlrect = QRectF()
         if xr:
             xrrect = xr.boundingRect()
         else:
             xrrect = QRectF()
+        w0 = self.width - CHIP_MARGIN*2 - CHIP_SPACER
         xlw = xlrect.width()
         #xlh = xlrect.height()
         xrw = xrrect.width()
         #xrh = xrrect.height()
-        part = w0 / (xlw + xrw)
+        ww = xlw + xrw
+        if ww == 0:
+            return
+        part = w0 / ww
         if part < 1.0:
             if xr:
                 xr.setScale(part)
@@ -514,7 +519,6 @@ class Chip:
             xr.setPos(xrx, CHIP_MARGIN)
 
     def _set_bottom_text(self, xl, xr):
-        w0 = self.width - CHIP_MARGIN*2 - CHIP_SPACER
         if xl:
             xlrect = xl.boundingRect()
         else:
@@ -523,11 +527,15 @@ class Chip:
             xrrect = xr.boundingRect()
         else:
             xrrect = QRectF()
+        w0 = self.width - CHIP_MARGIN*2 - CHIP_SPACER
         xlw = xlrect.width()
         xlh = xlrect.height()
         xrw = xrrect.width()
         xrh = xrrect.height()
-        part = w0 / (xlw + xrw)
+        ww = xlw + xrw
+        if ww == 0:
+            return
+        part = w0 / ww
         if part < 1.0:
             if xr:
                 xr.setScale(part)

@@ -56,7 +56,10 @@ class ViewPartInfo:
                     self.teacher_activities[t].append(ai)
                 except KeyError:
                     self.teacher_activities[t] = [ai]
-            r = a["Room"]
+            try:
+                r = a["Room"]
+            except KeyError:
+                continue
             rg = self.data.rooms[r]["RoomGroups"]
             if not rg:
                 rg = [r]

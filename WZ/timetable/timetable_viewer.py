@@ -182,7 +182,7 @@ if __name__ == '__main__':
 
 #TODO: How to get the data???
     source = "test_data_and_timetable.fet"
-    #source = "test_data_1.fet"
+    #source = "testx_data_and_timetable.fet"
     fet_data = FetData(source)
     #print("\n§DAYS:", fet_data.days)
     #print("\n§HOURS:", fet_data.hours)

@@ -88,13 +88,14 @@ class FetData:
             else:
                 t = []
             #TODO: Is it possible that there is no "Students" field?
-            s = node["Students"]
+            # ... Yes, but is that correct?
+            s = node.get("Students")
             if s:
                 if not isinstance(s, list):
                     s = [s]
             else:
-                #TODO: Is this possible?
-                s = []
+                #TODO: Is this possible? ... At the moment, yes.
+                s = ["–"]
             a = {
                 "Teachers": t,
                 "Subject": node["Subject"],
